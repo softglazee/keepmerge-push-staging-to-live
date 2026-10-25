@@ -1,0 +1,28 @@
+{
+	"name": "keepmerge-push-staging-to-live",
+	"version": "1.0.0",
+	"description": "Admin screen build for Keepmerge - Push Staging to Live. Source in src/admin, output in build/.",
+	"private": true,
+	"license": "GPL-2.0-or-later",
+	"author": "SoftGlaze",
+	"scripts": {
+		"build": "wp-scripts build",
+		"start": "wp-scripts start"
+	},
+	"devDependencies": {
+		"@wordpress/api-fetch": "7.55.0",
+		"@wordpress/element": "8.7.0",
+		"@wordpress/i18n": "6.28.0",
+		"@wordpress/scripts": "35.0.0",
+		"autoprefixer": "10.5.6",
+		"react": "18.3.1",
+		"react-dom": "18.3.1",
+		"tailwindcss": "3.4.18"
+	},
+	"dependencies": {
+		"lucide-react": "1.48.0"
+	},
+	"browserslist": [
+		"extends @wordpress/browserslist-config"
+	]
+}

@@ -41,4 +41,7 @@ spl_autoload_register(
 	}
 );
 
+register_activation_hook( __FILE__, array( 'SoftGlaze\SafePush\Installer', 'activate' ) );
+register_deactivation_hook( __FILE__, array( 'SoftGlaze\SafePush\Installer', 'deactivate' ) );
+
 SoftGlaze\SafePush\Plugin::instance();
