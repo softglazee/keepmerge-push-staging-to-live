@@ -13,6 +13,7 @@ use SoftGlaze\SafePush\Installer;
 use SoftGlaze\SafePush\Nonce_Store;
 use SoftGlaze\SafePush\Pairing_Service;
 use SoftGlaze\SafePush\Pairing_Store;
+use SoftGlaze\SafePush\Settings;
 use SoftGlaze\SafePush\Signer;
 use SoftGlaze\SafePush\Throttle;
 use WP_Error;
@@ -45,11 +46,13 @@ final class Remote_Permission {
 
 	const ROUTE_FETCH = 'fetch';
 
+	const ROUTE_CODE_MANIFEST = 'code_manifest';
+
 	/**
 	 * Routes an active pairing answers with its long-term credentials (threat model §5.1: R1 and
-	 * the read-only routes R4 to R6). The pairing routes R2 and R3 end with approval.
+	 * the read-only routes R4 to R7). The pairing routes R2 and R3 end with approval.
 	 */
-	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH );
+	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST );
 
 	const SET_BOOTSTRAP = 'bootstrap';
 
@@ -141,6 +144,16 @@ final class Remote_Permission {
 	 */
 	public static function check_fetch( WP_REST_Request $request ) {
 		return self::check( $request, self::ROUTE_FETCH );
+	}
+
+	/**
+	 * Chain for POST /remote/code-manifest (R7): the full chain, then live's own switch.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_code_manifest( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_CODE_MANIFEST );
 	}
 
 	/**
@@ -288,6 +301,26 @@ final class Remote_Permission {
 
 		self::touch( $pairing );
 
+		// R7 only, after the request is known to be authentic: code reports stay off until a live
+		// administrator switches on "Allow code report requests" (blueprint §6.11, off by
+		// default). The refusal is signed like any answer to an authentic request, so the source
+		// can tell it from a forged one; strangers never get this far and never learn the setting.
+		if ( self::ROUTE_CODE_MANIFEST === $route_id && empty( Settings::get()['allow_code_report'] ) ) {
+			Audit_Log::write(
+				'code_manifest_requested',
+				array(
+					'result'      => 'denied',
+					'actor_type'  => 'remote',
+					'actor_id'    => 0,
+					'pairing_id'  => (int) $pairing['id'],
+					'object_type' => 'pairing',
+					'object_ref'  => $pairing['pairing_uuid'],
+					'details'     => array( 'reason' => 'code_report_disabled' ),
+				)
+			);
+			return self::error( 'code_report_disabled', 403 );
+		}
+
 		return true;
 	}
 
@@ -296,7 +329,7 @@ final class Remote_Permission {
 	 *
 	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phase 3):
 	 *
-	 *   state              status      confirm     finalize    baseline / manifest / fetch
+	 *   state              status      confirm     finalize    baseline / manifest / fetch / code_manifest
 	 *   pending            bootstrap   bootstrap   long-term*  401 pairing_invalid
 	 *   awaiting_approval  long-term   403 pairing_not_approved (every route but status)
 	 *   active             long-term   401         401         long-term

@@ -9,6 +9,7 @@ namespace SoftGlaze\SafePush\Sync;
 
 use SoftGlaze\SafePush\Limits;
 use SoftGlaze\SafePush\Sync\Exporters\Options;
+use SoftGlaze\SafePush\Woo\Guard;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -113,6 +114,7 @@ final class Manifest {
 				'hash'         => $item['hash'],
 				'groups'       => $item['groups'],
 				'base_hash'    => isset( $bases[ $entry['uuid'] ] ) ? (string) $bases[ $entry['uuid'] ]['base_hash'] : '',
+				'base_groups'  => isset( $bases[ $entry['uuid'] ] ) ? self::base_groups( $bases[ $entry['uuid'] ] ) : array(),
 				'modified_gmt' => $item['modified_gmt'],
 				'unsupported'  => (bool) $item['unsupported'],
 			);
@@ -143,6 +145,7 @@ final class Manifest {
 			'missing_block_types' => $missing_blocks,
 			'missing_stylesheets' => $missing_themes,
 			'live_changes'        => $changes,
+			'woocommerce'         => Guard::active(),
 		);
 	}
 
@@ -196,6 +199,7 @@ final class Manifest {
 				'unmapped'    => $item['unmapped'],
 				'hash'        => $item['hash'],
 				'groups'      => $item['groups'],
+				'fields'      => $item['fields'],
 				'problems'    => $item['problems'],
 				'unsupported' => (bool) $item['unsupported'],
 			);
@@ -247,11 +251,15 @@ final class Manifest {
 					return self::invalid();
 				}
 			} else {
-				if ( ! wp_is_uuid( $uuid, 4 ) || ! isset( $entry['type'] ) || ! is_string( $entry['type'] ) || 1 !== preg_match( '/\A[a-z0-9_-]{1,32}\z/', $entry['type'] ) ) {
+				// The type may be left out (an empty string) when the source no longer knows it: an
+				// object deleted there, looked up by its UUID and live ID. Live then accepts any type
+				// of the kind that is inside its own scope.
+				$type = isset( $entry['type'] ) ? $entry['type'] : '';
+				if ( ! wp_is_uuid( $uuid, 4 ) || ! is_string( $type ) || ( '' !== $type && 1 !== preg_match( '/\A[a-z0-9_-]{1,32}\z/', $type ) ) ) {
 					return self::invalid();
 				}
 				$clean['uuid'] = strtolower( $uuid );
-				$clean['type'] = $entry['type'];
+				$clean['type'] = $type;
 				if ( isset( $entry['live_id'] ) ) {
 					if ( ! is_int( $entry['live_id'] ) || $entry['live_id'] < 0 ) {
 						return self::invalid();
@@ -284,27 +292,34 @@ final class Manifest {
 			return Scope::widgets_included() ? self::state( 'found', 'widgets', 'widgets' ) : self::state( 'excluded' );
 		}
 
+		$any_type = '' === $entry['type'];
+
 		if ( 'term' === $kind || 'menu' === $kind ) {
 			$taxonomy = 'menu' === $kind ? 'nav_menu' : $entry['type'];
-			$allowed  = 'menu' === $kind ? Scope::menus_included() && 'nav_menu' === $entry['type'] : in_array( $taxonomy, Scope::taxonomies(), true );
+			if ( 'menu' === $kind ) {
+				$allowed = Scope::menus_included() && ( $any_type || 'nav_menu' === $entry['type'] );
+			} else {
+				$allowed = $any_type ? ! empty( Scope::taxonomies() ) : in_array( $taxonomy, Scope::taxonomies(), true );
+			}
 			if ( ! $allowed ) {
 				return self::state( 'excluded' );
 			}
 			foreach ( self::candidate_ids( $pairing, $entry, 'term' ) as $id ) {
 				$term = get_term( $id );
-				if ( $term instanceof \WP_Term && $term->taxonomy === $taxonomy && Scope::allows_term( $term, $kind ) ) {
+				if ( $term instanceof \WP_Term && ( ( $any_type && 'term' === $kind ) || $term->taxonomy === $taxonomy ) && Scope::allows_term( $term, $kind ) ) {
 					return self::state( 'found', $kind, (int) $term->term_id );
 				}
 			}
 			return self::state( 'missing' );
 		}
 
-		if ( ! in_array( $entry['type'], Scope::post_types_for_kind( $kind ), true ) ) {
+		$types = Scope::post_types_for_kind( $kind );
+		if ( $any_type ? empty( $types ) : ! in_array( $entry['type'], $types, true ) ) {
 			return self::state( 'excluded' );
 		}
 		foreach ( self::candidate_ids( $pairing, $entry, 'post' ) as $id ) {
 			$post = get_post( $id );
-			if ( $post instanceof \WP_Post && $post->post_type === $entry['type'] && Scope::allows_post( $post, $kind ) ) {
+			if ( $post instanceof \WP_Post && ( $any_type ? in_array( $post->post_type, $types, true ) : $post->post_type === $entry['type'] ) && Scope::allows_post( $post, $kind ) ) {
 				return self::state( 'found', $kind, (int) $post->ID );
 			}
 		}
@@ -383,6 +398,26 @@ final class Manifest {
 			'items'       => $items,
 			'next_cursor' => count( $rows ) < self::LIVE_CHANGES_PAGE ? null : $last,
 		);
+	}
+
+	/**
+	 * The base hashes of a product's field groups from a sync_state row (group => hash).
+	 *
+	 * @param array $row Row.
+	 * @return array<string,string>
+	 */
+	private static function base_groups( array $row ) {
+		if ( ! isset( $row['base_groups'] ) || ! is_string( $row['base_groups'] ) || '' === $row['base_groups'] ) {
+			return array();
+		}
+		$groups = json_decode( $row['base_groups'], true, 4 );
+		$out    = array();
+		foreach ( is_array( $groups ) ? $groups : array() as $group => $hash ) {
+			if ( is_string( $group ) && is_string( $hash ) && 1 === preg_match( '/\A[0-9a-f]{64}\z/', $hash ) ) {
+				$out[ sanitize_key( $group ) ] = $hash;
+			}
+		}
+		return $out;
 	}
 
 	/**

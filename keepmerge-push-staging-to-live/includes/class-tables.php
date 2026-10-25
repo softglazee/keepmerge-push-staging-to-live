@@ -68,6 +68,10 @@ final class Tables {
 	 * site: a hash, because host clone tools search-replace URLs in every table and would
 	 * rewrite a stored URL to match the copy (threat model T21).
 	 *
+	 * sync_state.base_groups (destination) holds the base hash of each product field group as JSON
+	 * (group => hash), so the planner can run the three-way comparison per group (blueprint §6.6)
+	 * and "Push stock" can be refused when live's stock changed since the base (§7 rule 4).
+	 *
 	 * Source rows (role "source") also keep the receiver login on live (remote_login), what live
 	 * last reported about itself and the last check (remote_info, JSON without credentials) and
 	 * the address the outbound guard checked with its time (resolved_ip, resolved_gmt), which
@@ -161,6 +165,7 @@ object_type varchar(32) NOT NULL DEFAULT '',
 object_id bigint(20) unsigned NOT NULL DEFAULT 0,
 remote_object_id bigint(20) unsigned NOT NULL DEFAULT 0,
 base_hash char(64) NOT NULL DEFAULT '',
+base_groups text NULL,
 base_gmt datetime NULL DEFAULT NULL,
 last_push_id bigint(20) unsigned NOT NULL DEFAULT 0,
 match_confidence varchar(16) NOT NULL DEFAULT '',

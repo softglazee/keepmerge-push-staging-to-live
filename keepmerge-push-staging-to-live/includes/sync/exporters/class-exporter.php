@@ -91,6 +91,7 @@ abstract class Exporter {
 				'unsupported'  => ! empty( $problems ),
 				'hash'         => $hashes['hash'],
 				'groups'       => $hashes['groups'],
+				'fields'       => Hasher::field_hashes( $form ),
 			),
 			$extra
 		);

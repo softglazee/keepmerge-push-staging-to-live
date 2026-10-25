@@ -17,6 +17,7 @@ use SoftGlaze\SafePush\Receive_Window;
 use SoftGlaze\SafePush\Settings;
 use SoftGlaze\SafePush\Signer;
 use SoftGlaze\SafePush\Sync\Baseline_Matcher;
+use SoftGlaze\SafePush\Sync\Code_Report;
 use SoftGlaze\SafePush\Sync\Manifest;
 use SoftGlaze\SafePush\Throttle;
 use WP_Error;
@@ -31,8 +32,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Routes under keepmerge/v1/remote/ that the paired source calls (threat model §5.1). This
- * version has status, pair/confirm and pair/finalize, and the three read-only routes of an
- * active pairing: baseline, manifest and items/fetch. None of the read-only routes writes to
+ * version has status, pair/confirm and pair/finalize, and the four read-only routes of an
+ * active pairing: baseline, manifest, items/fetch and code-manifest (the last only while live's
+ * "Allow code report requests" is on). None of the read-only routes writes to
  * live's content, options or sync state; they write only what the chain writes for every
  * request (the nonce, the last-used time) and one audit row with counts.
  *
@@ -54,6 +56,8 @@ final class Remote_Controller {
 	const MANIFEST_MAX_BYTES = 262144;
 
 	const FETCH_MAX_BYTES = 32768;
+
+	const CODE_MANIFEST_MAX_BYTES = 1024;
 
 	/**
 	 * An Application Password failure seen during this request (core runs that check before any
@@ -146,6 +150,17 @@ final class Remote_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'fetch_items' ),
 				'permission_callback' => array( Remote_Permission::class, 'check_fetch' ),
+				'args'                => array(),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/code-manifest',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'code_manifest' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_code_manifest' ),
 				'args'                => array(),
 			)
 		);
@@ -390,6 +405,49 @@ final class Remote_Controller {
 		}
 
 		self::audit_read( 'items_fetched', $context['pairing'], array_merge( array( 'count' => count( $result['items'] ) ), $result['counts'] ) );
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * POST /remote/code-manifest (R7, read-only): live's inventory, or one page of file hashes of
+	 * a component in live's own list. Names, versions, paths, sizes and SHA-1 values only; never
+	 * file content (blueprint §6.11). The chain has already checked "Allow code report requests".
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function code_manifest( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, self::CODE_MANIFEST_MAX_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$result = Code_Report::answer( $body );
+		if ( is_wp_error( $result ) ) {
+			self::audit_read( 'code_manifest_requested', $context['pairing'], array( 'reason' => $result->get_error_code() ), 'denied' );
+			return $result;
+		}
+
+		if ( isset( $result['inventory'] ) ) {
+			$counts = array(
+				'part'       => 'inventory',
+				'components' => count( $result['inventory']['components'] ),
+			);
+		} else {
+			$counts = array(
+				'part'      => 'files',
+				'files'     => count( $result['files'] ),
+				'cursor'    => (int) $result['cursor'],
+				'truncated' => (bool) $result['truncated'],
+			);
+		}
+		self::audit_read( 'code_manifest_requested', $context['pairing'], $counts );
 
 		return new WP_REST_Response( $result, 200 );
 	}

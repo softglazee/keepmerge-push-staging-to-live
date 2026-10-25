@@ -9,6 +9,7 @@ import PanelHead from '../components/PanelHead';
 import { SkeletonCard } from '../components/Skeleton';
 import { checkPairing, confirmConnect, errorMessage, getSend, previewConnect, revokePairing } from '../api';
 import BaselineCard from './send/BaselineCard';
+import PlanCard from './send/PlanCard';
 import ConnectCard from './send/ConnectCard';
 import ConnectionCard from './send/ConnectionCard';
 import { useTick } from './receive/time';
@@ -22,10 +23,10 @@ const CHECKABLE = [ 'pending', 'awaiting_approval', 'active' ];
  * on live. Status calls go through this site's admin routes; the long-term credentials never
  * reach the browser.
  *
- * Each active pairing has its baseline card (Phase 3).
+ * Each active pairing has its baseline card (Phase 3) and its plan card (Phase 4: dry run, diff,
+ * conflict decisions, code report).
  *
- * TODO(Phase 4): plan, diff and conflict decisions.
- * TODO(Phase 5): the push dialog with counts and the typed live domain.
+ * TODO(Phase 5): sending the push from the push dialog.
  *
  * @param {Object}   props
  * @param {Function} props.notify    Toast.
@@ -261,6 +262,16 @@ export default function SendScreen( { notify, onChanged } ) {
 								pairing={ pairing }
 								initial={ ( data.baselines || {} )[ pairing.uuid ] || null }
 								notify={ notify }
+								onDone={ load }
+							/>
+						) }
+						{ 'active' === pairing.status && (
+							<PlanCard
+								key={ `${ pairing.uuid }-${ ( ( data.baselines || {} )[ pairing.uuid ] || {} ).finished_at || 0 }` }
+								pairing={ pairing }
+								baseline={ ( data.baselines || {} )[ pairing.uuid ] || null }
+								initialPlan={ ( data.plans || {} )[ pairing.uuid ] || null }
+								notify={ notify }
 							/>
 						) }
 					</Fragment>
@@ -297,15 +308,17 @@ export default function SendScreen( { notify, onChanged } ) {
 					</div>
 				) }
 
-				<Card icon={ ListChecks } title={ __( 'Plan and push', 'keepmerge-push-staging-to-live' ) }>
-					<EmptyState
-						title={ __( 'Nothing to compare yet', 'keepmerge-push-staging-to-live' ) }
-						text={ __(
-							'After connecting and running the baseline, Keepmerge shows what a push would create, update or keep, with conflicts for you to decide. Orders, customers and code are never part of a push.',
-							'keepmerge-push-staging-to-live'
-						) }
-					/>
-				</Card>
+				{ ! pairings.some( ( pairing ) => 'active' === pairing.status ) && (
+					<Card icon={ ListChecks } title={ __( 'Plan and push', 'keepmerge-push-staging-to-live' ) }>
+						<EmptyState
+							title={ __( 'Nothing to compare yet', 'keepmerge-push-staging-to-live' ) }
+							text={ __(
+								'After connecting and running the baseline, Keepmerge shows what a push would create, update or keep, with conflicts for you to decide. Orders, customers and code are never part of a push.',
+								'keepmerge-push-staging-to-live'
+							) }
+						/>
+					</Card>
+				) }
 			</div>
 
 			{ confirm && (

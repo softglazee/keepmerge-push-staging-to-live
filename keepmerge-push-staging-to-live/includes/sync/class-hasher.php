@@ -49,6 +49,49 @@ final class Hasher {
 	}
 
 	/**
+	 * One hash per field of an item's hash form, so a diff can tell which fields differ even
+	 * where IDs and URLs are written differently on the two sites: top-level fields, each meta
+	 * key ("meta.<key>"), and each field of a product group ("groups.<group>.<field>", product
+	 * meta as "groups.<group>.meta.<key>").
+	 *
+	 * @param array $hash_form Hash form.
+	 * @return array<string,string> Field path => hash.
+	 */
+	public static function field_hashes( array $hash_form ) {
+		$out = array();
+		foreach ( $hash_form as $key => $value ) {
+			$key = (string) $key;
+			if ( 'meta' === $key && is_array( $value ) ) {
+				foreach ( $value as $meta_key => $meta_value ) {
+					$out[ 'meta.' . $meta_key ] = self::hash( $meta_value );
+				}
+				continue;
+			}
+			if ( 'groups' === $key && is_array( $value ) ) {
+				foreach ( $value as $group => $fields ) {
+					if ( ! is_array( $fields ) ) {
+						$out[ 'groups.' . $group ] = self::hash( $fields );
+						continue;
+					}
+					foreach ( $fields as $field => $field_value ) {
+						if ( 'meta' === $field && is_array( $field_value ) ) {
+							foreach ( $field_value as $meta_key => $meta_value ) {
+								$out[ 'groups.' . $group . '.meta.' . $meta_key ] = self::hash( $meta_value );
+							}
+							continue;
+						}
+						$out[ 'groups.' . $group . '.' . $field ] = self::hash( $field_value );
+					}
+				}
+				continue;
+			}
+			$out[ $key ] = self::hash( $value );
+		}
+		ksort( $out, SORT_STRING );
+		return $out;
+	}
+
+	/**
 	 * SHA-256 over the canonical JSON of a value.
 	 *
 	 * @param mixed $value Hash form.

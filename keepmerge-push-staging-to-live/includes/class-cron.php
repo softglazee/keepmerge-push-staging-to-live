@@ -56,6 +56,7 @@ final class Cron {
 		Receive_Window::is_open();
 		Nonce_Store::prune( 5000 );
 		Throttle::prune();
+		Sync\Plan_Store::prune( 0 );
 
 		// TODO(Phase 8): temp directories older than 24 h, expired push sessions, push_items rows
 		// and snapshot files past retention (never the newest push's snapshot).

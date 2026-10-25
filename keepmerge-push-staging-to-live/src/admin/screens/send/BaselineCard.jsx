@@ -109,8 +109,9 @@ function ItemLink( { href, id, where } ) {
  * @param {Object}   props.pairing  Active pairing.
  * @param {Object}   props.initial  Stored baseline summary, or null.
  * @param {Function} props.notify   Toast.
+ * @param {Function} [props.onDone] Called after a run finished (the plan card needs it).
  */
-export default function BaselineCard( { pairing, initial, notify } ) {
+export default function BaselineCard( { pairing, initial, notify, onDone } ) {
 	const [ baseline, setBaseline ] = useState( initial || null );
 	const [ cloneDate, setCloneDate ] = useState( initial && initial.clone_date ? initial.clone_date : '' );
 	const [ unknown, setUnknown ] = useState( !! ( initial && initial.clone_unknown ) );
@@ -169,6 +170,9 @@ export default function BaselineCard( { pairing, initial, notify } ) {
 					setPage( 1 );
 					setTable( null );
 					loadTable( 'strong', 1 );
+					if ( onDone ) {
+						onDone();
+					}
 					notify(
 						'success',
 						sprintf(

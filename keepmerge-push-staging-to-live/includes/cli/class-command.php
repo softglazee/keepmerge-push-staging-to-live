@@ -11,6 +11,9 @@ use SoftGlaze\SafePush\Installer;
 use SoftGlaze\SafePush\Pairing_Service;
 use SoftGlaze\SafePush\Receive_Window;
 use SoftGlaze\SafePush\Source_Pairing;
+use SoftGlaze\SafePush\Sync\Classifier;
+use SoftGlaze\SafePush\Sync\Plan_Store;
+use SoftGlaze\SafePush\Sync\Planner;
 use WP_CLI;
 use WP_Error;
 
@@ -19,12 +22,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Pairs this site and controls the receive window from the command line.
+ * Pairs this site, controls the receive window and builds dry-run plans from the command line.
  *
  * Shell access implies full trust on this site; every change is still audited with the actor
  * "cli", and destructive commands ask first unless --yes is given.
  *
- * TODO(Phase 4–8): plan, push, pushes, rollback, audit.
+ * TODO(Phase 5–8): push, pushes, rollback, audit.
  */
 final class Command {
 
@@ -333,6 +336,161 @@ final class Command {
 		}
 
 		WP_CLI::success( 'Pairing revoked.' );
+	}
+
+	/**
+	 * Builds a dry-run plan against the live site and prints it: counts per class, the conflicts
+	 * to decide, and every item that differs. Live is only read; nothing is sent for writing.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--pairing=<uuid>]
+	 * : Pairing UUID. Default: the first active pairing this site sends through.
+	 *
+	 * [--types=<groups>]
+	 * : Comma-separated scope: content, products, media, terms, menus, site_editor, options.
+	 * Default: every included type.
+	 *
+	 * [--all]
+	 * : List unchanged items too.
+	 *
+	 * [--format=<format>]
+	 * : Output format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp keepmerge plan
+	 *     wp keepmerge plan --types=content,media --format=json
+	 *
+	 * @param array $args       Positional arguments (unused).
+	 * @param array $assoc_args Associative arguments.
+	 * @return void
+	 */
+	public function plan( $args, $assoc_args ) {
+		unset( $args );
+
+		$uuid = isset( $assoc_args['pairing'] ) ? strtolower( trim( (string) $assoc_args['pairing'] ) ) : '';
+		if ( '' === $uuid ) {
+			foreach ( Source_Pairing::list_pairings() as $pairing ) {
+				if ( 'active' === $pairing['status'] ) {
+					$uuid = $pairing['uuid'];
+					break;
+				}
+			}
+		}
+		if ( '' === $uuid ) {
+			WP_CLI::error( 'This site has no active pairing to a live site. See wp keepmerge status.' );
+		}
+
+		$groups = array();
+		if ( isset( $assoc_args['types'] ) && '' !== trim( (string) $assoc_args['types'] ) ) {
+			$groups = array_values( array_filter( array_map( 'trim', explode( ',', strtolower( (string) $assoc_args['types'] ) ) ) ) );
+		}
+
+		$plan = Planner::run( $uuid, $groups, get_current_user_id() );
+		if ( is_wp_error( $plan ) ) {
+			$this->fail( $plan );
+		}
+		if ( 'planned' !== $plan['state'] ) {
+			WP_CLI::error( 'The plan did not finish. Run the command again.' );
+		}
+
+		$all  = ! empty( $assoc_args['all'] );
+		$rows = array();
+		foreach ( Plan_Store::all_items( (int) $plan['id'] ) as $row ) {
+			$in_scope = 'out_of_scope' !== $row['action'] || ! empty( $row['payload']['pulled_in'] );
+			if ( ! $in_scope || ( ! $all && Classifier::UNCHANGED === $row['status'] ) ) {
+				continue;
+			}
+			$rows[] = $this->plan_line( $row );
+		}
+
+		if ( isset( $assoc_args['format'] ) && 'json' === $assoc_args['format'] ) {
+			WP_CLI::line(
+				(string) wp_json_encode(
+					array(
+						'plan' => $plan,
+						'rows' => $rows,
+					),
+					JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+				)
+			);
+			return;
+		}
+
+		$summary = $plan['summary'];
+		WP_CLI::line( sprintf( 'Plan %d (pairing %s), clone date: %s', $plan['id'], $plan['pairing'], $summary['clone']['unknown'] ? 'unknown' : (string) $summary['clone']['date'] ) );
+		WP_CLI::line( sprintf( 'Items: %d in scope, %d differ. Conflicts to decide: %d. Blocked: %d. Would send: %d.', $summary['totals']['in_scope'], $summary['totals']['changes'], $summary['undecided'], $summary['blocked'], $summary['sent'] ) );
+
+		$counts = array();
+		foreach ( $summary['by_class'] as $class => $count ) {
+			if ( $count > 0 ) {
+				$counts[] = array(
+					'class' => $class,
+					'items' => $count,
+				);
+			}
+		}
+		WP_CLI\Utils\format_items( 'table', $counts, array( 'class', 'items' ) );
+
+		$dialog = $summary['dialog'];
+		WP_CLI::line( sprintf( 'A push would: create %d, update %d, trash %d, recreate %d, record base %d; keep live %d; skip %d. Held for review on live (predicted): %d. Decided by dates: %d.', $dialog['create'], $dialog['update'], $dialog['trash'], $dialog['recreate'], $dialog['record_base'], $dialog['keep_live'], $dialog['skip'], $dialog['held'], $dialog['by_dates'] ) );
+		foreach ( $summary['warnings'] as $code => $warning ) {
+			WP_CLI::line( sprintf( 'Warning %s: %d item(s)', $code, $warning['count'] ) );
+		}
+		if ( ! empty( $summary['missing_themes'] ) ) {
+			WP_CLI::line( 'Themes missing on live: ' . implode( ', ', $summary['missing_themes'] ) );
+		}
+		foreach ( $summary['missing_blocks'] as $block ) {
+			WP_CLI::line( sprintf( 'Block type not registered on live: %s (%d item(s))', $block['name'], $block['items'] ) );
+		}
+		WP_CLI::line( 'Code report: ' . $summary['code']['state'] );
+
+		if ( empty( $rows ) ) {
+			WP_CLI::success( 'Nothing differs.' );
+			return;
+		}
+		WP_CLI\Utils\format_items( 'table', $rows, array( 'item', 'kind', 'type', 'local_id', 'live_id', 'class', 'action', 'groups', 'badges', 'warnings' ) );
+	}
+
+	/**
+	 * One plan row for the table.
+	 *
+	 * @param array $row Row.
+	 * @return array
+	 */
+	private function plan_line( array $row ) {
+		$p      = $row['payload'];
+		$groups = array();
+		foreach ( isset( $p['groups'] ) && is_array( $p['groups'] ) ? $p['groups'] : array() as $name => $group ) {
+			$action   = ! empty( $group['decision'] ) ? $group['decision'] : ( '' === $group['action'] ? 'decide' : $group['action'] );
+			$groups[] = $name . ':' . $action;
+		}
+		$warnings = array();
+		foreach ( isset( $p['warnings'] ) ? (array) $p['warnings'] : array() as $warning ) {
+			$warnings[] = $warning['code'];
+		}
+		$effective = Planner::effective( $row );
+
+		return array(
+			'item'     => wp_strip_all_tags( isset( $p['title'] ) ? (string) $p['title'] : '' ),
+			'uuid'     => (string) $row['uuid'],
+			'kind'     => (string) $row['object_type'],
+			'type'     => isset( $p['type'] ) ? (string) $p['type'] : '',
+			'local_id' => (int) $row['local_object_id'],
+			'live_id'  => isset( $p['live_id'] ) ? (int) $p['live_id'] : 0,
+			'class'    => (string) $row['status'],
+			'action'   => '' === $effective ? 'DECIDE' : $effective,
+			'groups'   => implode( ' ', $groups ),
+			'badges'   => implode( ',', isset( $p['badges'] ) ? (array) $p['badges'] : array() ),
+			'warnings' => implode( ',', $warnings ),
+		);
 	}
 
 	/**

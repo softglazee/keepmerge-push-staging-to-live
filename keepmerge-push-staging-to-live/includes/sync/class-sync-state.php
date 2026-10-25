@@ -20,6 +20,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * On the source the baseline writes rows here; it is the only table it writes besides the UUID
  * meta of its own objects. Live reads its rows for base hashes and never writes them in this
  * version (blueprint §6.4 step 3).
+ *
+ * TODO(Phase 7): live writes base_hash and, for products, base_groups (JSON group => hash) after
+ * each apply and adopt; the planner's per-group three-way reads base_groups from the manifest.
  */
 final class Sync_State {
 

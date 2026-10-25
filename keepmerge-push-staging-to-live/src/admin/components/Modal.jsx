@@ -15,8 +15,10 @@ const FOCUSABLE =
  * @param {*}        props.children Body.
  * @param {*}        [props.footer] Buttons.
  * @param {string}   [props.initialFocus] Selector of the element to focus first.
+ * @param {string}   [props.size]     'wide' for a larger dialog (the diff drawer).
+ * @param {*}        [props.subtitle] Line under the title.
  */
-export default function Modal( { title, onClose, children, footer, initialFocus } ) {
+export default function Modal( { title, onClose, children, footer, initialFocus, size, subtitle } ) {
 	const dialogRef = useRef( null );
 	const titleId = useRef( `sgsp-modal-${ Math.random().toString( 36 ).slice( 2 ) }` );
 
@@ -70,16 +72,19 @@ export default function Modal( { title, onClose, children, footer, initialFocus 
 	return (
 		<div className="sgsp-modal-overlay">
 			<div
-				className="sgsp-modal"
+				className={ 'wide' === size ? 'sgsp-modal sgsp-modal--wide' : 'sgsp-modal' }
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby={ titleId.current }
 				ref={ dialogRef }
 			>
 				<div className="sgsp-modal__head">
-					<h2 className="sgsp-modal__title" id={ titleId.current }>
-						{ title }
-					</h2>
+					<div className="sgsp-min-w-0">
+						<h2 className="sgsp-modal__title" id={ titleId.current }>
+							{ title }
+						</h2>
+						{ subtitle && <div className="sgsp-modal__subtitle">{ subtitle }</div> }
+					</div>
 					<button
 						type="button"
 						className="sgsp-icon-button"

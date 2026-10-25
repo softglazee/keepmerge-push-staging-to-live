@@ -19,6 +19,8 @@ use SoftGlaze\SafePush\Settings;
 use SoftGlaze\SafePush\Source_Pairing;
 use SoftGlaze\SafePush\Sync\Baseline;
 use SoftGlaze\SafePush\Sync\Option_Policy;
+use SoftGlaze\SafePush\Sync\Plan_Store;
+use SoftGlaze\SafePush\Sync\Planner;
 use SoftGlaze\SafePush\Tables;
 use WP_Error;
 use WP_REST_Request;
@@ -526,6 +528,7 @@ final class Admin_Controller {
 				),
 				'pairings'    => Source_Pairing::list_pairings(),
 				'baselines'   => $this->baselines(),
+				'plans'       => $this->latest_plans(),
 			)
 		);
 	}
@@ -584,6 +587,22 @@ final class Admin_Controller {
 		$result = Baseline::step( is_string( $uuid ) && wp_is_uuid( $uuid, 4 ) ? strtolower( $uuid ) : '', $args );
 
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * The newest usable plan of each source pairing (null when none, or older than 60 minutes),
+	 * keyed by pairing UUID, so the Send tab can show it again after a reload.
+	 *
+	 * @return array<string,array|null>
+	 */
+	private function latest_plans() {
+		$out = array();
+		foreach ( Source_Pairing::list_pairings() as $pairing ) {
+			$row                     = Source_Pairing::find( $pairing['uuid'] );
+			$plan                    = null === $row ? null : Plan_Store::latest( (int) $row['id'] );
+			$out[ $pairing['uuid'] ] = null === $plan || Plan_Store::is_expired( $plan ) ? null : Planner::present( $plan );
+		}
+		return $out;
 	}
 
 	/**

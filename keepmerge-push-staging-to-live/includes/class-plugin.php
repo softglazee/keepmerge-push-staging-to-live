@@ -86,6 +86,7 @@ final class Plugin {
 		Installer::ensure_site_id();
 
 		( new Rest\Admin_Controller() )->register_routes();
+		( new Rest\Plan_Controller() )->register_routes();
 
 		if ( Receive_Window::is_open() ) {
 			( new Rest\Remote_Controller() )->register_routes();

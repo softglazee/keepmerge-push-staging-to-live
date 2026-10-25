@@ -201,3 +201,93 @@ export function getBaseline( pairing, filter, page ) {
 export function runBaseline( data ) {
 	return apiFetch( { path: `${ BASE }/baseline`, method: 'POST', data } );
 }
+
+/**
+ * Starts a dry-run plan (reads live, writes only this site's plan rows).
+ *
+ * @param {Object} data { pairing, types }.
+ * @return {Promise} The plan.
+ */
+export function createPlan( data ) {
+	return apiFetch( { path: `${ BASE }/plans`, method: 'POST', data } );
+}
+
+/**
+ * One time-boxed step of a plan.
+ *
+ * @param {number} id    Plan ID.
+ * @param {number} steps Step count the screen last saw.
+ * @return {Promise} The plan.
+ */
+export function stepPlan( id, steps ) {
+	return apiFetch( {
+		path: `${ BASE }/plans/${ id }/step`,
+		method: 'POST',
+		data: { steps },
+	} );
+}
+
+/**
+ * The plan and one page of rows.
+ *
+ * @param {number} id     Plan ID.
+ * @param {Object} params tab, class, kind, warnings, all, search, orderby, order, page, per_page.
+ * @return {Promise} { plan, rows }.
+ */
+export function getPlan( id, params ) {
+	const clean = { ...params };
+	[ 'warnings', 'all' ].forEach( ( key ) => {
+		if ( clean[ key ] ) {
+			clean[ key ] = 'true';
+		} else {
+			delete clean[ key ];
+		}
+	} );
+	return apiFetch( { path: `${ BASE }/plans/${ id }${ query( clean ) }` } );
+}
+
+/**
+ * The text diff of one plan item (reads live's copy).
+ *
+ * @param {number} id   Plan ID.
+ * @param {string} item Item key (UUID, option:<name> or unit:widgets).
+ * @return {Promise} Diff.
+ */
+export function getPlanDiff( id, item ) {
+	return apiFetch( {
+		path: `${ BASE }/plans/${ id }/items/${ item }/diff`,
+	} );
+}
+
+/**
+ * Saves decisions, or the bulk "Keep live for all remaining".
+ *
+ * @param {number} id   Plan ID.
+ * @param {Object} data { decisions: [ { uuid, action, group } ], bulk }.
+ * @return {Promise} The plan.
+ */
+export function decidePlan( id, data ) {
+	return apiFetch( {
+		path: `${ BASE }/plans/${ id }/decisions`,
+		method: 'POST',
+		data,
+	} );
+}
+
+/**
+ * The code report of a pairing; with run, one time-boxed step of it.
+ *
+ * @param {string}  pairing Pairing UUID.
+ * @param {boolean} run     Run one step.
+ * @param {boolean} restart Start again from live's inventory.
+ * @return {Promise} Report.
+ */
+export function getCodeReport( pairing, run, restart ) {
+	return apiFetch( {
+		path: `${ BASE }/code-report${ query( {
+			pairing,
+			run: run ? 'true' : '',
+			restart: restart ? 'true' : '',
+		} ) }`,
+	} );
+}
