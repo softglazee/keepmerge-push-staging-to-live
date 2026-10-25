@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { createElement, Fragment, useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { ListChecks, Plus } from 'lucide-react';
 import Card from '../components/Card';
@@ -8,6 +8,7 @@ import LoadError from '../components/LoadError';
 import PanelHead from '../components/PanelHead';
 import { SkeletonCard } from '../components/Skeleton';
 import { checkPairing, confirmConnect, errorMessage, getSend, previewConnect, revokePairing } from '../api';
+import BaselineCard from './send/BaselineCard';
 import ConnectCard from './send/ConnectCard';
 import ConnectionCard from './send/ConnectionCard';
 import { useTick } from './receive/time';
@@ -21,7 +22,9 @@ const CHECKABLE = [ 'pending', 'awaiting_approval', 'active' ];
  * on live. Status calls go through this site's admin routes; the long-term credentials never
  * reach the browser.
  *
- * TODO(Phase 3): baseline. TODO(Phase 4): plan, diff and conflict decisions.
+ * Each active pairing has its baseline card (Phase 3).
+ *
+ * TODO(Phase 4): plan, diff and conflict decisions.
  * TODO(Phase 5): the push dialog with counts and the typed live domain.
  *
  * @param {Object}   props
@@ -244,15 +247,23 @@ export default function SendScreen( { notify, onChanged } ) {
 			{ head }
 			<div className="sgsp-stack">
 				{ pairings.map( ( pairing ) => (
-					<ConnectionCard
-						key={ pairing.uuid }
-						pairing={ pairing }
-						site={ data.site }
-						now={ now }
-						busy={ busy === pairing.uuid }
-						onCheck={ () => runCheck( pairing ) }
-						onRevoke={ () => setConfirm( pairing ) }
-					/>
+					<Fragment key={ pairing.uuid }>
+						<ConnectionCard
+							pairing={ pairing }
+							site={ data.site }
+							now={ now }
+							busy={ busy === pairing.uuid }
+							onCheck={ () => runCheck( pairing ) }
+							onRevoke={ () => setConfirm( pairing ) }
+						/>
+						{ 'active' === pairing.status && (
+							<BaselineCard
+								pairing={ pairing }
+								initial={ ( data.baselines || {} )[ pairing.uuid ] || null }
+								notify={ notify }
+							/>
+						) }
+					</Fragment>
 				) ) }
 
 				{ formOpen ? (
@@ -290,7 +301,7 @@ export default function SendScreen( { notify, onChanged } ) {
 					<EmptyState
 						title={ __( 'Nothing to compare yet', 'keepmerge-push-staging-to-live' ) }
 						text={ __(
-							'After connecting, Keepmerge matches the items on both sites and shows what a push would create, update or keep, with conflicts for you to decide. Orders, customers and code are never part of a push.',
+							'After connecting and running the baseline, Keepmerge shows what a push would create, update or keep, with conflicts for you to decide. Orders, customers and code are never part of a push.',
 							'keepmerge-push-staging-to-live'
 						) }
 					/>

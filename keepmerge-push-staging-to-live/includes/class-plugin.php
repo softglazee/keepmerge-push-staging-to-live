@@ -49,6 +49,7 @@ final class Plugin {
 		add_action( 'init', array( Installer::class, 'maybe_upgrade' ), 1 );
 		add_action( 'init', array( Installer::class, 'ensure_site_id' ), 2 );
 		add_action( 'init', array( Settings::class, 'register' ) );
+		add_action( 'update_option_' . Settings::OPTION, array( Sync\Scope::class, 'flush' ) );
 
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
 

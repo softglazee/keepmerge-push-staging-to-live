@@ -486,6 +486,70 @@ final class Source_Pairing {
 	}
 
 	/**
+	 * An active source pairing and a client with its long-term credentials, for the read-only
+	 * routes (baseline, manifest, items/fetch). The credentials stay inside the client.
+	 *
+	 * @param mixed $uuid Pairing UUID.
+	 * @return array{row:array,client:Remote_Client}|WP_Error
+	 */
+	public static function active_client( $uuid ) {
+		$row = self::find( $uuid );
+		if ( null === $row ) {
+			return self::not_found();
+		}
+		if ( 'active' !== $row['status'] ) {
+			return new WP_Error(
+				'pairing_not_active',
+				'awaiting_approval' === $row['status'] || 'pending' === $row['status']
+					? Remote_Client::message( 'pairing_not_approved' )
+					: __( 'This pairing cannot be used: connect again with a new key from the live site.', 'keepmerge-push-staging-to-live' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		$client = self::row_client( $row );
+		if ( is_wp_error( $client ) ) {
+			self::to_repair_needed( $row, 'decrypt_failed' );
+			return new WP_Error( 'decrypt_failed', $client->get_error_message(), array( 'status' => 409 ) );
+		}
+
+		return array(
+			'row'    => $row,
+			'client' => $client,
+		);
+	}
+
+	/**
+	 * After a read-route call: keeps a newly checked address, records a refusal in the pairing's
+	 * last check and retires the pairing when live refused it for good (the PERMANENT codes).
+	 *
+	 * @param array         $row    Row the client was built from.
+	 * @param Remote_Client $client Client.
+	 * @param WP_Error|null $error  The call's error, if any.
+	 * @return void
+	 */
+	public static function after_call( array $row, Remote_Client $client, $error = null ) {
+		self::keep_pin( $row, $client );
+		if ( ! $error instanceof WP_Error ) {
+			Pairing_Store::update( (int) $row['id'], array( 'last_used_gmt' => gmdate( 'Y-m-d H:i:s' ) ) );
+			return;
+		}
+
+		$code         = $error->get_error_code();
+		$info         = self::decode_info( Pairing_Store::find( $row['pairing_uuid'] ) );
+		$info['last'] = self::last_entry( false, $code, $error );
+		if ( 'window_closed' === $code ) {
+			$info['window_open']      = false;
+			$info['window_closes_at'] = null;
+		}
+		Pairing_Store::update( (int) $row['id'], array( 'remote_info' => self::encode_info( $info ) ) );
+
+		if ( isset( self::PERMANENT[ $code ] ) ) {
+			self::to_repair_needed( Pairing_Store::find( $row['pairing_uuid'] ), self::PERMANENT[ $code ] );
+		}
+	}
+
+	/**
 	 * What to tell the admin after revoking here.
 	 *
 	 * @param array $row Row.

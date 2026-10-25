@@ -214,6 +214,7 @@ final class Remote_Client {
 	 *     @type int   $budget  Seconds the whole call may take (default Limits::time_budget()).
 	 *     @type int   $timeout Seconds per attempt (default 15, at most 30).
 	 *     @type int[] $backoff Seconds before each retry (default 1, 2, 4, 8, 16).
+	 *     @type int   $depth   JSON nesting accepted in a 2xx answer (default 16, at most 128).
 	 * }
 	 * @return array{status:int,data:array}|WP_Error
 	 */
@@ -421,7 +422,9 @@ final class Remote_Client {
 				return $this->failure( $code, $status, '', false );
 			}
 
-			$data = json_decode( $raw, true, 16 );
+			// Normal forms of items (items/fetch) nest deeper than the pairing answers.
+			$depth = isset( $opts['depth'] ) ? min( 128, max( 16, (int) $opts['depth'] ) ) : 16;
+			$data  = json_decode( $raw, true, $depth );
 			if ( ! is_array( $data ) ) {
 				return $this->failure( 'response_invalid', $status, '', true );
 			}

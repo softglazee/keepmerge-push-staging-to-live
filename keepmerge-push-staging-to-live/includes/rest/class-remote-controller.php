@@ -16,6 +16,8 @@ use SoftGlaze\SafePush\Plugin;
 use SoftGlaze\SafePush\Receive_Window;
 use SoftGlaze\SafePush\Settings;
 use SoftGlaze\SafePush\Signer;
+use SoftGlaze\SafePush\Sync\Baseline_Matcher;
+use SoftGlaze\SafePush\Sync\Manifest;
 use SoftGlaze\SafePush\Throttle;
 use WP_Error;
 use WP_HTTP_Response;
@@ -29,7 +31,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Routes under keepmerge/v1/remote/ that the paired source calls (threat model §5.1). This
- * version has three: status, pair/confirm and pair/finalize.
+ * version has status, pair/confirm and pair/finalize, and the three read-only routes of an
+ * active pairing: baseline, manifest and items/fetch. None of the read-only routes writes to
+ * live's content, options or sync state; they write only what the chain writes for every
+ * request (the nonce, the last-used time) and one audit row with counts.
  *
  * The routes are registered only while the receive window is open, so a site with the window
  * closed has no remote route at all. Every route's permission_callback is the full chain in
@@ -43,6 +48,12 @@ final class Remote_Controller {
 	const CONFIRM_MAX_BYTES = 4096;
 
 	const FINALIZE_MAX_BYTES = 1024;
+
+	const BASELINE_MAX_BYTES = 524288;
+
+	const MANIFEST_MAX_BYTES = 262144;
+
+	const FETCH_MAX_BYTES = 32768;
 
 	/**
 	 * An Application Password failure seen during this request (core runs that check before any
@@ -102,6 +113,39 @@ final class Remote_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'finalize' ),
 				'permission_callback' => array( Remote_Permission::class, 'check_finalize' ),
+				'args'                => array(),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/baseline',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'baseline' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_baseline' ),
+				'args'                => array(),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/manifest',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'manifest' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_manifest' ),
+				'args'                => array(),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/items/fetch',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'fetch_items' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_fetch' ),
 				'args'                => array(),
 			)
 		);
@@ -248,6 +292,130 @@ final class Remote_Controller {
 		}
 
 		return new WP_REST_Response( Pairing_Service::finalize( $context['pairing'], Throttle::client_ip() ), 200 );
+	}
+
+	/**
+	 * POST /remote/baseline (R4, read-only): match results for at most 500 fingerprints.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function baseline( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, self::BASELINE_MAX_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$result = Baseline_Matcher::answer( $body );
+		if ( is_wp_error( $result ) ) {
+			self::audit_read( 'baseline_requested', $context['pairing'], array( 'reason' => $result->get_error_code() ), 'denied' );
+			return $result;
+		}
+
+		self::audit_read(
+			'baseline_requested',
+			$context['pairing'],
+			array_merge( array( 'fingerprints' => count( $result['results'] ) ), $result['counts'] )
+		);
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * POST /remote/manifest (R5, read-only): live and base hashes for at most 500 items, live-only
+	 * changes since the base, and the block types and themes live lacks for the listed items.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function manifest( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, self::MANIFEST_MAX_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$result = Manifest::answer( $context['pairing'], $body );
+		if ( is_wp_error( $result ) ) {
+			self::audit_read( 'manifest_requested', $context['pairing'], array( 'reason' => $result->get_error_code() ), 'denied' );
+			return $result;
+		}
+
+		self::audit_read(
+			'manifest_requested',
+			$context['pairing'],
+			array_merge(
+				array(
+					'items'        => count( $result['items'] ),
+					'live_changes' => count( $result['live_changes']['items'] ),
+				),
+				$result['counts']
+			)
+		);
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * POST /remote/items/fetch (R6, read-only): live's normal forms of at most 50 items of
+	 * included types, for diffs.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function fetch_items( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, self::FETCH_MAX_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$result = Manifest::fetch( $context['pairing'], $body );
+		if ( is_wp_error( $result ) ) {
+			self::audit_read( 'items_fetched', $context['pairing'], array( 'reason' => $result->get_error_code() ), 'denied' );
+			return $result;
+		}
+
+		self::audit_read( 'items_fetched', $context['pairing'], array_merge( array( 'count' => count( $result['items'] ) ), $result['counts'] ) );
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * Audit row of a read route: counts only, never content (blueprint §17).
+	 *
+	 * @param string $event   Event.
+	 * @param array  $pairing Pairing row.
+	 * @param array  $counts  Counts.
+	 * @param string $result  ok or denied.
+	 * @return void
+	 */
+	private static function audit_read( $event, array $pairing, array $counts, $result = 'ok' ) {
+		Audit_Log::write(
+			$event,
+			array(
+				'result'      => $result,
+				'actor_type'  => 'remote',
+				'actor_id'    => 0,
+				'pairing_id'  => (int) $pairing['id'],
+				'object_type' => 'pairing',
+				'object_ref'  => $pairing['pairing_uuid'],
+				'details'     => $counts,
+			)
+		);
 	}
 
 	/**

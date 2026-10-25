@@ -39,6 +39,18 @@ final class Remote_Permission {
 
 	const ROUTE_FINALIZE = 'finalize';
 
+	const ROUTE_BASELINE = 'baseline';
+
+	const ROUTE_MANIFEST = 'manifest';
+
+	const ROUTE_FETCH = 'fetch';
+
+	/**
+	 * Routes an active pairing answers with its long-term credentials (threat model §5.1: R1 and
+	 * the read-only routes R4 to R6). The pairing routes R2 and R3 end with approval.
+	 */
+	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH );
+
 	const SET_BOOTSTRAP = 'bootstrap';
 
 	const SET_LONG_TERM = 'long_term';
@@ -99,6 +111,36 @@ final class Remote_Permission {
 	 */
 	public static function check_finalize( WP_REST_Request $request ) {
 		return self::check( $request, self::ROUTE_FINALIZE );
+	}
+
+	/**
+	 * Chain for POST /remote/baseline.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_baseline( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_BASELINE );
+	}
+
+	/**
+	 * Chain for POST /remote/manifest.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_manifest( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_MANIFEST );
+	}
+
+	/**
+	 * Chain for POST /remote/items/fetch.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_fetch( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_FETCH );
 	}
 
 	/**
@@ -250,8 +292,17 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Which credential set a pairing in its current state accepts on a route (the state × route
-	 * table of the phase plan), or the refusal.
+	 * Which credential set a pairing in its current state accepts on a route, or the refusal.
+	 *
+	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phase 3):
+	 *
+	 *   state              status      confirm     finalize    baseline / manifest / fetch
+	 *   pending            bootstrap   bootstrap   long-term*  401 pairing_invalid
+	 *   awaiting_approval  long-term   403 pairing_not_approved (every route but status)
+	 *   active             long-term   401         401         long-term
+	 *   repair_needed,
+	 *   revoked            401 pairing_invalid on every route
+	 *   (* only once confirm issued the long-term credentials)
 	 *
 	 * @param array|null $pairing  Pairing row.
 	 * @param string     $route_id Route.
@@ -282,7 +333,7 @@ final class Remote_Permission {
 				if ( self::ROUTE_FINALIZE === $route_id && '' !== (string) $pairing['app_password_uuid'] && ! empty( $pairing['secret_enc'] ) ) {
 					return self::SET_LONG_TERM;
 				}
-				return self::refusal( 'pairing_invalid', 401, 'not_confirmed' );
+				return self::refusal( 'pairing_invalid', 401, self::ROUTE_FINALIZE === $route_id ? 'not_confirmed' : 'not_active' );
 
 			case 'awaiting_approval':
 				if ( self::ROUTE_STATUS === $route_id ) {
@@ -291,7 +342,7 @@ final class Remote_Permission {
 				return self::refusal( 'pairing_not_approved', 403, 'pairing_not_approved' );
 
 			case 'active':
-				if ( self::ROUTE_STATUS === $route_id ) {
+				if ( in_array( $route_id, self::ACTIVE_ROUTES, true ) ) {
 					return self::SET_LONG_TERM;
 				}
 				return self::refusal( 'pairing_invalid', 401, 'already_active' );

@@ -17,6 +17,7 @@ use SoftGlaze\SafePush\Receive_Window;
 use SoftGlaze\SafePush\Receiver_User;
 use SoftGlaze\SafePush\Settings;
 use SoftGlaze\SafePush\Source_Pairing;
+use SoftGlaze\SafePush\Sync\Baseline;
 use SoftGlaze\SafePush\Sync\Option_Policy;
 use SoftGlaze\SafePush\Tables;
 use WP_Error;
@@ -237,6 +238,56 @@ final class Admin_Controller {
 				'callback'            => array( $this, 'confirm_connect' ),
 				'permission_callback' => $permission,
 				'args'                => $key_args,
+			)
+		);
+
+		// Baseline (source): args are type checks only; each value is validated in the handler,
+		// after the permission check (core checks args first).
+		register_rest_route(
+			$ns,
+			self::BASE . '/baseline',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_baseline' ),
+					'permission_callback' => $permission,
+					'args'                => array(
+						'pairing' => array(
+							'type'      => 'string',
+							'maxLength' => 36,
+						),
+						'filter'  => array(
+							'type'      => 'string',
+							'maxLength' => 20,
+						),
+						'page'    => array(
+							'type'    => 'integer',
+							'minimum' => 1,
+							'maximum' => 100000,
+						),
+					),
+				),
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'run_baseline' ),
+					'permission_callback' => $permission,
+					'args'                => array(
+						'pairing'       => array(
+							'type'      => 'string',
+							'maxLength' => 36,
+						),
+						'clone_date'    => array(
+							'type'      => 'string',
+							'maxLength' => 10,
+						),
+						'clone_unknown' => array( 'type' => 'boolean' ),
+						'restart'       => array( 'type' => 'boolean' ),
+						'cursor'        => array(
+							'type'    => 'integer',
+							'minimum' => 0,
+						),
+					),
+				),
 			)
 		);
 
@@ -474,8 +525,78 @@ final class Admin_Controller {
 					'message' => $blocker->get_error_message(),
 				),
 				'pairings'    => Source_Pairing::list_pairings(),
+				'baselines'   => $this->baselines(),
 			)
 		);
+	}
+
+	/**
+	 * GET /admin/baseline: a pairing's baseline record and one page of its sample table.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_baseline( WP_REST_Request $request ) {
+		$uuid   = $request->get_param( 'pairing' );
+		$filter = $request->get_param( 'filter' );
+		$page   = $request->get_param( 'page' );
+
+		$uuid   = is_string( $uuid ) && wp_is_uuid( $uuid, 4 ) ? strtolower( $uuid ) : '';
+		$filter = is_string( $filter ) && '' !== $filter ? sanitize_key( $filter ) : 'strong';
+		$page   = is_int( $page ) ? $page : 1;
+
+		$rows = Baseline::rows( $uuid, $filter, $page );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+
+		return rest_ensure_response(
+			array(
+				'baseline' => Baseline::summary( $uuid ),
+				'table'    => $rows,
+			)
+		);
+	}
+
+	/**
+	 * POST /admin/baseline: one time-boxed step of a pairing's baseline. Reads live; writes this
+	 * site's sync state and UUID meta only.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function run_baseline( WP_REST_Request $request ) {
+		$uuid    = $request->get_param( 'pairing' );
+		$date    = $request->get_param( 'clone_date' );
+		$unknown = $request->get_param( 'clone_unknown' );
+		$restart = $request->get_param( 'restart' );
+		$cursor  = $request->get_param( 'cursor' );
+
+		$args = array(
+			'restart'       => true === $restart,
+			'clone_date'    => is_string( $date ) ? sanitize_text_field( $date ) : '',
+			'clone_unknown' => true === $unknown,
+		);
+		if ( is_int( $cursor ) ) {
+			$args['cursor'] = $cursor;
+		}
+
+		$result = Baseline::step( is_string( $uuid ) && wp_is_uuid( $uuid, 4 ) ? strtolower( $uuid ) : '', $args );
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * Baseline records of this site's source pairings, keyed by pairing UUID.
+	 *
+	 * @return array<string,array|null>
+	 */
+	private function baselines() {
+		$out = array();
+		foreach ( Source_Pairing::list_pairings() as $pairing ) {
+			$out[ $pairing['uuid'] ] = Baseline::summary( $pairing['uuid'] );
+		}
+		return $out;
 	}
 
 	/**

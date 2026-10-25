@@ -177,3 +177,27 @@ export function checkPairing( uuid ) {
 		method: 'POST',
 	} );
 }
+
+/**
+ * A pairing's baseline record and one page of its sample table.
+ *
+ * @param {string} pairing Pairing UUID.
+ * @param {string} filter  strong, medium, none, duplicate or excluded.
+ * @param {number} page    1-based page.
+ * @return {Promise} { baseline, table }.
+ */
+export function getBaseline( pairing, filter, page ) {
+	return apiFetch( {
+		path: `${ BASE }/baseline${ query( { pairing, filter, page } ) }`,
+	} );
+}
+
+/**
+ * One time-boxed step of a pairing's baseline (reads live, writes this site's sync state).
+ *
+ * @param {Object} data { pairing, restart, clone_date, clone_unknown, cursor }.
+ * @return {Promise} The baseline record.
+ */
+export function runBaseline( data ) {
+	return apiFetch( { path: `${ BASE }/baseline`, method: 'POST', data } );
+}
