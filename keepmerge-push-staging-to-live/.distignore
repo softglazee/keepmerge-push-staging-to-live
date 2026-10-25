@@ -1,0 +1,15 @@
+.distignore
+.gitignore
+.gitattributes
+.git
+.github
+.DS_Store
+Thumbs.db
+node_modules
+*.map
+package-lock.json
+*.dist
+phpcs.xml*
+phpunit.xml*
+*.md
+src/**/*.test.js
