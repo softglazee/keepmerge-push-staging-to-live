@@ -57,4 +57,13 @@ final class Limits {
 		}
 		return (int) wp_convert_hr_to_bytes( $raw );
 	}
+
+	/**
+	 * PHP post_max_size in bytes; 0 means no limit.
+	 *
+	 * @return int
+	 */
+	public static function post_max_size_bytes() {
+		return max( 0, (int) wp_convert_hr_to_bytes( (string) ini_get( 'post_max_size' ) ) );
+	}
 }

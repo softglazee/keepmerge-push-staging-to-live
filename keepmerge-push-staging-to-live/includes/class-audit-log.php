@@ -154,6 +154,8 @@ final class Audit_Log {
 	 *     @type string $object_ref  UUID or name of the object, never its content.
 	 *     @type string $ip          Address to record; defaults to the client address for user and remote actors.
 	 *     @type array  $details     Small array of facts; 'reason' takes part in collapsing.
+	 *     @type bool   $collapse    Collapse a successful event too: one row per event, address
+	 *                               and pairing per 10 minutes with a count (status polling).
 	 * }
 	 * @return int|false Row ID written or updated, false when nothing was written.
 	 */
@@ -185,15 +187,23 @@ final class Audit_Log {
 		$table   = Tables::table_name( 'audit' );
 		$now     = gmdate( 'Y-m-d H:i:s' );
 
-		if ( 'ok' !== $result && '' !== $ip ) {
+		$pairing_id   = isset( $args['pairing_id'] ) ? absint( $args['pairing_id'] ) : 0;
+		$collapse_ok  = 'ok' === $result && ! empty( $args['collapse'] );
+		$collapse_bad = 'ok' !== $result && '' !== $ip;
+
+		$locked = false;
+		if ( $collapse_ok || $collapse_bad ) {
+			// Parallel requests would otherwise read the same count and lose increments.
+			$locked = self::collapse_lock();
 			$reason = isset( $details['reason'] ) && is_scalar( $details['reason'] ) ? (string) $details['reason'] : '';
-			$open   = self::find_open_row( $event, $ip, $reason );
+			$open   = self::find_open_row( $event, $ip, $reason, $collapse_ok ? $pairing_id : null );
 			if ( null !== $open ) {
 				$open['details']['count']   = ( isset( $open['details']['count'] ) ? absint( $open['details']['count'] ) : 1 ) + 1;
 				$open['details']['last_at'] = $now;
 
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; $wpdb->update prepares the statement.
 				$wpdb->update( $table, array( 'details' => wp_json_encode( $open['details'] ) ), array( 'id' => $open['id'] ), array( '%s' ), array( '%d' ) );
+				self::collapse_unlock( $locked );
 				return $open['id'];
 			}
 			$details['count'] = 1;
@@ -201,7 +211,7 @@ final class Audit_Log {
 
 		$row = array(
 			'created_gmt' => $now,
-			'pairing_id'  => isset( $args['pairing_id'] ) ? absint( $args['pairing_id'] ) : 0,
+			'pairing_id'  => $pairing_id,
 			'actor_type'  => $actor_type,
 			'actor_id'    => $actor_id,
 			'event'       => $event,
@@ -214,8 +224,51 @@ final class Audit_Log {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Own table; $wpdb->insert prepares the statement.
 		$ok = $wpdb->insert( $table, $row, array( '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ) );
+		$id = $ok ? (int) $wpdb->insert_id : false;
 
-		return $ok ? (int) $wpdb->insert_id : false;
+		self::collapse_unlock( $locked );
+
+		return $id;
+	}
+
+	/**
+	 * Takes the database's named lock that serialises collapsing writes on this site's audit
+	 * table (waits at most 2 seconds; without it the row is still written, the count may then
+	 * miss a parallel increment).
+	 *
+	 * @return bool Whether the lock is held.
+	 */
+	private static function collapse_lock() {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Named lock, no table involved.
+		return '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', self::lock_name(), 2 ) );
+	}
+
+	/**
+	 * Releases the named lock.
+	 *
+	 * @param bool $locked Whether collapse_lock() succeeded.
+	 * @return void
+	 */
+	private static function collapse_unlock( $locked ) {
+		global $wpdb;
+
+		if ( $locked ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Named lock, no table involved.
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', self::lock_name() ) );
+		}
+	}
+
+	/**
+	 * Lock name, unique per database and table prefix (named locks are server-wide).
+	 *
+	 * @return string
+	 */
+	private static function lock_name() {
+		global $wpdb;
+
+		return 'sgsp_audit_' . md5( (string) $wpdb->dbname . '|' . Tables::table_name( 'audit' ) );
 	}
 
 	/**
@@ -491,28 +544,45 @@ final class Audit_Log {
 	 * Rows inside one window are already collapsed per reason, so a handful of rows is the most
 	 * that can match; the LIMIT keeps the lookup bounded either way.
 	 *
-	 * @param string $event  Event.
-	 * @param string $ip     Address.
-	 * @param string $reason Reason code, '' when the caller gave none.
+	 * @param string   $event      Event.
+	 * @param string   $ip         Address.
+	 * @param string   $reason     Reason code, '' when the caller gave none.
+	 * @param int|null $ok_pairing For a collapsed successful event, its pairing; null for failures.
 	 * @return array{id:int,details:array}|null
 	 */
-	private static function find_open_row( $event, $ip, $reason ) {
+	private static function find_open_row( $event, $ip, $reason, $ok_pairing = null ) {
 		global $wpdb;
 
 		$since = gmdate( 'Y-m-d H:i:s', time() - self::COLLAPSE_WINDOW );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; a cached answer would split one burst into many rows.
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT id, details FROM %i WHERE event = %s AND created_gmt >= %s AND ip = %s AND result <> %s ORDER BY id DESC LIMIT 20',
-				Tables::table_name( 'audit' ),
-				$event,
-				$since,
-				$ip,
-				'ok'
-			),
-			ARRAY_A
-		);
+		if ( null === $ok_pairing ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; a cached answer would split one burst into many rows.
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT id, details FROM %i WHERE event = %s AND created_gmt >= %s AND ip = %s AND result <> %s ORDER BY id DESC LIMIT 20',
+					Tables::table_name( 'audit' ),
+					$event,
+					$since,
+					$ip,
+					'ok'
+				),
+				ARRAY_A
+			);
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; a cached answer would split one burst into many rows.
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT id, details FROM %i WHERE event = %s AND created_gmt >= %s AND ip = %s AND result = %s AND pairing_id = %d ORDER BY id DESC LIMIT 20',
+					Tables::table_name( 'audit' ),
+					$event,
+					$since,
+					$ip,
+					'ok',
+					absint( $ok_pairing )
+				),
+				ARRAY_A
+			);
+		}
 
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$details = is_string( $row['details'] ) ? json_decode( $row['details'], true ) : null;

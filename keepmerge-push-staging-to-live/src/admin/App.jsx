@@ -233,9 +233,7 @@ export default function App() {
 			/>
 		),
 		send: <SendScreen overview={ overview } error={ overviewError } onRetry={ loadOverview } />,
-		receive: (
-			<ReceiveScreen overview={ overview } error={ overviewError } onRetry={ loadOverview } />
-		),
+		receive: <ReceiveScreen notify={ notify } onChanged={ loadOverview } />,
 		pushes: (
 			<PushesScreen overview={ overview } error={ overviewError } onRetry={ loadOverview } />
 		),

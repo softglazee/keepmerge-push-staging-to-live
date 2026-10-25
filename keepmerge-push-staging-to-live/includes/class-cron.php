@@ -42,8 +42,9 @@ final class Cron {
 	/**
 	 * The prune itself.
 	 *
-	 * The audit log already has a retention setting, so its prune runs now; the rest of the
-	 * list arrives with the data it prunes.
+	 * Audit rows past retention, expired pairing keys and approvals (with their receivers), a
+	 * receive window whose time is up, nonces older than 900 s and spent throttle rows; the rest
+	 * of the list arrives with the data it prunes.
 	 *
 	 * @return void
 	 */
@@ -51,8 +52,12 @@ final class Cron {
 		$settings = Settings::get();
 		Audit_Log::prune( (int) $settings['audit_days'] );
 
-		// TODO(Phase 8): nonces older than 900 s, expired pending and awaiting_approval pairings,
-		// throttle rows, temp directories older than 24 h, expired push sessions, push_items rows
+		Pairing_Service::cleanup_expired();
+		Receive_Window::is_open();
+		Nonce_Store::prune( 5000 );
+		Throttle::prune();
+
+		// TODO(Phase 8): temp directories older than 24 h, expired push sessions, push_items rows
 		// and snapshot files past retention (never the newest push's snapshot).
 	}
 }

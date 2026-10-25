@@ -63,6 +63,11 @@ final class Tables {
 	 * Column names avoid MySQL reserved words, which dbDelta does not quote: the push cursor
 	 * is stored as cursor_json because CURSOR is reserved.
 	 *
+	 * pairings keeps the key's bootstrap credentials apart from the long-term ones because both
+	 * exist between confirm and finalize (blueprint §5.3). local_home_hash binds a row to this
+	 * site: a hash, because host clone tools search-replace URLs in every table and would
+	 * rewrite a stored URL to match the copy (threat model T21).
+	 *
 	 * @return string[]
 	 */
 	public static function schema() {
@@ -80,11 +85,14 @@ role varchar(20) NOT NULL DEFAULT '',
 remote_url varchar(255) NOT NULL DEFAULT '',
 rest_root varchar(255) NOT NULL DEFAULT '',
 local_home_url varchar(255) NOT NULL DEFAULT '',
+local_home_hash char(64) NOT NULL DEFAULT '',
 status varchar(20) NOT NULL DEFAULT 'pending',
 receiver_user_id bigint(20) unsigned NOT NULL DEFAULT 0,
 app_password_uuid varchar(36) NOT NULL DEFAULT '',
 app_password_enc text NULL,
 secret_enc text NULL,
+bootstrap_password_uuid varchar(36) NOT NULL DEFAULT '',
+bootstrap_secret_enc text NULL,
 source_site_id varchar(36) NOT NULL DEFAULT '',
 source_ip varchar(45) NOT NULL DEFAULT '',
 default_author_id bigint(20) unsigned NOT NULL DEFAULT 0,

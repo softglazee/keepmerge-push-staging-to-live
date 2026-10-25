@@ -27,6 +27,11 @@ final class Installer {
 	const CAPABILITY = 'softglaze_sp_receive_push';
 
 	/**
+	 * Folder under uploads that holds the plugin's temporary files and snapshots (§14.6).
+	 */
+	const UPLOADS_DIR = 'keepmerge-push-staging-to-live';
+
+	/**
 	 * Activation hook.
 	 *
 	 * Network activation is refused: the plugin pairs single sites, and a network-wide
@@ -45,19 +50,66 @@ final class Installer {
 		}
 
 		self::install();
+
+		// Receivers left without a live pairing (for example after a deactivation, which needs a
+		// new key) are deleted, so no account outlives its purpose (threat model §7.1, S-06).
+		Receiver_User::delete_orphans();
 	}
 
 	/**
-	 * Deactivation hook. Content, logs, snapshots and tables stay.
+	 * Deactivation hook (blueprint §18.2). Every receiver Application Password and secret is
+	 * revoked, the receive window closes, pairings need a new key, the push lock and the temp
+	 * directory go. Content, logs, snapshots and tables stay.
+	 *
+	 * TODO(Phase 2B): source-role pairings keep their encrypted credentials but become
+	 * repair_needed.
 	 *
 	 * @return void
 	 */
 	public static function deactivate() {
 		Cron::unschedule();
 
-		// TODO(Phase 2A): revoke every receiver Application Password and HMAC secret, close the
-		// receive window, mark pairings repair_needed, release the push lock (blueprint §5.9).
-		// TODO(Phase 5): delete uploads/keepmerge-push-staging-to-live/tmp/.
+		Receive_Window::close( 'deactivated' );
+		Pairing_Service::revoke_credentials_for_deactivation();
+		delete_option( Receive_Window::LOCK_OPTION );
+		self::delete_temp_dir();
+	}
+
+	/**
+	 * Deletes uploads/keepmerge-push-staging-to-live/tmp/ through WP_Filesystem.
+	 *
+	 * Only with the direct method: a deactivation cannot stop to ask for FTP credentials, and
+	 * the daily prune removes leftovers. The path is built from wp_upload_dir() and must resolve
+	 * inside the uploads base.
+	 *
+	 * @return bool Whether the directory is gone.
+	 */
+	public static function delete_temp_dir() {
+		global $wp_filesystem;
+
+		$uploads = wp_upload_dir( null, false );
+		if ( ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) ) {
+			return false;
+		}
+
+		$base = realpath( $uploads['basedir'] );
+		$dir  = untrailingslashit( $uploads['basedir'] ) . '/' . self::UPLOADS_DIR . '/tmp';
+		$real = realpath( $dir );
+		if ( false === $real ) {
+			return true;
+		}
+		if ( false === $base || 0 !== strpos( $real, trailingslashit( $base ) ) ) {
+			return false;
+		}
+
+		if ( ! function_exists( 'get_filesystem_method' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		if ( 'direct' !== get_filesystem_method( array(), $uploads['basedir'], true ) || ! WP_Filesystem() || ! $wp_filesystem ) {
+			return false;
+		}
+
+		return (bool) $wp_filesystem->delete( $real, true, 'd' );
 	}
 
 	/**
@@ -106,10 +158,8 @@ final class Installer {
 
 	/**
 	 * The receiver role with exactly one capability. A role left over with extra capabilities
-	 * (by another plugin or a role editor) is reduced back to that one.
-	 *
-	 * TODO(Phase 2A): hide the role from role dropdowns (editable_roles) and the rest of the
-	 * receiver lock-down in blueprint §5.8.
+	 * (by another plugin or a role editor) is reduced back to that one. The lock-down hooks are
+	 * in Receiver_User.
 	 *
 	 * @return void
 	 */
@@ -136,45 +186,70 @@ final class Installer {
 	 * database now serves a different home URL than the one the ID was created for.
 	 *
 	 * A different home URL means the database was copied (a host re-cloned live into staging,
-	 * for example): two sites must never share an ID, so the copy gets a new one and the event
-	 * is audited as clone_detected (blueprint §5.9).
+	 * for example). The record keeps a SHA-256 of the normalised home URL: clone tools
+	 * search-replace URLs in every table, serialized options included, so a stored URL would be
+	 * rewritten to match the copy, while the hash is not. On a mismatch, before any remote route
+	 * is registered (this runs on init, priority 2): new site ID, receive window closed, every
+	 * pairing recorded for the other URL loses its receiver Application Passwords and secrets
+	 * and needs a new key, clone_detected is audited (blueprint §5.9, threat model T21).
 	 *
 	 * @return string UUID.
 	 */
 	public static function ensure_site_id() {
 		$home   = self::normalised_home();
+		$hash   = self::home_hash();
 		$stored = get_option( self::SITE_ID_OPTION );
 
-		if ( is_array( $stored ) && isset( $stored['uuid'], $stored['home'] ) && wp_is_uuid( $stored['uuid'] ) && $stored['home'] === $home ) {
+		$valid = is_array( $stored ) && isset( $stored['uuid'] ) && is_string( $stored['uuid'] ) && wp_is_uuid( $stored['uuid'] );
+
+		if ( $valid && isset( $stored['home_hash'] ) && is_string( $stored['home_hash'] ) && hash_equals( $hash, $stored['home_hash'] ) ) {
+			return $stored['uuid'];
+		}
+
+		// A record written before the hash existed is upgraded when its URL still matches.
+		if ( $valid && ! isset( $stored['home_hash'] ) && isset( $stored['home'] ) && $stored['home'] === $home ) {
+			$stored['home_hash'] = $hash;
+			update_option( self::SITE_ID_OPTION, $stored, true );
 			return $stored['uuid'];
 		}
 
 		$record = array(
 			'uuid'        => wp_generate_uuid4(),
 			'home'        => $home,
+			'home_hash'   => $hash,
 			'created_gmt' => gmdate( 'Y-m-d H:i:s' ),
 		);
 		update_option( self::SITE_ID_OPTION, $record, true );
 
-		if ( is_array( $stored ) && ! empty( $stored['uuid'] ) && isset( $stored['home'] ) && $stored['home'] !== $home ) {
+		if ( $valid ) {
+			Receive_Window::close( 'clone_detected', 'system' );
+			$changed = Pairing_Service::handle_clone();
+
 			Audit_Log::write(
 				'clone_detected',
 				array(
 					'actor_type' => 'system',
 					'details'    => array(
 						'previous_site_id' => (string) $stored['uuid'],
-						'previous_home'    => (string) $stored['home'],
+						'previous_home'    => isset( $stored['home'] ) ? (string) $stored['home'] : '',
 						'site_id'          => $record['uuid'],
 						'home'             => $home,
+						'pairings_reset'   => $changed,
 					),
 				)
 			);
-
-			// TODO(Phase 2A): close the receive window, delete receiver Application Passwords and
-			// secrets of pairings recorded for the other URL and mark them repair_needed.
 		}
 
 		return $record['uuid'];
+	}
+
+	/**
+	 * SHA-256 of the normalised home URL: the value pairings and the site ID are bound to.
+	 *
+	 * @return string 64 hex.
+	 */
+	public static function home_hash() {
+		return hash( 'sha256', self::normalised_home() );
 	}
 
 	/**

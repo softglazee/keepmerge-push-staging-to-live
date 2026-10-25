@@ -68,3 +68,42 @@ export function getAuditExportChunk( filters, before ) {
 		path: `${ BASE }/audit/export${ query( { ...filters, before } ) }`,
 	} );
 }
+
+export function getReceive() {
+	return apiFetch( { path: `${ BASE }/receive` } );
+}
+
+/**
+ * Opens (with hours 1–24) or closes the receive window.
+ *
+ * @param {Object} data { action: 'open'|'close', hours }.
+ * @return {Promise} Receive tab data.
+ */
+export function setReceive( data ) {
+	return apiFetch( { path: `${ BASE }/receive`, method: 'POST', data } );
+}
+
+/**
+ * Creates a pairing key. The response is the only place the key ever appears.
+ *
+ * @return {Promise} { key, pairing }.
+ */
+export function createPairingKey() {
+	return apiFetch( { path: `${ BASE }/pairings`, method: 'POST' } );
+}
+
+export function updatePairing( uuid, data ) {
+	return apiFetch( { path: `${ BASE }/pairings/${ uuid }`, method: 'PATCH', data } );
+}
+
+export function revokePairing( uuid ) {
+	return apiFetch( { path: `${ BASE }/pairings/${ uuid }`, method: 'DELETE' } );
+}
+
+export function approvePairing( uuid ) {
+	return apiFetch( { path: `${ BASE }/pairings/${ uuid }/approve`, method: 'POST' } );
+}
+
+export function rejectPairing( uuid ) {
+	return apiFetch( { path: `${ BASE }/pairings/${ uuid }/reject`, method: 'POST' } );
+}

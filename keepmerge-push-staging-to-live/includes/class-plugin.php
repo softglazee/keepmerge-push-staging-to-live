@@ -45,7 +45,7 @@ final class Plugin {
 	 */
 	private function __construct() {
 		// Before anything else on init: tables exist and the site ID matches this home URL
-		// before any later code (and, from Phase 2A, the remote routes) relies on them.
+		// before any later code (and the remote routes) relies on them.
 		add_action( 'init', array( Installer::class, 'maybe_upgrade' ), 1 );
 		add_action( 'init', array( Installer::class, 'ensure_site_id' ), 2 );
 		add_action( 'init', array( Settings::class, 'register' ) );
@@ -57,16 +57,33 @@ final class Plugin {
 
 		add_action( Cron::HOOK, array( Cron::class, 'daily_prune' ) );
 
-		// TODO(Phase 2A): receive window, Rest\Remote_Controller (registered only while the window
-		// is open), receiver lock-down hooks (blueprint §5.8), Cli\Command when WP_CLI is defined.
+		// The receiver lock-down applies whether or not the window is open (blueprint §5.8).
+		Receiver_User::register_hooks();
+		Rest\Remote_Controller::register_hooks();
+
+		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'WP_CLI' ) ) {
+			\WP_CLI::add_command( 'keepmerge', Cli\Command::class );
+		}
 	}
 
 	/**
-	 * Registers the admin routes. No remote route exists in this version of the code.
+	 * Registers the admin routes, and the remote routes only while the receive window is open
+	 * (threat model §6 step 0): with the window closed, the site has no remote route at all.
+	 *
+	 * Clone detection (Installer::ensure_site_id() on init) has already run by now, so a copied
+	 * database has its window closed before this check.
 	 *
 	 * @return void
 	 */
 	public function register_rest_routes() {
+		// Runs again here in case another plugin started the REST server before init: the
+		// clone check must precede the window check. It is a no-op when nothing changed.
+		Installer::ensure_site_id();
+
 		( new Rest\Admin_Controller() )->register_routes();
+
+		if ( Receive_Window::is_open() ) {
+			( new Rest\Remote_Controller() )->register_routes();
+		}
 	}
 }

@@ -9,8 +9,11 @@ namespace SoftGlaze\SafePush\Rest;
 
 use SoftGlaze\SafePush\Audit_Log;
 use SoftGlaze\SafePush\Installer;
+use SoftGlaze\SafePush\Pairing_Service;
 use SoftGlaze\SafePush\Plugin;
 use SoftGlaze\SafePush\Readiness;
+use SoftGlaze\SafePush\Receive_Window;
+use SoftGlaze\SafePush\Receiver_User;
 use SoftGlaze\SafePush\Settings;
 use SoftGlaze\SafePush\Sync\Option_Policy;
 use SoftGlaze\SafePush\Tables;
@@ -96,6 +99,96 @@ final class Admin_Controller {
 
 		register_rest_route(
 			$ns,
+			self::BASE . '/receive',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_receive' ),
+					'permission_callback' => $permission,
+				),
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'update_receive' ),
+					'permission_callback' => $permission,
+					// Not "required": core checks required args before permission_callback, and an
+					// anonymous request must be refused for its missing rights first (S-38).
+					'args'                => array(
+						'action' => array(
+							'type' => 'string',
+							'enum' => array( 'open', 'close' ),
+						),
+						'hours'  => array(
+							'type'    => 'integer',
+							'minimum' => Receive_Window::MIN_HOURS,
+							'maximum' => Receive_Window::MAX_HOURS,
+							'default' => Receive_Window::DEFAULT_HOURS,
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/pairings',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'create_pairing_key' ),
+				'permission_callback' => $permission,
+			)
+		);
+
+		$uuid = '(?P<uuid>[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})';
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/pairings/' . $uuid,
+			array(
+				array(
+					'methods'             => 'PATCH',
+					'callback'            => array( $this, 'update_pairing' ),
+					'permission_callback' => $permission,
+					'args'                => array(
+						'default_author' => array(
+							'type'    => 'integer',
+							'minimum' => 1,
+						),
+						'pinned_ip'      => array(
+							'type'      => 'string',
+							'maxLength' => 45,
+						),
+					),
+				),
+				array(
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'revoke_pairing' ),
+					'permission_callback' => $permission,
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/pairings/' . $uuid . '/approve',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'approve_pairing' ),
+				'permission_callback' => $permission,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/pairings/' . $uuid . '/reject',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'reject_pairing' ),
+				'permission_callback' => $permission,
+			)
+		);
+
+		register_rest_route(
+			$ns,
 			self::BASE . '/audit/export',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -166,6 +259,10 @@ final class Admin_Controller {
 		$sends_to      = array();
 		$receives_from = array();
 		foreach ( $pairings as $row ) {
+			// A pending pairing is only an unused key, not a connection.
+			if ( 'pending' === $row['status'] ) {
+				continue;
+			}
 			$item = array(
 				'id'        => (int) $row['id'],
 				'uuid'      => $row['pairing_uuid'],
@@ -186,8 +283,8 @@ final class Admin_Controller {
 			ARRAY_A
 		);
 
-		$receive = get_option( 'softglaze_sp_receive', array() );
-		$open    = is_array( $receive ) && ! empty( $receive['open'] ) && isset( $receive['closes_at'] ) && (int) $receive['closes_at'] > time();
+		$open    = Receive_Window::is_open();
+		$receive = Receive_Window::state();
 
 		return rest_ensure_response(
 			array(
@@ -212,6 +309,164 @@ final class Admin_Controller {
 				'last_push' => is_array( $last_push ) ? $last_push : null,
 				'readiness' => Readiness::checks(),
 			)
+		);
+	}
+
+	/**
+	 * GET /admin/receive: the Receive tab. Expired keys and approvals are cleaned up first
+	 * (blueprint §5.3 step 6).
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_receive() {
+		Pairing_Service::cleanup_expired();
+
+		return rest_ensure_response( $this->receive_payload() );
+	}
+
+	/**
+	 * POST /admin/receive: open the window for 1–24 hours, or close it now.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function update_receive( WP_REST_Request $request ) {
+		$action = sanitize_key( (string) $request->get_param( 'action' ) );
+
+		if ( 'open' === $action ) {
+			$result = Receive_Window::open( $request->get_param( 'hours' ) );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+		} elseif ( 'close' === $action ) {
+			Receive_Window::close( 'manual' );
+		} else {
+			return new WP_Error( 'invalid_action', __( 'Unknown action.', 'keepmerge-push-staging-to-live' ), array( 'status' => 400 ) );
+		}
+
+		return rest_ensure_response( $this->receive_payload() );
+	}
+
+	/**
+	 * POST /admin/pairings: creates a pairing key. The response is the only place the key ever
+	 * appears; it is not stored.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function create_pairing_key() {
+		$result = Pairing_Service::create_key( get_current_user_id() );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$response = rest_ensure_response( $result );
+		$response->header( 'Cache-Control', 'no-store' );
+
+		return $response;
+	}
+
+	/**
+	 * PATCH /admin/pairings/{uuid}: default author and IP pin.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function update_pairing( WP_REST_Request $request ) {
+		$author = $request->get_param( 'default_author' );
+		$pin    = $request->get_param( 'pinned_ip' );
+
+		$result = Pairing_Service::update(
+			(string) $request->get_param( 'uuid' ),
+			null === $author ? null : absint( $author ),
+			null === $pin ? null : sanitize_text_field( (string) $pin )
+		);
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * DELETE /admin/pairings/{uuid}: revoke.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function revoke_pairing( WP_REST_Request $request ) {
+		$result = Pairing_Service::revoke( (string) $request->get_param( 'uuid' ) );
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * POST /admin/pairings/{uuid}/approve.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function approve_pairing( WP_REST_Request $request ) {
+		$result = Pairing_Service::approve( (string) $request->get_param( 'uuid' ), get_current_user_id() );
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * POST /admin/pairings/{uuid}/reject.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function reject_pairing( WP_REST_Request $request ) {
+		$result = Pairing_Service::reject( (string) $request->get_param( 'uuid' ) );
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * What the Receive tab shows. No credential ever appears here.
+	 *
+	 * @return array
+	 */
+	private function receive_payload() {
+		$open    = Receive_Window::is_open();
+		$state   = Receive_Window::state();
+		$blocker = Pairing_Service::key_blocker();
+
+		$authors = array();
+		$users   = get_users(
+			array(
+				'capability' => 'edit_posts',
+				'fields'     => array( 'ID', 'display_name', 'user_login' ),
+				'orderby'    => 'display_name',
+				'number'     => 200,
+			)
+		);
+		foreach ( $users as $user ) {
+			if ( Receiver_User::is_receiver( (int) $user->ID ) ) {
+				continue;
+			}
+			$authors[] = array(
+				'id'   => (int) $user->ID,
+				'name' => $user->display_name . ' (' . $user->user_login . ')',
+			);
+		}
+
+		return array(
+			'now'            => time(),
+			'window'         => array(
+				'open'          => $open,
+				'opened_at'     => $open ? $state['opened_at'] : null,
+				'closes_at'     => $open ? $state['closes_at'] : null,
+				'choices'       => Receive_Window::CHOICES,
+				'default_hours' => Receive_Window::DEFAULT_HOURS,
+				'max_hours'     => Receive_Window::MAX_HOURS,
+			),
+			'can_create_key' => null === $blocker,
+			'key_blocker'    => null === $blocker ? null : array(
+				'code'    => $blocker->get_error_code(),
+				'message' => $blocker->get_error_message(),
+			),
+			'multisite'      => is_multisite(),
+			'pairings'       => Pairing_Service::list_destination(),
+			'authors'        => $authors,
 		);
 	}
 
