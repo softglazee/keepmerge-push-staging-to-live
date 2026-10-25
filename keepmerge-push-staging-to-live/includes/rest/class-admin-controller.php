@@ -9,12 +9,14 @@ namespace SoftGlaze\SafePush\Rest;
 
 use SoftGlaze\SafePush\Audit_Log;
 use SoftGlaze\SafePush\Installer;
+use SoftGlaze\SafePush\Pairing_Key;
 use SoftGlaze\SafePush\Pairing_Service;
 use SoftGlaze\SafePush\Plugin;
 use SoftGlaze\SafePush\Readiness;
 use SoftGlaze\SafePush\Receive_Window;
 use SoftGlaze\SafePush\Receiver_User;
 use SoftGlaze\SafePush\Settings;
+use SoftGlaze\SafePush\Source_Pairing;
 use SoftGlaze\SafePush\Sync\Option_Policy;
 use SoftGlaze\SafePush\Tables;
 use WP_Error;
@@ -184,6 +186,57 @@ final class Admin_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'reject_pairing' ),
 				'permission_callback' => $permission,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/pairings/' . $uuid . '/status',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'check_source_pairing' ),
+				'permission_callback' => $permission,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/send',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_send' ),
+				'permission_callback' => $permission,
+			)
+		);
+
+		// The key is not "required": core checks required args before permission_callback, and
+		// an anonymous request must be refused for its missing rights first (S-38).
+		$key_args = array(
+			'key' => array(
+				'type'      => 'string',
+				'maxLength' => Pairing_Key::MAX_LENGTH,
+			),
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/connect',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'preview_connect' ),
+				'permission_callback' => $permission,
+				'args'                => $key_args,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/connect/confirm',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'confirm_connect' ),
+				'permission_callback' => $permission,
+				'args'                => $key_args,
 			)
 		);
 
@@ -385,13 +438,96 @@ final class Admin_Controller {
 	}
 
 	/**
-	 * DELETE /admin/pairings/{uuid}: revoke.
+	 * DELETE /admin/pairings/{uuid}: revoke. A pairing this site sends through forgets its
+	 * credentials here (the live admin revokes it on live); a pairing it receives through
+	 * loses its receiver account and secrets.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function revoke_pairing( WP_REST_Request $request ) {
-		$result = Pairing_Service::revoke( (string) $request->get_param( 'uuid' ) );
+		$uuid = (string) $request->get_param( 'uuid' );
+
+		$result = null !== Source_Pairing::find( $uuid ) ? Source_Pairing::revoke( $uuid ) : Pairing_Service::revoke( $uuid );
+
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * GET /admin/send: the Send tab. Makes no outbound request.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_send() {
+		$blocker = Source_Pairing::blocker();
+
+		return rest_ensure_response(
+			array(
+				'now'         => time(),
+				'site'        => array(
+					'home_url' => home_url( '/' ),
+					'site_id'  => Installer::site_id(),
+				),
+				'can_connect' => null === $blocker,
+				'blocker'     => null === $blocker ? null : array(
+					'code'    => $blocker->get_error_code(),
+					'message' => $blocker->get_error_message(),
+				),
+				'pairings'    => Source_Pairing::list_pairings(),
+			)
+		);
+	}
+
+	/**
+	 * POST /admin/connect: preview of the live site a pasted key points to.
+	 *
+	 * The key is read by name and validated by the key parser only (one pattern per part), so
+	 * nothing in it is altered before the check.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function preview_connect( WP_REST_Request $request ) {
+		$key    = $request->get_param( 'key' );
+		$result = Source_Pairing::preview( is_string( $key ) ? $key : '' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$response = rest_ensure_response( $result );
+		$response->header( 'Cache-Control', 'no-store' );
+
+		return $response;
+	}
+
+	/**
+	 * POST /admin/connect/confirm: confirm and finalize with the pasted key.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function confirm_connect( WP_REST_Request $request ) {
+		$key    = $request->get_param( 'key' );
+		$result = Source_Pairing::connect( is_string( $key ) ? $key : '' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$response = rest_ensure_response( $result );
+		$response->header( 'Cache-Control', 'no-store' );
+
+		return $response;
+	}
+
+	/**
+	 * POST /admin/pairings/{uuid}/status: one signed status call for a pairing this site sends
+	 * through.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function check_source_pairing( WP_REST_Request $request ) {
+		$result = Source_Pairing::check( (string) $request->get_param( 'uuid' ) );
 
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
 	}

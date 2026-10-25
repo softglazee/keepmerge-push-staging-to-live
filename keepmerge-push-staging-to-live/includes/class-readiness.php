@@ -16,8 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * status ('ok', 'warning', 'error'), a label and one sentence saying what was found and, when
  * something is missing, what to do.
  *
- * TODO(Phase 2B): the cURL transport check on the source (§5.10) and, after the first status
- * call, whether the Authorization header reached live.
+ * Sending adds two checks: PHP's cURL transport (address pinning, blueprint §5.10) and, once a
+ * status call reached live, whether the Authorization header arrived there.
  */
 final class Readiness {
 
@@ -31,7 +31,7 @@ final class Readiness {
 	 * @return array<int,array{id:string,label:string,status:string,detail:string}>
 	 */
 	public static function checks() {
-		return array(
+		$checks = array(
 			self::https(),
 			self::application_passwords(),
 			self::sodium(),
@@ -39,6 +39,96 @@ final class Readiness {
 			self::time_limit(),
 			self::memory_limit(),
 			self::key_source(),
+			self::pinned_transport(),
+		);
+
+		$header = self::authorization_header();
+		if ( null !== $header ) {
+			$checks[] = $header;
+		}
+
+		return $checks;
+	}
+
+	/**
+	 * Sending needs PHP's cURL extension: each connection is pinned to the address the outbound
+	 * guard checked, and without cURL the site refuses to connect (DECISIONS A6, threat model RR4).
+	 * A site that only receives does not need it, so it is a warning there.
+	 *
+	 * @return array
+	 */
+	private static function pinned_transport() {
+		$sending  = ! empty( Pairing_Store::by_role( Source_Pairing::ROLE, array( 'pending', 'awaiting_approval', 'active' ), 1 ) );
+		$unpinned = (int) get_option( 'softglaze_sp_last_unpinned', 0 );
+
+		if ( ! Transfer\Outbound_Guard::transport_available() ) {
+			return array(
+				'id'     => 'pinned_transport',
+				'label'  => __( 'cURL for sending', 'keepmerge-push-staging-to-live' ),
+				'status' => $sending ? 'error' : 'warning',
+				'detail' => __( 'PHP\'s cURL extension is missing. This site can receive pushes, but it cannot connect to a live site or send: Keepmerge pins each connection to the address it checked (protection against DNS rebinding) and needs cURL for that. Ask your host to enable it.', 'keepmerge-push-staging-to-live' ),
+			);
+		}
+
+		if ( $unpinned > 0 ) {
+			return array(
+				'id'     => 'pinned_transport',
+				'label'  => __( 'cURL for sending', 'keepmerge-push-staging-to-live' ),
+				'status' => 'error',
+				'detail' => sprintf(
+					/* translators: %s: date and time. */
+					__( 'The cURL extension is loaded, but a request to live on %s did not go through it (another plugin or the server setup replaced WordPress\'s HTTP transport), so its answer was discarded. Sending needs WordPress to use cURL: Keepmerge pins each connection to the address it checked (protection against DNS rebinding).', 'keepmerge-push-staging-to-live' ),
+					wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $unpinned )
+				),
+			);
+		}
+
+		return array(
+			'id'     => 'pinned_transport',
+			'label'  => __( 'cURL for sending', 'keepmerge-push-staging-to-live' ),
+			'status' => 'ok',
+			'detail' => __( 'Available. Each connection to live goes to the address Keepmerge checked (protection against DNS rebinding).', 'keepmerge-push-staging-to-live' ),
+		);
+	}
+
+	/**
+	 * Whether the Authorization header reached live in the latest status call of a source
+	 * pairing; null before any status call.
+	 *
+	 * @return array|null
+	 */
+	private static function authorization_header() {
+		$latest = null;
+		foreach ( Source_Pairing::list_pairings() as $pairing ) {
+			if ( null === $pairing['authorization_header_seen'] || null === $pairing['last_check'] ) {
+				continue;
+			}
+			if ( null === $latest || (int) $pairing['last_check']['at'] > (int) $latest['last_check']['at'] ) {
+				$latest = $pairing;
+			}
+		}
+
+		if ( null === $latest ) {
+			return null;
+		}
+
+		$ok = true === $latest['authorization_header_seen'];
+
+		return array(
+			'id'     => 'authorization_header',
+			'label'  => __( 'Authorization header on live', 'keepmerge-push-staging-to-live' ),
+			'status' => $ok ? 'ok' : 'error',
+			'detail' => $ok
+				? sprintf(
+					/* translators: %s: live site host. */
+					__( 'The last status call showed that %s receives the Authorization header, so its receiver account can sign in.', 'keepmerge-push-staging-to-live' ),
+					$latest['live']['host']
+				)
+				: sprintf(
+					/* translators: %s: live site host. */
+					__( 'The Authorization header does not reach WordPress on %s: its web server or a proxy removes it, so pairing and pushing fail. Ask that host to pass it to PHP (on Apache: CGIPassAuth On, or a SetEnvIf Authorization rule in .htaccess).', 'keepmerge-push-staging-to-live' ),
+					$latest['live']['host']
+				),
 		);
 	}
 

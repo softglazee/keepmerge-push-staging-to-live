@@ -26,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *    the pairing waits 24 hours in "awaiting_approval".
  * 4. A live administrator approves (active) or rejects (revoked).
  *
- * TODO(Phase 2B): the source side (connect, stored credentials, source-role deactivation).
+ * The source side (connect, stored credentials, source-role deactivation) is Source_Pairing.
  */
 final class Pairing_Service {
 

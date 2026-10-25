@@ -38,7 +38,12 @@ function query( params ) {
 
 	Object.keys( params ).forEach( ( key ) => {
 		const value = params[ key ];
-		if ( undefined !== value && null !== value && '' !== value && 0 !== value ) {
+		if (
+			undefined !== value &&
+			null !== value &&
+			'' !== value &&
+			0 !== value
+		) {
 			search.append( key, String( value ) );
 		}
 	} );
@@ -60,7 +65,9 @@ export function saveSettings( data ) {
 }
 
 export function getAudit( filters, page ) {
-	return apiFetch( { path: `${ BASE }/audit${ query( { ...filters, page } ) }` } );
+	return apiFetch( {
+		path: `${ BASE }/audit${ query( { ...filters, page } ) }`,
+	} );
 }
 
 export function getAuditExportChunk( filters, before ) {
@@ -93,17 +100,80 @@ export function createPairingKey() {
 }
 
 export function updatePairing( uuid, data ) {
-	return apiFetch( { path: `${ BASE }/pairings/${ uuid }`, method: 'PATCH', data } );
+	return apiFetch( {
+		path: `${ BASE }/pairings/${ uuid }`,
+		method: 'PATCH',
+		data,
+	} );
 }
 
 export function revokePairing( uuid ) {
-	return apiFetch( { path: `${ BASE }/pairings/${ uuid }`, method: 'DELETE' } );
+	return apiFetch( {
+		path: `${ BASE }/pairings/${ uuid }`,
+		method: 'DELETE',
+	} );
 }
 
 export function approvePairing( uuid ) {
-	return apiFetch( { path: `${ BASE }/pairings/${ uuid }/approve`, method: 'POST' } );
+	return apiFetch( {
+		path: `${ BASE }/pairings/${ uuid }/approve`,
+		method: 'POST',
+	} );
 }
 
 export function rejectPairing( uuid ) {
-	return apiFetch( { path: `${ BASE }/pairings/${ uuid }/reject`, method: 'POST' } );
+	return apiFetch( {
+		path: `${ BASE }/pairings/${ uuid }/reject`,
+		method: 'POST',
+	} );
+}
+
+/**
+ * Send tab data: this site's pairings to live sites. Makes no request to live.
+ *
+ * @return {Promise} { now, site, can_connect, blocker, pairings }.
+ */
+export function getSend() {
+	return apiFetch( { path: `${ BASE }/send` } );
+}
+
+/**
+ * Reads what a pasted pairing key points to (live's status with the key's bootstrap credentials).
+ *
+ * @param {string} key Pairing key.
+ * @return {Promise} Preview.
+ */
+export function previewConnect( key ) {
+	return apiFetch( {
+		path: `${ BASE }/connect`,
+		method: 'POST',
+		data: { key },
+	} );
+}
+
+/**
+ * Confirms and finalizes with a pasted pairing key.
+ *
+ * @param {string} key Pairing key.
+ * @return {Promise} The new pairing (waiting for approval on live).
+ */
+export function confirmConnect( key ) {
+	return apiFetch( {
+		path: `${ BASE }/connect/confirm`,
+		method: 'POST',
+		data: { key },
+	} );
+}
+
+/**
+ * One signed status call for a pairing this site sends through.
+ *
+ * @param {string} uuid Pairing UUID.
+ * @return {Promise} The pairing with last_check.
+ */
+export function checkPairing( uuid ) {
+	return apiFetch( {
+		path: `${ BASE }/pairings/${ uuid }/status`,
+		method: 'POST',
+	} );
 }

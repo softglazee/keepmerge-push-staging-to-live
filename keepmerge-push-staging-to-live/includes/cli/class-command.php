@@ -10,6 +10,7 @@ namespace SoftGlaze\SafePush\Cli;
 use SoftGlaze\SafePush\Installer;
 use SoftGlaze\SafePush\Pairing_Service;
 use SoftGlaze\SafePush\Receive_Window;
+use SoftGlaze\SafePush\Source_Pairing;
 use WP_CLI;
 use WP_Error;
 
@@ -23,14 +24,16 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Shell access implies full trust on this site; every change is still audited with the actor
  * "cli", and destructive commands ask first unless --yes is given.
  *
- * TODO(Phase 2B): connect. TODO(Phase 4–8): plan, push, pushes, rollback, audit.
+ * TODO(Phase 4–8): plan, push, pushes, rollback, audit.
  */
 final class Command {
 
 	/**
-	 * Shows this site's ID, the receive window and the pairings that receive on this site.
+	 * Shows this site's ID, the receive window, the pairings that receive on this site and the
+	 * pairings this site sends through.
 	 *
-	 * Expired keys and approvals are removed first, as on the Receive tab.
+	 * Expired keys and approvals are removed first, as on the Receive tab. Each pairing this site
+	 * sends through is checked with one signed status call to its live site.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -67,11 +70,101 @@ final class Command {
 
 		if ( empty( $rows ) ) {
 			WP_CLI::line( 'Pairings (receiving): none' );
+		} else {
+			WP_CLI::line( 'Pairings (receiving):' );
+			WP_CLI\Utils\format_items( 'table', $rows, array( 'pairing', 'status', 'source', 'source_ip', 'site_id', 'expires', 'last_used' ) );
+		}
+
+		$sending = Source_Pairing::list_pairings();
+		if ( empty( $sending ) ) {
+			WP_CLI::line( 'Pairings (sending): none' );
 			return;
 		}
 
-		WP_CLI::line( 'Pairings (receiving):' );
-		WP_CLI\Utils\format_items( 'table', $rows, array( 'pairing', 'status', 'source', 'source_ip', 'site_id', 'expires', 'last_used' ) );
+		$rows     = array();
+		$messages = array();
+		foreach ( $sending as $pairing ) {
+			$checked = Source_Pairing::check( $pairing['uuid'] );
+			if ( is_array( $checked ) ) {
+				$pairing = $checked;
+			}
+			$last   = $pairing['last_check'];
+			$rows[] = array(
+				'pairing'    => $pairing['uuid'],
+				'status'     => $pairing['display_status'],
+				'live'       => '' === $pairing['live']['home_url'] ? $pairing['live']['host'] : $pairing['live']['home_url'],
+				'check'      => null === $last ? '-' : ( $last['ok'] ? 'ok (' . $last['state'] . ')' : $last['code'] ),
+				'address'    => '' === $pairing['address'] ? '-' : $pairing['address'],
+				'clock_skew' => null === $pairing['skew'] ? '-' : $pairing['skew'] . ' s',
+				'auth_hdr'   => null === $pairing['authorization_header_seen'] ? '-' : ( $pairing['authorization_header_seen'] ? 'yes' : 'no' ),
+			);
+			if ( null !== $last && ! $last['ok'] && '' !== $last['message'] ) {
+				$messages[] = $pairing['uuid'] . ': ' . $last['message'];
+			} elseif ( '' !== $pairing['reason_message'] && 'active' !== $pairing['status'] ) {
+				$messages[] = $pairing['uuid'] . ': ' . $pairing['reason_message'];
+			} elseif ( 'awaiting_approval' === $pairing['status'] ) {
+				$messages[] = $pairing['uuid'] . ': Waiting for approval on live (wp keepmerge pair-approve ' . $pairing['uuid'] . ' there).';
+			}
+		}
+
+		WP_CLI::line( 'Pairings (sending):' );
+		WP_CLI\Utils\format_items( 'table', $rows, array( 'pairing', 'status', 'live', 'check', 'address', 'clock_skew', 'auth_hdr' ) );
+		foreach ( $messages as $message ) {
+			WP_CLI::line( $message );
+		}
+	}
+
+	/**
+	 * Connects this site to a live site with a pairing key created there.
+	 *
+	 * Shows what the key points to (live's name, address, versions, clock difference, whether
+	 * the Authorization header arrives), asks, then confirms and finalizes. The live
+	 * administrator approves the pairing afterwards. The key works once.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <key>
+	 * : The pairing key shown on the live site (quote it).
+	 *
+	 * [--yes]
+	 * : Connect without asking.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp keepmerge connect "SGSP1|https://example.com/wp-json/|…" --yes
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Associative arguments.
+	 * @return void
+	 */
+	public function connect( $args, $assoc_args ) {
+		$key = isset( $args[0] ) ? (string) $args[0] : '';
+
+		$preview = Source_Pairing::preview( $key );
+		if ( is_wp_error( $preview ) ) {
+			$this->fail( $preview );
+		}
+
+		WP_CLI::line( 'Live site:      ' . ( '' === $preview['live']['name'] ? '-' : $preview['live']['name'] ) );
+		WP_CLI::line( 'Address:        ' . $preview['live']['home_url'] . ' (connects to ' . $preview['address'] . ')' );
+		WP_CLI::line( 'Live site ID:   ' . $preview['live']['site_id'] );
+		WP_CLI::line( 'Versions:       WordPress ' . $preview['versions']['wordpress'] . ', PHP ' . $preview['versions']['php'] . ', Keepmerge ' . $preview['versions']['plugin'] );
+		WP_CLI::line( 'Clock skew:     ' . $preview['skew'] . ' s' );
+		WP_CLI::line( 'Authorization:  ' . ( $preview['authorization_header_seen'] ? 'header arrives on live' : 'header missing on live' ) );
+		WP_CLI::line( 'Pairing:        ' . $preview['pairing'] );
+
+		if ( ! $preview['can_connect'] ) {
+			WP_CLI::error( $preview['blocker']['message'] );
+		}
+
+		WP_CLI::confirm( 'Connect this site to ' . $preview['live']['home_url'] . '?', $assoc_args );
+
+		$result = Source_Pairing::connect( $key );
+		if ( is_wp_error( $result ) ) {
+			$this->fail( $result );
+		}
+
+		WP_CLI::success( sprintf( 'Connected. Waiting for approval on live: approve pairing %1$s under Tools > Staging Push > Receive on %2$s (or run wp keepmerge pair-approve %1$s there).', $result['uuid'], $result['live']['host'] ) );
 	}
 
 	/**
@@ -196,7 +289,8 @@ final class Command {
 	}
 
 	/**
-	 * Revokes a pairing: deletes its receiver account, Application Passwords and secrets.
+	 * Revokes a pairing. On the live site: deletes its receiver account, Application Passwords
+	 * and secrets. On the staging site: forgets the stored credentials (then revoke it on live).
 	 *
 	 * ## OPTIONS
 	 *
@@ -215,6 +309,20 @@ final class Command {
 	 * @return void
 	 */
 	public function revoke( $args, $assoc_args ) {
+		$source = Source_Pairing::find( isset( $args[0] ) ? (string) $args[0] : '' );
+		if ( null !== $source ) {
+			if ( 'revoked' === $source['status'] ) {
+				WP_CLI::error( 'This pairing is already revoked.' );
+			}
+			WP_CLI::confirm( sprintf( 'Revoke pairing %s to %s? This site forgets its credentials; revoke it on live too.', $source['pairing_uuid'], $source['remote_url'] ), $assoc_args );
+			$result = Source_Pairing::revoke( $source['pairing_uuid'] );
+			if ( is_wp_error( $result ) ) {
+				$this->fail( $result );
+			}
+			WP_CLI::success( 'Pairing revoked on this site. ' . $result['next_step'] );
+			return;
+		}
+
 		$pairing = $this->find( isset( $args[0] ) ? $args[0] : '' );
 
 		WP_CLI::confirm( sprintf( 'Revoke pairing %s (%s)? The staging site will need a new key.', $pairing['uuid'], '' === $pairing['source_url'] ? 'no source yet' : $pairing['source_url'] ), $assoc_args );

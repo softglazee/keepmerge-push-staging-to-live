@@ -61,8 +61,8 @@ final class Installer {
 	 * revoked, the receive window closes, pairings need a new key, the push lock and the temp
 	 * directory go. Content, logs, snapshots and tables stay.
 	 *
-	 * TODO(Phase 2B): source-role pairings keep their encrypted credentials but become
-	 * repair_needed.
+	 * Source pairings become repair_needed as well, and their stored credentials are deleted
+	 * (Source_Pairing::mark_repair_needed_for_deactivation() explains why).
 	 *
 	 * @return void
 	 */
@@ -71,6 +71,7 @@ final class Installer {
 
 		Receive_Window::close( 'deactivated' );
 		Pairing_Service::revoke_credentials_for_deactivation();
+		Source_Pairing::mark_repair_needed_for_deactivation();
 		delete_option( Receive_Window::LOCK_OPTION );
 		self::delete_temp_dir();
 	}

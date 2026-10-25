@@ -68,6 +68,11 @@ final class Tables {
 	 * site: a hash, because host clone tools search-replace URLs in every table and would
 	 * rewrite a stored URL to match the copy (threat model T21).
 	 *
+	 * Source rows (role "source") also keep the receiver login on live (remote_login), what live
+	 * last reported about itself and the last check (remote_info, JSON without credentials) and
+	 * the address the outbound guard checked with its time (resolved_ip, resolved_gmt), which
+	 * every request of a run connects to for at most 10 minutes (blueprint §5.10).
+	 *
 	 * @return string[]
 	 */
 	public static function schema() {
@@ -104,6 +109,10 @@ approved_gmt datetime NULL DEFAULT NULL,
 approved_by bigint(20) unsigned NOT NULL DEFAULT 0,
 last_used_gmt datetime NULL DEFAULT NULL,
 revoked_gmt datetime NULL DEFAULT NULL,
+remote_login varchar(60) NOT NULL DEFAULT '',
+remote_info longtext NULL,
+resolved_ip varchar(45) NOT NULL DEFAULT '',
+resolved_gmt datetime NULL DEFAULT NULL,
 PRIMARY KEY  (id),
 UNIQUE KEY pairing_uuid (pairing_uuid),
 KEY role_status (role,status)

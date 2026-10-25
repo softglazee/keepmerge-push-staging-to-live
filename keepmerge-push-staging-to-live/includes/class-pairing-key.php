@@ -32,11 +32,12 @@ final class Pairing_Key {
 	 * One pattern per part, in key order.
 	 *
 	 * The REST root is https only, with no user-info, whitespace, "|" or "#"; plain-permalink
-	 * roots ("…/?rest_route=/") are allowed.
+	 * roots ("…/?rest_route=/") are allowed. A bracketed IPv6 literal host parses here so that
+	 * the source's outbound guard can refuse it with its own reason (IPv4 only).
 	 */
 	const PATTERNS = array(
 		'prefix'    => '/\ASGSP1\z/',
-		'rest_root' => '#\Ahttps://[a-z0-9.-]+(?::[0-9]{1,5})?/[A-Za-z0-9._~!$&\'()*+,;=:/?%-]*\z#i',
+		'rest_root' => '#\Ahttps://(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::[0-9]{1,5})?/[A-Za-z0-9._~!$&\'()*+,;=:/?%-]*\z#i',
 		'pairing'   => '/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/',
 		'login'     => '/\Asoftglaze-sp-[0-9a-f]{8}\z/',
 		'password'  => '/\A[A-Za-z0-9]{24}\z/',

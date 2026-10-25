@@ -232,7 +232,7 @@ export default function App() {
 				onNavigate={ select }
 			/>
 		),
-		send: <SendScreen overview={ overview } error={ overviewError } onRetry={ loadOverview } />,
+		send: <SendScreen notify={ notify } onChanged={ loadOverview } />,
 		receive: <ReceiveScreen notify={ notify } onChanged={ loadOverview } />,
 		pushes: (
 			<PushesScreen overview={ overview } error={ overviewError } onRetry={ loadOverview } />

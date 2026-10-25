@@ -61,6 +61,10 @@ final class Plugin {
 		Receiver_User::register_hooks();
 		Rest\Remote_Controller::register_hooks();
 
+		// Pins the plugin's own outbound requests to the checked address (blueprint §5.10); it
+		// leaves every request it did not arm untouched.
+		add_action( 'http_api_curl', array( Transfer\Outbound_Guard::class, 'pin_handle' ), 10, 3 );
+
 		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'WP_CLI' ) ) {
 			\WP_CLI::add_command( 'keepmerge', Cli\Command::class );
 		}

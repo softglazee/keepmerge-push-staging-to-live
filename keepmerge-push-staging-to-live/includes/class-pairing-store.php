@@ -52,6 +52,10 @@ final class Pairing_Store {
 		'approved_by'             => '%d',
 		'last_used_gmt'           => '%s',
 		'revoked_gmt'             => '%s',
+		'remote_login'            => '%s',
+		'remote_info'             => '%s',
+		'resolved_ip'             => '%s',
+		'resolved_gmt'            => '%s',
 	);
 
 	/**
