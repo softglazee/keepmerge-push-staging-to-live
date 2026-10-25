@@ -291,3 +291,55 @@ export function getCodeReport( pairing, run, restart ) {
 		} ) }`,
 	} );
 }
+
+/**
+ * Starts a push of a planned plan. The live domain typed by the admin is checked on the server.
+ *
+ * @param {number} plan    Plan ID.
+ * @param {string} confirm The live domain as typed.
+ * @return {Promise} The push.
+ */
+export function startPush( plan, confirm ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes`,
+		method: 'POST',
+		data: { plan, confirm },
+	} );
+}
+
+/**
+ * One time-boxed step of a push (one batch sent to live).
+ *
+ * @param {number} id    Push ID.
+ * @param {number} steps Step count the screen last saw.
+ * @return {Promise} The push.
+ */
+export function stepPush( id, steps ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/${ id }/step`,
+		method: 'POST',
+		data: { steps },
+	} );
+}
+
+/**
+ * Aborts a push before apply: live removes what it staged for it.
+ *
+ * @param {number} id Push ID.
+ * @return {Promise} The push.
+ */
+export function abortPush( id ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/${ id }/abort`,
+		method: 'POST',
+	} );
+}
+
+/**
+ * Pushes received on this site and pushes sent from it.
+ *
+ * @return {Promise} { now, received, sent }.
+ */
+export function getPushes() {
+	return apiFetch( { path: `${ BASE }/pushes` } );
+}

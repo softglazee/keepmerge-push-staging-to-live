@@ -1020,6 +1020,34 @@ final class Planner {
 	}
 
 	/**
+	 * The plan action with which a row is part of a push, or '' when the push leaves it alone:
+	 * content sent (create, push, use_staging, recreate), live's copy trashed (trash_on_live), or
+	 * the item recorded as in sync (record_base). These rows, and only these, travel to live.
+	 *
+	 * @param array $row Row.
+	 * @return string
+	 */
+	public static function push_action( array $row ) {
+		$effective = self::effective( $row );
+		if ( in_array( $effective, Classifier::SENT, true ) || in_array( $effective, array( 'trash_on_live', 'record_base' ), true ) ) {
+			return $effective;
+		}
+		return '';
+	}
+
+	/**
+	 * The plan hash: SHA-256 of the sorted lines "uuid:plan action:staging hash" of every row a
+	 * push carries. Live computes the same over what it received (Transfer\Push_Session).
+	 *
+	 * @param string[] $lines Lines.
+	 * @return string
+	 */
+	public static function plan_hash( array $lines ) {
+		sort( $lines, SORT_STRING );
+		return hash( 'sha256', implode( "\n", $lines ) );
+	}
+
+	/**
 	 * Whether a row still needs a decision (in scope, or pulled in).
 	 *
 	 * @param array $row Row.
@@ -1250,7 +1278,10 @@ final class Planner {
 			$sends = in_array( $effective, Classifier::SENT, true );
 			if ( $sends || 'trash_on_live' === $effective ) {
 				++$sent;
-				$hash[] = $row['uuid'] . ':' . $effective . ':' . ( isset( $p['s'] ) ? $p['s'] : '' );
+			}
+			$push_action = self::push_action( $row );
+			if ( '' !== $push_action ) {
+				$hash[] = $row['uuid'] . ':' . $push_action . ':' . ( isset( $p['s'] ) ? $p['s'] : '' );
 			}
 			if ( $sends && ! empty( $p['gate'] ) ) {
 				++$dialog['held'];
@@ -1321,7 +1352,6 @@ final class Planner {
 			}
 		}
 
-		sort( $hash, SORT_STRING );
 		$code = Code_Report::summary( (string) $cursor['pairing'] );
 
 		return array(
@@ -1335,6 +1365,7 @@ final class Planner {
 			'undecided'      => $undecid,
 			'blocked'        => $blocked,
 			'sent'           => $sent,
+			'push_total'     => count( $hash ),
 			'ready'          => 0 === $undecid && 0 === $blocked && $sent > 0,
 			'dialog'         => $dialog,
 			'warnings'       => $warnings,
@@ -1351,7 +1382,7 @@ final class Planner {
 			),
 			'scope'          => $cursor['scope'],
 			'code'           => $code,
-			'plan_hash'      => hash( 'sha256', implode( "\n", $hash ) ),
+			'plan_hash'      => self::plan_hash( $hash ),
 		);
 	}
 

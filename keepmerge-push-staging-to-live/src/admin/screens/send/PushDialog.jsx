@@ -1,24 +1,29 @@
-import { createElement, Fragment, useState } from '@wordpress/element';
+import { createElement, Fragment, useEffect, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { Send } from 'lucide-react';
+import { LoaderCircle, Send } from 'lucide-react';
 import Alert from '../../components/Alert';
 import Modal from '../../components/Modal';
-import { number } from './plan-labels';
+import Skeleton from '../../components/Skeleton';
+import { errorMessage, getPlan, startPush } from '../../api';
+import { actionLabel, groupLabel, number } from './plan-labels';
 
 /**
- * The push dialog: what the push would do, with exact counts, and the live domain typed to
- * confirm.
- *
- * TODO(Phase 5): the confirm button sends the decided items to live (POST /admin/pushes with
- * the typed domain checked server-side). In this build the plan is a dry run and nothing is sent.
+ * The push dialog: what the push will do, with exact counts, the conflicts as decided, and the
+ * live domain typed to confirm. The domain is compared again on the server
+ * (POST /admin/pushes); the button only saves a round trip.
  *
  * @param {Object}   props
- * @param {Object}   props.summary Plan summary.
- * @param {string}   props.host    Live host.
- * @param {Function} props.onClose Closes the dialog.
+ * @param {Object}   props.summary   Plan summary.
+ * @param {number}   props.planId    Plan ID.
+ * @param {string}   props.host      Live host.
+ * @param {Function} props.onClose   Closes the dialog.
+ * @param {Function} props.onStarted Receives the push once live opened it.
  */
-export default function PushDialog( { summary, host, onClose } ) {
+export default function PushDialog( { summary, planId, host, onClose, onStarted } ) {
 	const [ typed, setTyped ] = useState( '' );
+	const [ busy, setBusy ] = useState( false );
+	const [ error, setError ] = useState( '' );
+	const [ decided, setDecided ] = useState( null );
 	const d = summary.dialog;
 	const lines = [
 		[ d.create, __( 'created on live', 'keepmerge-push-staging-to-live' ) ],
@@ -31,6 +36,37 @@ export default function PushDialog( { summary, host, onClose } ) {
 	];
 	const matches = typed.trim().toLowerCase() === host.toLowerCase();
 
+	useEffect( () => {
+		let live = true;
+		getPlan( planId, { class: 'conflicts', per_page: 100 } )
+			.then( ( data ) => live && setDecided( data.rows ? data.rows.items : [] ) )
+			.catch( () => live && setDecided( [] ) );
+		return () => {
+			live = false;
+		};
+	}, [ planId ] );
+
+	const push = () => {
+		setBusy( true );
+		setError( '' );
+		startPush( planId, typed.trim() )
+			.then( ( started ) => onStarted( started ) )
+			.catch( ( err ) => {
+				setError( errorMessage( err ) );
+				setBusy( false );
+			} );
+	};
+
+	const decision = ( row ) => {
+		if ( row.groups && row.groups.length && 'product' === row.kind ) {
+			return row.groups
+				.filter( ( group ) => 'conflict' === group.class )
+				.map( ( group ) => `${ groupLabel( group.name ) }: ${ actionLabel( group.decision || group.action ) }` )
+				.join( ', ' );
+		}
+		return actionLabel( row.effective );
+	};
+
 	return (
 		<Modal
 			title={ sprintf(
@@ -38,28 +74,48 @@ export default function PushDialog( { summary, host, onClose } ) {
 				__( 'Push to %s', 'keepmerge-push-staging-to-live' ),
 				host
 			) }
-			onClose={ onClose }
+			onClose={ busy ? () => {} : onClose }
 			initialFocus=".sgsp-confirm-cancel"
 			footer={
 				<Fragment>
-					<button type="button" className="sgsp-button sgsp-button--secondary sgsp-confirm-cancel" onClick={ onClose }>
+					<button type="button" className="sgsp-button sgsp-button--secondary sgsp-confirm-cancel" onClick={ onClose } disabled={ busy }>
 						{ __( 'Cancel', 'keepmerge-push-staging-to-live' ) }
 					</button>
-					<button type="button" className="sgsp-button sgsp-button--primary" disabled aria-describedby="sgsp-push-dryrun">
-						<Send size={ 15 } aria-hidden="true" />
-						{ __( 'Push', 'keepmerge-push-staging-to-live' ) }
+					<button
+						type="button"
+						className="sgsp-button sgsp-button--primary"
+						disabled={ ! matches || busy }
+						aria-describedby="sgsp-push-what"
+						onClick={ push }
+					>
+						{ busy ? <LoaderCircle size={ 15 } aria-hidden="true" /> : <Send size={ 15 } aria-hidden="true" /> }
+						{ busy ? __( 'Opening the push on live…', 'keepmerge-push-staging-to-live' ) : __( 'Push', 'keepmerge-push-staging-to-live' ) }
 					</button>
 				</Fragment>
 			}
 		>
-			<p>{ __( 'With the decisions in this plan, a push would leave these items:', 'keepmerge-push-staging-to-live' ) }</p>
+			<p>{ __( 'With the decisions in this plan, the push leaves these items:', 'keepmerge-push-staging-to-live' ) }</p>
 			<ul className="sgsp-pushcounts">
-				{ lines.map( ( [ count, label ] ) => (
-					<li key={ label } className={ count > 0 ? '' : 'is-zero' }>
-						<strong>{ number( count ) }</strong> { label }
-					</li>
-				) ) }
+				{ lines
+					.filter( ( [ count ] ) => count > 0 )
+					.map( ( [ count, label ] ) => (
+						<li key={ label }>
+							<strong>{ number( count ) }</strong> { label }
+						</li>
+					) ) }
 			</ul>
+
+			<div className="sgsp-pushdialog__facts">
+				<p className="sgsp-m-0">
+					<strong>{ number( d.held ) }</strong>{ ' ' }
+					{ _n( 'will need review on live', 'will need review on live', d.held, 'keepmerge-push-staging-to-live' ) }
+				</p>
+				<p className="sgsp-m-0">
+					<strong>{ number( d.by_dates ) }</strong>{ ' ' }
+					{ _n( 'default decided by dates', 'defaults decided by dates', d.by_dates, 'keepmerge-push-staging-to-live' ) }
+				</p>
+			</div>
+
 			{ d.held > 0 && (
 				<Alert tone="warning" title={ __( 'Review on live', 'keepmerge-push-staging-to-live' ) }>
 					<p className="sgsp-m-0">
@@ -106,6 +162,24 @@ export default function PushDialog( { summary, host, onClose } ) {
 					) }
 				</p>
 			) }
+
+			<h3 className="sgsp-pushdialog__subtitle">{ __( 'Conflicts as decided', 'keepmerge-push-staging-to-live' ) }</h3>
+			{ null === decided && <Skeleton width="60%" /> }
+			{ null !== decided && 0 === decided.length && (
+				<p className="sgsp-field__hint sgsp-mt-0">{ __( 'This plan has no conflicts.', 'keepmerge-push-staging-to-live' ) }</p>
+			) }
+			{ null !== decided && decided.length > 0 && (
+				<ul className="sgsp-decided">
+					{ decided.map( ( row ) => (
+						<li key={ row.uuid }>
+							<span className="sgsp-decided__title">{ row.title || row.uuid }</span>
+							<span className="sgsp-decided__type">{ row.type_label }</span>
+							<span className="sgsp-decided__action">{ decision( row ) }</span>
+						</li>
+					) ) }
+				</ul>
+			) }
+
 			<div className="sgsp-field sgsp-mt-3">
 				<label className="sgsp-field__label" htmlFor="sgsp-push-domain">
 					{ sprintf(
@@ -121,13 +195,24 @@ export default function PushDialog( { summary, host, onClose } ) {
 					autoComplete="off"
 					spellCheck="false"
 					value={ typed }
+					disabled={ busy }
 					onChange={ ( event ) => setTyped( event.target.value ) }
+					onKeyDown={ ( event ) => {
+						if ( 'Enter' === event.key && matches && ! busy ) {
+							push();
+						}
+					} }
 					aria-invalid={ '' !== typed && ! matches }
 				/>
 			</div>
-			<p className="sgsp-field__hint" id="sgsp-push-dryrun">
-				{ __( 'Dry run only in this build: sending to live is not available yet, so nothing is sent.', 'keepmerge-push-staging-to-live' ) }
+			<p className="sgsp-field__hint" id="sgsp-push-what">
+				{ __( 'The items are sent to live and staged there. Nothing on live changes until they are applied; staged items wait up to 24 hours.', 'keepmerge-push-staging-to-live' ) }
 			</p>
+			{ error && (
+				<Alert tone="danger" title={ __( 'The push did not start', 'keepmerge-push-staging-to-live' ) }>
+					<p className="sgsp-m-0">{ error }</p>
+				</Alert>
+			) }
 		</Modal>
 	);
 }

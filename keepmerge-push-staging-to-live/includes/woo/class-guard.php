@@ -34,6 +34,12 @@ final class Guard {
 	);
 
 	/**
+	 * Prefix of order post types (orders, refunds, HPOS placeholders and any variant an
+	 * extension registers under the same name).
+	 */
+	const DENIED_POST_TYPE_PREFIX = 'shop_order';
+
+	/**
 	 * Tables (without the WordPress prefix) whose rows are never read or written. Listed so that
 	 * reviews can see the boundary in one place; no query in the plugin names them.
 	 */
@@ -146,7 +152,8 @@ final class Guard {
 	 * @return bool
 	 */
 	public static function is_denied_post_type( $post_type ) {
-		return in_array( (string) $post_type, self::DENIED_POST_TYPES, true );
+		$post_type = (string) $post_type;
+		return in_array( $post_type, self::DENIED_POST_TYPES, true ) || 0 === strpos( $post_type, self::DENIED_POST_TYPE_PREFIX );
 	}
 
 	/**

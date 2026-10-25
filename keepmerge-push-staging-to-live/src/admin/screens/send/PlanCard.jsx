@@ -12,9 +12,12 @@ import DiffDrawer from './DiffDrawer';
 import PlanRows from './PlanRows';
 import { SummaryPanel, WarningsPanel } from './PlanSummary';
 import PushDialog from './PushDialog';
+import PushProgress from './PushProgress';
 import { number, scopeList, stageLabel, tabList } from './plan-labels';
 
 const LIST_TABS = [ 'content', 'woocommerce', 'media', 'menus', 'site_editor', 'options' ];
+
+const PUSH_ACTIVE = [ 'sending_items', 'paused' ];
 
 /**
  * Sub-tabs of the diff: the WAI-ARIA tabs pattern (arrow keys move and select), each with its
@@ -83,19 +86,26 @@ function SubTabs( { tabs, selected, onSelect, idPrefix } ) {
  * The plan of one active pairing (blueprint F6, F7; §16 Send tab): scope, a dry run in
  * time-boxed steps, then the diff with its sub-tabs, conflict decisions and the push dialog.
  *
+ * A push started from the dialog replaces the plan view with its progress (PushProgress); a
+ * push that is still sending or paused when the tab is opened again is shown the same way, with
+ * Resume. A finished push stays above the next plan.
+ *
  * @param {Object}   props
  * @param {Object}   props.pairing     Pairing.
  * @param {Object}   props.baseline    Baseline summary, or null.
  * @param {Object}   props.initialPlan The newest usable plan, or null.
+ * @param {Object}   props.initialPush The newest push of this pairing, or null.
  * @param {Function} props.notify      Toast.
  */
-export default function PlanCard( { pairing, baseline, initialPlan, notify } ) {
+export default function PlanCard( { pairing, baseline, initialPlan, initialPush, notify } ) {
 	const [ plan, setPlan ] = useState( initialPlan || null );
+	const [ push, setPush ] = useState( initialPush || null );
+	const [ autoRun, setAutoRun ] = useState( false );
 	const [ running, setRunning ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const [ scopeMode, setScopeMode ] = useState( 'all' );
 	const [ groups, setGroups ] = useState( [] );
-	const [ formOpen, setFormOpen ] = useState( ! initialPlan );
+	const [ formOpen, setFormOpen ] = useState( ! initialPlan && ! ( initialPush && PUSH_ACTIVE.includes( initialPush.state ) ) );
 	const [ tab, setTab ] = useState( 'summary' );
 	const [ diffRow, setDiffRow ] = useState( null );
 	const [ pushOpen, setPushOpen ] = useState( false );
@@ -166,11 +176,40 @@ export default function PlanCard( { pairing, baseline, initialPlan, notify } ) {
 	};
 
 	const baselineDone = !! baseline && 'done' === baseline.state;
-	const planned = !! plan && 'planned' === plan.state && ! expired;
+	const pushActive = !! push && PUSH_ACTIVE.includes( push.state );
+	const planned = !! plan && 'planned' === plan.state && ! expired && ! pushActive;
 	const summary = planned ? plan.summary : null;
 
+	const started = ( next ) => {
+		// The plan became this push: the plan view gives way to the push's progress.
+		setPushOpen( false );
+		setPlan( null );
+		setAutoRun( true );
+		setPush( next );
+	};
+
+	const planAgain = () => {
+		setPush( null );
+		setAutoRun( false );
+		setPlan( null );
+		setFormOpen( true );
+	};
+
+	const pushPanel = push ? (
+		<PushProgress
+			key={ push.id }
+			initial={ push }
+			autoRun={ autoRun }
+			notify={ notify }
+			onChange={ setPush }
+			onPlanAgain={ planAgain }
+		/>
+	) : null;
+
 	let badge = <Badge tone="neutral">{ __( 'No plan yet', 'keepmerge-push-staging-to-live' ) }</Badge>;
-	if ( running ) {
+	if ( pushActive ) {
+		badge = <Badge tone="info" icon={ LoaderCircle }>{ __( 'Pushing', 'keepmerge-push-staging-to-live' ) }</Badge>;
+	} else if ( running ) {
 		badge = <Badge tone="info" icon={ LoaderCircle }>{ __( 'Planning', 'keepmerge-push-staging-to-live' ) }</Badge>;
 	} else if ( expired ) {
 		badge = <Badge tone="warning">{ __( 'Expired', 'keepmerge-push-staging-to-live' ) }</Badge>;
@@ -258,6 +297,11 @@ export default function PlanCard( { pairing, baseline, initialPlan, notify } ) {
 		</form>
 	);
 
+	if ( pushActive ) {
+		// Same tree shape as the finished view below, so the progress keeps its state.
+		return card( <Fragment>{ pushPanel }</Fragment> );
+	}
+
 	if ( running && plan ) {
 		const p = plan.progress || {};
 		const percent = Math.round( ( 100 * ( p.stage_index + ( 'export' === plan.stage && p.total ? p.done / p.total : 0 ) ) ) / Math.max( 1, p.stages - 1 ) );
@@ -274,6 +318,7 @@ export default function PlanCard( { pairing, baseline, initialPlan, notify } ) {
 	if ( ! planned ) {
 		return card(
 			<Fragment>
+				{ pushPanel }
 				{ error && (
 					<Alert tone="danger" title={ __( 'The plan could not finish', 'keepmerge-push-staging-to-live' ) }>
 						<p className="sgsp-m-0">{ error }</p>
@@ -454,7 +499,7 @@ export default function PlanCard( { pairing, baseline, initialPlan, notify } ) {
 			</div>
 
 			{ diffRow && <DiffDrawer planId={ plan.id } row={ diffRow } onClose={ () => setDiffRow( null ) } /> }
-			{ pushOpen && <PushDialog summary={ summary } host={ host } onClose={ () => setPushOpen( false ) } /> }
+			{ pushOpen && <PushDialog summary={ summary } planId={ plan.id } host={ host } onClose={ () => setPushOpen( false ) } onStarted={ started } /> }
 			{ bulkOpen && (
 				<ConfirmDialog
 					title={ __( 'Keep live for all remaining conflicts?', 'keepmerge-push-staging-to-live' ) }

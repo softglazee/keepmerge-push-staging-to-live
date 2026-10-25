@@ -26,7 +26,8 @@ const CHECKABLE = [ 'pending', 'awaiting_approval', 'active' ];
  * Each active pairing has its baseline card (Phase 3) and its plan card (Phase 4: dry run, diff,
  * conflict decisions, code report).
  *
- * TODO(Phase 5): sending the push from the push dialog.
+ * The push dialog sends the decided items to live, where they are staged (Phase 5); the plan
+ * card then shows the push's progress and can resume it after the page was closed.
  *
  * @param {Object}   props
  * @param {Function} props.notify    Toast.
@@ -271,6 +272,7 @@ export default function SendScreen( { notify, onChanged } ) {
 								pairing={ pairing }
 								baseline={ ( data.baselines || {} )[ pairing.uuid ] || null }
 								initialPlan={ ( data.plans || {} )[ pairing.uuid ] || null }
+								initialPush={ ( data.pushes || {} )[ pairing.uuid ] || null }
 								notify={ notify }
 							/>
 						) }

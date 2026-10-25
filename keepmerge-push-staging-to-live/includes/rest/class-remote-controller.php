@@ -20,6 +20,7 @@ use SoftGlaze\SafePush\Sync\Baseline_Matcher;
 use SoftGlaze\SafePush\Sync\Code_Report;
 use SoftGlaze\SafePush\Sync\Manifest;
 use SoftGlaze\SafePush\Throttle;
+use SoftGlaze\SafePush\Transfer\Push_Session;
 use WP_Error;
 use WP_HTTP_Response;
 use WP_REST_Request;
@@ -32,11 +33,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Routes under keepmerge/v1/remote/ that the paired source calls (threat model §5.1). This
- * version has status, pair/confirm and pair/finalize, and the four read-only routes of an
- * active pairing: baseline, manifest, items/fetch and code-manifest (the last only while live's
- * "Allow code report requests" is on). None of the read-only routes writes to
- * live's content, options or sync state; they write only what the chain writes for every
- * request (the nonce, the last-used time) and one audit row with counts.
+ * version has status, pair/confirm and pair/finalize; the four read-only routes of an active
+ * pairing: baseline, manifest, items/fetch and code-manifest (the last only while live's
+ * "Allow code report requests" is on); and the push session routes push, push/{id},
+ * push/{id}/items and push/{id}/abort, which stage items in Keepmerge's own tables and never
+ * write live's content, options or sync state (Phase 5). The read-only routes write only what
+ * the chain writes for every request (the nonce, the last-used time) and one audit row with
+ * counts.
  *
  * The routes are registered only while the receive window is open, so a site with the window
  * closed has no remote route at all. Every route's permission_callback is the full chain in
@@ -58,6 +61,14 @@ final class Remote_Controller {
 	const FETCH_MAX_BYTES = 32768;
 
 	const CODE_MANIFEST_MAX_BYTES = 1024;
+
+	const ABORT_MAX_BYTES = 1024;
+
+	/**
+	 * JSON nesting accepted in an item batch: the envelope's own levels plus typed values, which
+	 * Normalizer::decode() limits to 64 levels.
+	 */
+	const ITEMS_DEPTH = 96;
 
 	/**
 	 * An Application Password failure seen during this request (core runs that check before any
@@ -162,6 +173,60 @@ final class Remote_Controller {
 				'callback'            => array( $this, 'code_manifest' ),
 				'permission_callback' => array( Remote_Permission::class, 'check_code_manifest' ),
 				'args'                => array(),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'open_push' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push' ),
+				'args'                => array(),
+			)
+		);
+
+		// The session ID is the only URL parameter: core checks its pattern before the chain runs,
+		// with no side effect (threat model §6).
+		$id   = '(?P<id>' . Remote_Permission::UUID_PATTERN . ')';
+		$args = array(
+			'id' => array(
+				'type'    => 'string',
+				'pattern' => '^' . Remote_Permission::UUID_PATTERN . '$',
+			),
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push/' . $id,
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_push' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push_get' ),
+				'args'                => $args,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push/' . $id . '/items',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'push_items' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push_items' ),
+				'args'                => $args,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push/' . $id . '/abort',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'abort_push' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push_abort' ),
+				'args'                => $args,
 			)
 		);
 	}
@@ -453,6 +518,102 @@ final class Remote_Controller {
 	}
 
 	/**
+	 * POST /remote/push (R8): opens a push session and takes the destination lock (blueprint
+	 * §10.1). Body (at most 64 KB): push, plan_hash, counts, items, files, file_bytes.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function open_push( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, Push_Session::MAX_OPEN_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$result = Push_Session::open( $context['pairing'], $body );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * GET /remote/push/{id} (R9): state and progress of this pairing's session.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_push( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
+		if ( is_wp_error( $session ) ) {
+			return $session;
+		}
+
+		return new WP_REST_Response( Push_Session::status( $session ), 200 );
+	}
+
+	/**
+	 * POST /remote/push/{id}/items (R13): one batch of at most 50 items and 2 MB, validated and
+	 * staged (blueprint §10.2); nothing is applied.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function push_items( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, Push_Session::MAX_BATCH_BYTES, self::ITEMS_DEPTH );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
+		if ( is_wp_error( $session ) ) {
+			return $session;
+		}
+
+		$result = Push_Session::receive( $session, $context['pairing'], $body );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * POST /remote/push/{id}/abort (R15): purges the staged rows and releases the lock, only
+	 * before apply starts.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function abort_push( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, self::ABORT_MAX_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
+		if ( is_wp_error( $session ) ) {
+			return $session;
+		}
+
+		$result = Push_Session::abort( $session, $context['pairing'] );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
 	 * Audit row of a read route: counts only, never content (blueprint §17).
 	 *
 	 * @param string $event   Event.
@@ -608,9 +769,10 @@ final class Remote_Controller {
 	 *
 	 * @param WP_REST_Request $request   Request.
 	 * @param int             $max_bytes Size limit.
+	 * @param int             $depth     JSON nesting accepted.
 	 * @return array|WP_Error
 	 */
-	private static function decode_body( WP_REST_Request $request, $max_bytes ) {
+	private static function decode_body( WP_REST_Request $request, $max_bytes, $depth = 8 ) {
 		$raw = (string) $request->get_body();
 		if ( strlen( $raw ) > $max_bytes ) {
 			return new WP_Error( 'payload_too_large', 'payload_too_large', array( 'status' => 413 ) );
@@ -619,7 +781,7 @@ final class Remote_Controller {
 			return array();
 		}
 
-		$data = json_decode( $raw, true, 8 );
+		$data = json_decode( $raw, true, $depth );
 		if ( ! is_array( $data ) || ( array() !== $data && array_keys( $data ) === range( 0, count( $data ) - 1 ) ) ) {
 			return self::invalid_body();
 		}

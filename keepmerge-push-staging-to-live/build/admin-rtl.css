@@ -2466,6 +2466,222 @@
 	}
 }
 
+/* Push: dialog, progress, history (Phase 5) ------------------------------ */
+
+.sgsp-pushdialog__facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sgsp-space-2) var(--sgsp-space-6);
+	margin: var(--sgsp-space-3) 0;
+	padding: var(--sgsp-space-3) var(--sgsp-space-4);
+	border-radius: var(--sgsp-radius-control);
+	background: var(--sgsp-slate-50);
+	font-size: 13px;
+	color: var(--sgsp-slate-800);
+}
+
+.sgsp-pushdialog__facts strong {
+	font-variant-numeric: tabular-nums;
+	color: var(--sgsp-slate-900);
+}
+
+.sgsp-pushdialog__subtitle {
+	margin: var(--sgsp-space-4) 0 var(--sgsp-space-2);
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--sgsp-slate-900);
+}
+
+.sgsp-decided {
+	max-height: 180px;
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	border: 1px solid var(--sgsp-slate-200);
+	border-radius: var(--sgsp-radius-control);
+	list-style: none;
+}
+
+.sgsp-decided li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 2px var(--sgsp-space-3);
+	margin: 0;
+	padding: var(--sgsp-space-2) var(--sgsp-space-3);
+	border-bottom: 1px solid var(--sgsp-slate-100);
+	font-size: 13px;
+}
+
+.sgsp-decided li:last-child {
+	border-bottom: 0;
+}
+
+.sgsp-decided__title {
+	flex: 1 1 160px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+	font-weight: 600;
+	color: var(--sgsp-slate-900);
+}
+
+.sgsp-decided__type {
+	font-size: 12px;
+	color: var(--sgsp-slate-600);
+}
+
+.sgsp-decided__action {
+	font-weight: 600;
+	color: var(--sgsp-navy);
+}
+
+.sgsp-push {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sgsp-space-3);
+}
+
+.sgsp-push__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sgsp-space-2) var(--sgsp-space-3);
+}
+
+.sgsp-push__to {
+	font-size: 14px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+	color: var(--sgsp-slate-900);
+}
+
+.sgsp-push .sgsp-progress,
+.sgsp-push .sgsp-stats {
+	margin: 0;
+}
+
+.sgsp-push__actions {
+	align-items: center;
+}
+
+.sgsp-push__list {
+	padding: var(--sgsp-space-3) var(--sgsp-space-4);
+	border: 1px solid var(--sgsp-warning-200);
+	border-radius: var(--sgsp-radius-control);
+	background: var(--sgsp-warning-50);
+	font-size: 13px;
+}
+
+.sgsp-push__list summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--sgsp-slate-900);
+}
+
+.sgsp-push__list ul {
+	margin: var(--sgsp-space-2) 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sgsp-push__list li {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: var(--sgsp-space-2) 0;
+	border-top: 1px solid var(--sgsp-warning-200);
+	overflow-wrap: anywhere;
+}
+
+.sgsp-push__log {
+	padding: var(--sgsp-space-3) var(--sgsp-space-4);
+	border: 1px solid var(--sgsp-slate-200);
+	border-radius: var(--sgsp-radius-control);
+	background: var(--sgsp-slate-50);
+}
+
+.sgsp-push__logtitle {
+	margin: 0 0 var(--sgsp-space-2);
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--sgsp-slate-600);
+}
+
+.sgsp-push__log ol {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sgsp-push__logitem {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	gap: var(--sgsp-space-2);
+	margin: 0;
+	padding: 3px 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--sgsp-slate-700);
+}
+
+.sgsp-push__logitem time {
+	white-space: nowrap;
+	font-family: var(--sgsp-font-mono);
+	font-variant-numeric: tabular-nums;
+	color: var(--sgsp-slate-500);
+}
+
+.sgsp-push__logitem.is-paused,
+.sgsp-push__logitem.is-failed {
+	color: var(--sgsp-warning-text);
+}
+
+.sgsp-push__logitem.is-staged {
+	font-weight: 600;
+	color: var(--sgsp-success-text);
+}
+
+.sgsp-pushcell {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.sgsp-pushcell__when {
+	font-weight: 600;
+	color: var(--sgsp-slate-900);
+}
+
+.sgsp-pushcell__note {
+	max-width: 260px;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--sgsp-warning-text);
+}
+
+.sgsp-pushcell__id {
+	padding: 0;
+	background: none;
+	font-size: 11px;
+	color: var(--sgsp-slate-500);
+}
+
+.sgsp-datatable td.sgsp-num,
+.sgsp-datatable th.sgsp-num {
+	text-align: left;
+	font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 782px) {
+
+	.sgsp-datatable td.sgsp-num {
+		text-align: right;
+	}
+}
+
 @media (min-width: 1280px) {
 	.xl\:sgsp-col-span-2 {
 		grid-column: span 2 / span 2;

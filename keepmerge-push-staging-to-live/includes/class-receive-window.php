@@ -26,9 +26,8 @@ final class Receive_Window {
 	const OPTION = 'softglaze_sp_receive';
 
 	/**
-	 * Push lock written by the destination's push session (Phase 5).
-	 *
-	 * Expected shape: array( 'push_uuid' => string, 'heartbeat' => unix seconds ).
+	 * Push lock of the destination's push session (Transfer\Push_Lock):
+	 * array( 'push_uuid' => string, 'pairing_id' => int, 'heartbeat' => unix seconds, 'acquired' => unix seconds ).
 	 */
 	const LOCK_OPTION = 'softglaze_sp_push_lock';
 
@@ -189,18 +188,9 @@ final class Receive_Window {
 	/**
 	 * Whether a push holds the destination lock with a heartbeat younger than 5 minutes.
 	 *
-	 * TODO(Phase 5): the push session writes LOCK_OPTION with its heartbeat.
-	 *
 	 * @return bool
 	 */
 	public static function push_lock_is_fresh() {
-		$lock = get_option( self::LOCK_OPTION, array() );
-		if ( ! is_array( $lock ) || ! isset( $lock['heartbeat'] ) ) {
-			return false;
-		}
-
-		$age = time() - absint( $lock['heartbeat'] );
-
-		return $age >= 0 && $age < self::LOCK_FRESH;
+		return Transfer\Push_Lock::is_fresh();
 	}
 }

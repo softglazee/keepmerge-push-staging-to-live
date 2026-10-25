@@ -48,11 +48,20 @@ final class Remote_Permission {
 
 	const ROUTE_CODE_MANIFEST = 'code_manifest';
 
+	const ROUTE_PUSH = 'push';
+
+	const ROUTE_PUSH_GET = 'push_get';
+
+	const ROUTE_PUSH_ITEMS = 'push_items';
+
+	const ROUTE_PUSH_ABORT = 'push_abort';
+
 	/**
-	 * Routes an active pairing answers with its long-term credentials (threat model §5.1: R1 and
-	 * the read-only routes R4 to R7). The pairing routes R2 and R3 end with approval.
+	 * Routes an active pairing answers with its long-term credentials (threat model §5.1: R1,
+	 * the read-only routes R4 to R7 and the push routes R8, R9, R13, R15). The pairing routes R2
+	 * and R3 end with approval.
 	 */
-	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST );
+	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST, self::ROUTE_PUSH, self::ROUTE_PUSH_GET, self::ROUTE_PUSH_ITEMS, self::ROUTE_PUSH_ABORT );
 
 	const SET_BOOTSTRAP = 'bootstrap';
 
@@ -154,6 +163,46 @@ final class Remote_Permission {
 	 */
 	public static function check_code_manifest( WP_REST_Request $request ) {
 		return self::check( $request, self::ROUTE_CODE_MANIFEST );
+	}
+
+	/**
+	 * Chain for POST /remote/push (R8).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH );
+	}
+
+	/**
+	 * Chain for GET /remote/push/{id} (R9).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push_get( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH_GET );
+	}
+
+	/**
+	 * Chain for POST /remote/push/{id}/items (R13).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push_items( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH_ITEMS );
+	}
+
+	/**
+	 * Chain for POST /remote/push/{id}/abort (R15).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push_abort( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH_ABORT );
 	}
 
 	/**
@@ -327,9 +376,10 @@ final class Remote_Permission {
 	/**
 	 * Which credential set a pairing in its current state accepts on a route, or the refusal.
 	 *
-	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phase 3):
+	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phases 3, 4, 5):
 	 *
-	 *   state              status      confirm     finalize    baseline / manifest / fetch / code_manifest
+	 *   state              status      confirm     finalize    baseline / manifest / fetch / code_manifest /
+	 *                                                          push / push_get / push_items / push_abort
 	 *   pending            bootstrap   bootstrap   long-term*  401 pairing_invalid
 	 *   awaiting_approval  long-term   403 pairing_not_approved (every route but status)
 	 *   active             long-term   401         401         long-term

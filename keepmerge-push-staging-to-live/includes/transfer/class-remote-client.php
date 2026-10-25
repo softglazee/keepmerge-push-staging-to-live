@@ -586,7 +586,27 @@ final class Remote_Client {
 			case 'same_site':
 				return __( 'This key belongs to this site itself. Create the key on the live site.', 'keepmerge-push-staging-to-live' );
 			case 'push_locked':
-				return __( 'Another push is running on the live site. Wait until it ends, or release a stale lock on the live site\'s Pushes tab.', 'keepmerge-push-staging-to-live' );
+				return __( 'Another push session is open on the live site, so it does not accept a second one. If it is an earlier push from this site, abort it on this Send tab; otherwise wait until it ends. A push that is never applied expires on live after 24 hours.', 'keepmerge-push-staging-to-live' );
+			case 'lock_lost':
+				return __( 'The live site released this push\'s lock (for example because Keepmerge was deactivated there), so it stopped accepting items for it. Abort this push and push again.', 'keepmerge-push-staging-to-live' );
+			case 'push_not_found':
+			case 'push_expired':
+			case 'push_aborted':
+			case 'push_failed':
+				return __( 'The live site no longer has this push session (it expired after 24 hours, was aborted, or was set aside). Create a new plan and push again.', 'keepmerge-push-staging-to-live' );
+			case 'push_exists':
+				return __( 'The live site already has a different push with this identifier. Create a new plan and push again.', 'keepmerge-push-staging-to-live' );
+			case 'batch_out_of_order':
+			case 'batch_mismatch':
+			case 'item_count_exceeded':
+			case 'too_many_items':
+				return __( 'The live site refused this batch because it does not fit the push it has on record. Abort this push, then plan and push again.', 'keepmerge-push-staging-to-live' );
+			case 'push_applying':
+				return __( 'The live site is already applying this push, so it can no longer be aborted from here.', 'keepmerge-push-staging-to-live' );
+			case 'plan_hash_mismatch':
+			case 'counts_mismatch':
+			case 'count_mismatch':
+				return __( 'The items the live site received do not match the plan, so live set this push aside and changes nothing. Create a new plan and push again.', 'keepmerge-push-staging-to-live' );
 			case 'storage_full':
 			case 'storage_unwritable':
 				return __( 'The live site cannot store the files of this push (disk full or uploads folder not writable). Free space or fix the permissions on live.', 'keepmerge-push-staging-to-live' );

@@ -484,12 +484,14 @@ final class Scope {
 	}
 
 	/**
-	 * Whether a post type is never an item (core internals, WooCommerce orders and coupons).
+	 * Whether a post type is never an item, whatever a setting says: core internals (the Font
+	 * Library's types by their wp_font_ prefix too) and WooCommerce orders and coupons.
 	 *
 	 * @param string $post_type Post type.
 	 * @return bool
 	 */
-	private static function never_post_type( $post_type ) {
-		return in_array( $post_type, self::NEVER_POST_TYPES, true ) || Guard::is_denied_post_type( $post_type );
+	public static function never_post_type( $post_type ) {
+		$post_type = (string) $post_type;
+		return in_array( $post_type, self::NEVER_POST_TYPES, true ) || 0 === strpos( $post_type, 'wp_font_' ) || Guard::is_denied_post_type( $post_type );
 	}
 }

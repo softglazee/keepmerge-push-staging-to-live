@@ -87,6 +87,7 @@ final class Plugin {
 
 		( new Rest\Admin_Controller() )->register_routes();
 		( new Rest\Plan_Controller() )->register_routes();
+		( new Rest\Push_Controller() )->register_routes();
 
 		if ( Receive_Window::is_open() ) {
 			( new Rest\Remote_Controller() )->register_routes();

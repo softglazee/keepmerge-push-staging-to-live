@@ -22,6 +22,7 @@ use SoftGlaze\SafePush\Sync\Option_Policy;
 use SoftGlaze\SafePush\Sync\Plan_Store;
 use SoftGlaze\SafePush\Sync\Planner;
 use SoftGlaze\SafePush\Tables;
+use SoftGlaze\SafePush\Transfer\Push_Runner;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -385,7 +386,8 @@ final class Admin_Controller {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the latest push must be current.
 		$last_push = $wpdb->get_row(
-			$wpdb->prepare( 'SELECT id, push_uuid, side, state, started_gmt, finished_gmt FROM %i ORDER BY id DESC LIMIT %d', Tables::table_name( 'pushes' ), 1 ),
+			// A plan that was never pushed is not a push (planning and planned rows share the table).
+			$wpdb->prepare( "SELECT id, push_uuid, side, state, started_gmt, finished_gmt FROM %i WHERE state NOT IN ('planning','planned') ORDER BY id DESC LIMIT %d", Tables::table_name( 'pushes' ), 1 ),
 			ARRAY_A
 		);
 
@@ -529,6 +531,7 @@ final class Admin_Controller {
 				'pairings'    => Source_Pairing::list_pairings(),
 				'baselines'   => $this->baselines(),
 				'plans'       => $this->latest_plans(),
+				'pushes'      => $this->latest_pushes(),
 			)
 		);
 	}
@@ -598,9 +601,27 @@ final class Admin_Controller {
 	private function latest_plans() {
 		$out = array();
 		foreach ( Source_Pairing::list_pairings() as $pairing ) {
+			$row  = Source_Pairing::find( $pairing['uuid'] );
+			$plan = null === $row ? null : Plan_Store::latest( (int) $row['id'] );
+			// A plan that became a push is shown as the push (latest_pushes()).
+			$usable                  = null !== $plan && in_array( $plan['state'], array( 'planning', 'planned' ), true ) && ! Plan_Store::is_expired( $plan );
+			$out[ $pairing['uuid'] ] = $usable ? Planner::present( $plan ) : null;
+		}
+		return $out;
+	}
+
+	/**
+	 * The newest push of each source pairing (null when none), keyed by pairing UUID, so a Send
+	 * tab opened again can show its progress and resume it.
+	 *
+	 * @return array<string,array|null>
+	 */
+	private function latest_pushes() {
+		$out = array();
+		foreach ( Source_Pairing::list_pairings() as $pairing ) {
 			$row                     = Source_Pairing::find( $pairing['uuid'] );
-			$plan                    = null === $row ? null : Plan_Store::latest( (int) $row['id'] );
-			$out[ $pairing['uuid'] ] = null === $plan || Plan_Store::is_expired( $plan ) ? null : Planner::present( $plan );
+			$push                    = null === $row ? null : Push_Runner::latest( (int) $row['id'] );
+			$out[ $pairing['uuid'] ] = null === $push ? null : Push_Runner::present( $push );
 		}
 		return $out;
 	}
