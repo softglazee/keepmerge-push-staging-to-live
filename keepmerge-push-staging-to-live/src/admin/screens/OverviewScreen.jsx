@@ -18,6 +18,7 @@ import LoadError from '../components/LoadError';
 import PanelHead from '../components/PanelHead';
 import { SkeletonCard } from '../components/Skeleton';
 import { pairingStatusLabel } from './labels';
+import { pushStateInfo } from './send/push-labels';
 
 const CHECK_ICONS = {
 	ok: CircleCheck,
@@ -180,7 +181,12 @@ export default function OverviewScreen( { overview, error, onRetry, onNavigate }
 							<dt>{ __( 'Started', 'keepmerge-push-staging-to-live' ) }</dt>
 							<dd>{ overview.last_push.started_gmt } UTC</dd>
 							<dt>{ __( 'State', 'keepmerge-push-staging-to-live' ) }</dt>
-							<dd>{ overview.last_push.state }</dd>
+							<dd>
+								{
+									pushStateInfo( overview.last_push.state )
+										.label
+								}
+							</dd>
 						</dl>
 					) : (
 						<div>

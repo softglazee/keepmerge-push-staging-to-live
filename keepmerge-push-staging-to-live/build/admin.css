@@ -1236,6 +1236,18 @@
 	box-shadow: 0 -4px 16px rgba(15, 48, 87, 0.08);
 }
 
+/* Keyboard focus must not end up hidden under the sticky save bar (WCAG 2.2, 2.4.11): leave room
+   for it when the browser scrolls a focused field into view. The bar wraps to two rows on phones. */
+html:has(.sgsp-savebar) {
+	scroll-padding-bottom: 80px;
+}
+
+@media (max-width: 599px) {
+	html:has(.sgsp-savebar) {
+		scroll-padding-bottom: 120px;
+	}
+}
+
 .sgsp-savebar__state {
 	display: inline-flex;
 	align-items: center;
