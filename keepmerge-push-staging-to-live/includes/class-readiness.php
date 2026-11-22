@@ -204,7 +204,7 @@ final class Readiness {
 	private static function filesystem() {
 		$uploads = wp_upload_dir( null, false );
 
-		if ( ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) || ! is_dir( $uploads['basedir'] ) ) {
+		if ( ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) ) {
 			return array(
 				'id'     => 'filesystem',
 				'label'  => __( 'Uploads folder', 'keepmerge-push-staging-to-live' ),
@@ -213,23 +213,33 @@ final class Readiness {
 			);
 		}
 
+		// A site that never stored an upload has no uploads folder yet. Media_Receiver creates it
+		// with the first file and checks the method on wp-content in that case; so does this check.
+		$exists = is_dir( $uploads['basedir'] );
+
 		if ( ! function_exists( 'get_filesystem_method' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 		}
-		$method = get_filesystem_method( array(), $uploads['basedir'], true );
+		$method = get_filesystem_method( array(), $exists ? $uploads['basedir'] : WP_CONTENT_DIR, true );
 		$ok     = 'direct' === $method;
+
+		if ( ! $ok ) {
+			$detail = sprintf(
+				/* translators: %s: the filesystem method WordPress would use, for example ftpext. */
+				__( 'WordPress would need FTP credentials to write here (method: %s). Pushes run in the background and cannot ask for them; ask your host to let PHP write to the uploads folder.', 'keepmerge-push-staging-to-live' ),
+				$method
+			);
+		} elseif ( $exists ) {
+			$detail = __( 'Writable directly by WordPress.', 'keepmerge-push-staging-to-live' );
+		} else {
+			$detail = __( 'Not created yet; WordPress can create it directly when the first file arrives.', 'keepmerge-push-staging-to-live' );
+		}
 
 		return array(
 			'id'     => 'filesystem',
 			'label'  => __( 'Uploads folder', 'keepmerge-push-staging-to-live' ),
 			'status' => $ok ? 'ok' : 'error',
-			'detail' => $ok
-				? __( 'Writable directly by WordPress.', 'keepmerge-push-staging-to-live' )
-				: sprintf(
-					/* translators: %s: the filesystem method WordPress would use, for example ftpext. */
-					__( 'WordPress would need FTP credentials to write here (method: %s). Pushes run in the background and cannot ask for them; ask your host to let PHP write to the uploads folder.', 'keepmerge-push-staging-to-live' ),
-					$method
-				),
+			'detail' => $detail,
 		);
 	}
 
