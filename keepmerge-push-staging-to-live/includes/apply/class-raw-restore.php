@@ -82,7 +82,13 @@ final class Raw_Restore {
 		if ( $id < 1 ) {
 			return true;
 		}
-		if ( Identity::get( Scope::space( $kind ), $id ) !== (string) $row['uuid'] ) {
+		$found = Identity::get( Scope::space( $kind ), $id );
+		if ( '' === $found && self::removed_already( $kind, $id ) ) {
+			// A step that died after it removed the object, or moved it to the Trash and took its
+			// UUID, and before it recorded that: the removal is done.
+			return true;
+		}
+		if ( $found !== (string) $row['uuid'] ) {
 			// The object no longer carries this item's UUID: it is not the one the push created.
 			return new WP_Error( 'created_object_changed', 'created_object_changed' );
 		}
@@ -203,24 +209,29 @@ final class Raw_Restore {
 		if ( ! $post instanceof \WP_Post ) {
 			return true;
 		}
+		// The UUID goes last: a step that dies before that leaves a post the next step still
+		// recognises as the one this push created.
+		if ( 'trash' !== $post->post_status ) {
+			if ( ! EMPTY_TRASH_DAYS ) {
+				// This site has no Trash: wp_trash_post() would delete the post for good.
+				$draft = wp_update_post(
+					array(
+						'ID'            => (int) $id,
+						'post_status'   => 'draft',
+						// See post(): core would re-check the stored template and refuse.
+						'page_template' => '',
+					),
+					true
+				);
+				if ( is_wp_error( $draft ) ) {
+					return $draft;
+				}
+			} elseif ( ! wp_trash_post( (int) $id ) ) {
+				return new WP_Error( 'remove_failed', 'remove_failed' );
+			}
+		}
 		delete_post_meta( (int) $id, Identity::META_KEY );
-		if ( 'trash' === $post->post_status ) {
-			return true;
-		}
-		if ( ! EMPTY_TRASH_DAYS ) {
-			// This site has no Trash: wp_trash_post() would delete the post for good.
-			$draft = wp_update_post(
-				array(
-					'ID'            => (int) $id,
-					'post_status'   => 'draft',
-					// See post(): core would re-check the stored template and refuse.
-					'page_template' => '',
-				),
-				true
-			);
-			return is_wp_error( $draft ) ? $draft : true;
-		}
-		return wp_trash_post( (int) $id ) ? true : new WP_Error( 'remove_failed', 'remove_failed' );
+		return true;
 	}
 
 	/**
@@ -237,17 +248,33 @@ final class Raw_Restore {
 		if ( ! $product instanceof \WC_Product ) {
 			return true;
 		}
+		// The UUID goes last, as in trash_post().
+		if ( 'trash' !== $product->get_status() ) {
+			if ( ! EMPTY_TRASH_DAYS ) {
+				$product->set_status( 'draft' );
+				$product->save();
+			} else {
+				$product->delete( false );
+			}
+		}
 		delete_post_meta( (int) $id, Identity::META_KEY );
-		if ( 'trash' === $product->get_status() ) {
-			return true;
-		}
-		if ( ! EMPTY_TRASH_DAYS ) {
-			$product->set_status( 'draft' );
-			$product->save();
-			return true;
-		}
-		$product->delete( false );
 		return true;
+	}
+
+	/**
+	 * Whether an object without its UUID is in the state a finished removal leaves: gone, or a post
+	 * or product in the Trash.
+	 *
+	 * @param string $kind Object type.
+	 * @param int    $id   Object ID.
+	 * @return bool
+	 */
+	private static function removed_already( $kind, $id ) {
+		if ( 'term' === $kind || 'menu' === $kind ) {
+			return ! get_term( (int) $id ) instanceof \WP_Term;
+		}
+		$post = get_post( (int) $id );
+		return ! $post instanceof \WP_Post || ( 'attachment' !== $kind && 'trash' === $post->post_status );
 	}
 
 	/**
