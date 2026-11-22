@@ -167,6 +167,17 @@ export default function HeldReview( { push, onSaved, notify } ) {
 										{ reason.excerpt && <code className="sgsp-review__excerpt">{ reason.excerpt }</code> }
 									</li>
 								) ) }
+								{ item.reasons_total > item.reasons.length && (
+									<li>
+										<span className="sgsp-review__why">
+											{ sprintf(
+												/* translators: %s: number of further reasons not listed. */
+												_n( 'and %s more reason', 'and %s more reasons', item.reasons_total - item.reasons.length, 'keepmerge-push-staging-to-live' ),
+												number( item.reasons_total - item.reasons.length )
+											) }
+										</span>
+									</li>
+								) }
 							</ul>
 							<fieldset className="sgsp-review__choices">
 								<legend className="screen-reader-text">

@@ -8,6 +8,7 @@
 namespace SoftGlaze\SafePush\Transfer;
 
 use SoftGlaze\SafePush\Apply\Markup_Gate;
+use SoftGlaze\SafePush\Apply\Review;
 use SoftGlaze\SafePush\Sync\Exporters\Menus;
 use SoftGlaze\SafePush\Sync\Identity;
 use SoftGlaze\SafePush\Sync\Manifest;
@@ -499,12 +500,18 @@ final class Item_Stager {
 
 		$gate = Markup_Gate::check( $id['kind'], $decoded );
 
-		$out['data']   = $data;
-		$out['groups'] = $groups;
-		$out['gate']   = array_slice( $gate, 0, self::MAX_GATE_REASONS );
-		$out['media']  = $media;
-		$out['extra']  = $extra;
-		$out['status'] = empty( $gate ) ? 'staged' : 'held';
+		$out['data']      = $data;
+		$out['groups']    = $groups;
+		$out['gate']      = array_slice( Review::shown_first( $gate ), 0, self::MAX_GATE_REASONS );
+		$out['gate_info'] = empty( $gate ) ? array() : array(
+			// What the review offers is decided from every reason, not from the ones kept.
+			'gate_total'  => count( $gate ),
+			'gate_filter' => Review::filter_possible( $gate ),
+			'gate_css'    => Review::needs_edit_css( $id['kind'], $gate ),
+		);
+		$out['media']     = $media;
+		$out['extra']     = $extra;
+		$out['status']    = empty( $gate ) ? 'staged' : 'held';
 
 		$this->remember( $id, $out['status'] );
 		return $this->finish( $out );
@@ -570,18 +577,19 @@ final class Item_Stager {
 	 */
 	private function result( array $id ) {
 		return array(
-			'status'   => 'refused',
-			'reason'   => '',
-			'field'    => '',
-			'warnings' => array(),
-			'gate'     => array(),
-			'target'   => 0,
-			'data'     => null,
-			'groups'   => array(),
-			'refs'     => array(),
-			'media'    => null,
-			'extra'    => array(),
-			'identity' => $id,
+			'status'    => 'refused',
+			'reason'    => '',
+			'field'     => '',
+			'warnings'  => array(),
+			'gate'      => array(),
+			'gate_info' => array(),
+			'target'    => 0,
+			'data'      => null,
+			'groups'    => array(),
+			'refs'      => array(),
+			'media'     => null,
+			'extra'     => array(),
+			'identity'  => $id,
 		);
 	}
 
@@ -594,14 +602,15 @@ final class Item_Stager {
 	 * @return array
 	 */
 	private function refuse( array $out, $reason, $field = '' ) {
-		$out['status'] = 'refused';
-		$out['reason'] = (string) $reason;
-		$out['field']  = substr( (string) $field, 0, 64 );
-		$out['data']   = null;
-		$out['refs']   = array();
-		$out['gate']   = array();
-		$out['media']  = null;
-		$out['extra']  = array();
+		$out['status']    = 'refused';
+		$out['reason']    = (string) $reason;
+		$out['field']     = substr( (string) $field, 0, 64 );
+		$out['data']      = null;
+		$out['refs']      = array();
+		$out['gate']      = array();
+		$out['gate_info'] = array();
+		$out['media']     = null;
+		$out['extra']     = array();
 		$this->remember( $out['identity'], 'refused' );
 		return $this->finish( $out );
 	}

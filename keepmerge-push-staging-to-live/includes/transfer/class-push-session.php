@@ -1104,6 +1104,9 @@ final class Push_Session {
 			}
 			if ( ! empty( $staged['gate'] ) ) {
 				$payload['gate'] = $staged['gate'];
+				foreach ( isset( $staged['gate_info'] ) ? (array) $staged['gate_info'] : array() as $name => $value ) {
+					$payload[ $name ] = $value;
+				}
 			}
 			if ( is_array( $staged['media'] ) ) {
 				// The attachment's files on live: final paths and refs of the committed files.

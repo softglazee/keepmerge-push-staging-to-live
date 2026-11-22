@@ -200,6 +200,10 @@ export function reasonLabel( code, field = '' ) {
 			'Skipped by a live administrator in the review.',
 			'keepmerge-push-staging-to-live'
 		),
+		held_after_filter: __(
+			"Still held after WordPress's HTML filter, so live did not write it.",
+			'keepmerge-push-staging-to-live'
+		),
 		dependency_skipped: __(
 			'Uses an item that was not created on live, so it was not written.',
 			'keepmerge-push-staging-to-live'

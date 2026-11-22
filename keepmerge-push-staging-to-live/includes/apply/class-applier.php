@@ -71,7 +71,7 @@ final class Applier {
 	/**
 	 * Skip reasons (an item skipped is not a failure: the push goes on).
 	 */
-	const SKIPS = array( 'changed_during_push', 'review_skipped', 'dependency_skipped', 'reference_missing', 'reference_mismatch', 'theme_missing', 'option_not_allowed', 'type_not_included', 'path_taken', 'woocommerce_inactive', 'attribute_missing', 'target_exists' );
+	const SKIPS = array( 'changed_during_push', 'review_skipped', 'held_after_filter', 'dependency_skipped', 'reference_missing', 'reference_mismatch', 'theme_missing', 'option_not_allowed', 'type_not_included', 'path_taken', 'woocommerce_inactive', 'attribute_missing', 'target_exists' );
 
 	/**
 	 * Most items processed in one step; the softglaze_sp_apply_step_items filter may only lower it.
@@ -693,6 +693,10 @@ final class Applier {
 		}
 		if ( 'filtered' === $row['review'] ) {
 			$ctx->data = Review::filter( $kind, $ctx->data );
+			// The filter covers content fields only: anything the gate still finds is not written.
+			if ( array() !== Markup_Gate::check( $kind, $ctx->data ) ) {
+				return new WP_Error( 'held_after_filter', 'held_after_filter' );
+			}
 		}
 		$applier = self::applier( $kind );
 		if ( null === $applier ) {

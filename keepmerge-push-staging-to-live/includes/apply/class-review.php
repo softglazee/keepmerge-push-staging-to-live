@@ -59,19 +59,25 @@ final class Review {
 					);
 				}
 			}
-			$out[] = array(
-				'uuid'       => (string) $row['uuid'],
-				'kind'       => (string) $row['object_type'],
-				'type'       => isset( $payload['type'] ) ? (string) $payload['type'] : '',
-				'title'      => self::title( (string) $row['object_type'], $payload ),
-				'action'     => (string) $row['action'],
-				'status'     => (string) $row['status'],
-				'review'     => (string) $row['review'],
-				'review_by'  => (int) $row['review_by'],
-				'reasons'    => $reasons,
-				'can_filter' => self::filter_possible( $reasons ),
-				'needs_css'  => self::needs_edit_css( (string) $row['object_type'], $reasons ),
-				'live_id'    => (int) $row['local_object_id'],
+			// The row keeps the first reasons only; what it may get comes from all of them. A row
+			// with more reasons than it keeps and no record of all of them is never filtered.
+			$total    = isset( $payload['gate_total'] ) ? max( count( $reasons ), (int) $payload['gate_total'] ) : count( $reasons );
+			$complete = $total <= count( $reasons );
+			$filter   = self::filter_possible( $reasons ) && ( isset( $payload['gate_filter'] ) ? true === $payload['gate_filter'] : $complete );
+			$out[]    = array(
+				'uuid'          => (string) $row['uuid'],
+				'kind'          => (string) $row['object_type'],
+				'type'          => isset( $payload['type'] ) ? (string) $payload['type'] : '',
+				'title'         => self::title( (string) $row['object_type'], $payload ),
+				'action'        => (string) $row['action'],
+				'status'        => (string) $row['status'],
+				'review'        => (string) $row['review'],
+				'review_by'     => (int) $row['review_by'],
+				'reasons'       => $reasons,
+				'reasons_total' => $total,
+				'can_filter'    => $filter,
+				'needs_css'     => self::needs_edit_css( (string) $row['object_type'], $reasons ) || ! empty( $payload['gate_css'] ),
+				'live_id'       => (int) $row['local_object_id'],
 			);
 		}
 		return $out;
@@ -203,6 +209,29 @@ final class Review {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Reasons in the order the review shows them: those outside the content fields (which the HTML
+	 * filter does not reach) and custom CSS first, so a row that keeps only the first reasons keeps
+	 * the ones that decide what the review may choose. The order is otherwise kept.
+	 *
+	 * @param array[] $reasons Reasons.
+	 * @return array[]
+	 */
+	public static function shown_first( array $reasons ) {
+		$first = array();
+		$rest  = array();
+		foreach ( $reasons as $reason ) {
+			$field = isset( $reason['field'] ) ? (string) $reason['field'] : '';
+			$rule  = isset( $reason['rule'] ) ? (string) $reason['rule'] : '';
+			if ( 1 !== preg_match( self::CONTENT_FIELD, $field ) || 'styles_css' === $rule ) {
+				$first[] = $reason;
+			} else {
+				$rest[] = $reason;
+			}
+		}
+		return array_merge( $first, $rest );
 	}
 
 	/**
