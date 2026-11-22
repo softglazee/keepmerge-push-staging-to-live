@@ -695,7 +695,10 @@ final class Applier {
 			// Only an explicit approval writes markup unfiltered: an item nobody approved gets
 			// WordPress's HTML filter also when a live administrator's session (whose own filters
 			// core removes) finishes the apply.
-			$ctx->data = Review::filter( $kind, $ctx->data );
+			$filtered = Review::filter( $kind, $ctx->data );
+			if ( 'global_styles' !== $kind || 'filtered' === $row['review'] || ! Review::styles_unchanged( $ctx->data, $filtered ) ) {
+				$ctx->data = $filtered;
+			}
 		}
 		if ( 'filtered' === $row['review'] && array() !== Markup_Gate::check( $kind, $ctx->data ) ) {
 			// The filter covers content fields only: anything the gate still finds is not written.

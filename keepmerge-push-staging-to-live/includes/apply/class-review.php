@@ -327,6 +327,49 @@ final class Review {
 	}
 
 	/**
+	 * Whether the filter left global styles as they were apart from how the JSON is written (key
+	 * order, escaped slashes), so the stored text can stay staging's own: the item hash compares
+	 * the text, and the markup gate holds every global styles item core's filters would change.
+	 *
+	 * @param array $before Data before Review::filter().
+	 * @param array $after  Data after it.
+	 * @return bool
+	 */
+	public static function styles_unchanged( array $before, array $after ) {
+		$title_before = isset( $before['post_title'] ) ? $before['post_title'] : null;
+		$title_after  = isset( $after['post_title'] ) ? $after['post_title'] : null;
+		if ( $title_before !== $title_after || ! isset( $before['post_content'], $after['post_content'] ) ) {
+			return false;
+		}
+		$a = json_decode( (string) $before['post_content'], true );
+		$b = json_decode( (string) $after['post_content'], true );
+		if ( ! is_array( $a ) || ! is_array( $b ) ) {
+			return false;
+		}
+		return self::sorted( $a, 0 ) === self::sorted( $b, 0 );
+	}
+
+	/**
+	 * An array with its string keys sorted at every level (lists keep their order).
+	 *
+	 * @param mixed $value Value.
+	 * @param int   $depth Depth.
+	 * @return mixed
+	 */
+	private static function sorted( $value, $depth ) {
+		if ( ! is_array( $value ) || $depth > 64 ) {
+			return $value;
+		}
+		foreach ( $value as $key => $item ) {
+			$value[ $key ] = self::sorted( $item, $depth + 1 );
+		}
+		if ( array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) {
+			ksort( $value, SORT_STRING );
+		}
+		return $value;
+	}
+
+	/**
 	 * Every "css" key under styles removed.
 	 *
 	 * @param mixed $value Value.
