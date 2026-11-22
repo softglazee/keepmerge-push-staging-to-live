@@ -41,8 +41,8 @@ final class Cron {
 
 	/**
 	 * The prune itself, each part bounded per run: expired audit rows, keys, approvals, nonces,
-	 * throttle rows, plans and unapplied sessions, stale applies (marked interrupted), old
-	 * temporary folders, and snapshots past retention (never the newest pushes).
+	 * throttle rows, plans, every due unapplied session (time-boxed), stale applies (marked
+	 * interrupted), old temporary folders, and snapshots past retention (never the newest pushes).
 	 *
 	 * @return array Counts of what was pruned (for WP-CLI and tests).
 	 */
@@ -56,7 +56,7 @@ final class Cron {
 		$out['nonces'] = Nonce_Store::prune( 5000 );
 		Throttle::prune();
 		Sync\Plan_Store::prune( 0 );
-		$out['expired']     = Transfer\Push_Session::expire_old( 50 );
+		$out['expired']     = Transfer\Push_Session::expire_all_due( 50 );
 		$out['interrupted'] = self::detect_stale();
 		$out['temp']        = Transfer\Media_Receiver::prune_temp();
 		$out['retention']   = Transfer\Push_Session::prune_retention( (int) $settings['snapshot_days'] );

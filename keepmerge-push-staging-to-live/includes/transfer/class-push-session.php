@@ -502,6 +502,41 @@ final class Push_Session {
 	}
 
 	/**
+	 * Expires every due session in batches until none is left or the time budget is used (daily
+	 * prune), so sessions a source leaves behind never pile up faster than one prune clears them.
+	 *
+	 * @param int $batch Sessions per query.
+	 * @return int Sessions expired.
+	 */
+	public static function expire_all_due( $batch = 50 ) {
+		global $wpdb;
+
+		$deadline = Limits::deadline( 2 );
+		$cutoff   = gmdate( 'Y-m-d H:i:s', time() - self::TTL );
+		$batch    = max( 1, absint( $batch ) );
+		$after    = 0;
+		$done     = 0;
+		$more     = true;
+		while ( $more && ! Limits::over( $deadline ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the next batch of due sessions after the last one seen.
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, push_uuid FROM %i WHERE side = %s AND state IN ('open','receiving','staged','awaiting_review','failed') AND started_gmt < %s AND id > %d ORDER BY id ASC LIMIT %d", Tables::table_name( 'pushes' ), self::SIDE, $cutoff, $after, $batch ), ARRAY_A );
+			$rows = is_array( $rows ) ? $rows : array();
+			foreach ( $rows as $row ) {
+				$after   = (int) $row['id'];
+				$session = self::find( (string) $row['push_uuid'] );
+				if ( null !== $session && self::expire_if_due( $session ) ) {
+					++$done;
+				}
+				if ( Limits::over( $deadline ) ) {
+					break;
+				}
+			}
+			$more = count( $rows ) >= $batch;
+		}
+		return $done;
+	}
+
+	/**
 	 * The session as the remote routes and the screens present it.
 	 *
 	 * @param array|null $session Session.
@@ -1000,6 +1035,11 @@ final class Push_Session {
 			),
 			'staged' === $fields['state'] ? 'ok' : 'error'
 		);
+		if ( 'failed' === $fields['state'] ) {
+			// The source decides the plan hash and the counts, so a failed push keeps nothing staged
+			// (as an abort): repeated failures cannot fill this site's database.
+			self::purge( (int) $session['id'] );
+		}
 
 		return self::find( $session['push_uuid'] );
 	}
