@@ -1092,7 +1092,9 @@ final class Applier {
 	private static function order( array $session, $pass ) {
 		global $wpdb;
 
-		$where = ( 'allocate' === $pass ? "action IN ('create','recreate')" : "action IN ('create','recreate','created','update','trash')" ) . ' AND ' . self::PROCESSABLE;
+		// A row a dead step left "applying" stays in the write order when a later step builds it
+		// again (the cursor that step claimed may name an earlier pass); the write pass recovers it.
+		$where = 'allocate' === $pass ? "action IN ('create','recreate') AND " . self::PROCESSABLE : "action IN ('create','recreate','created','update','trash') AND ( " . self::PROCESSABLE . " OR status = 'applying' )";
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Own table; the conditions are constants of this class.
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, object_type, refs FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') AND {$where} ORDER BY id ASC", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE ), ARRAY_A );
 		$rows = is_array( $rows ) ? $rows : array();
