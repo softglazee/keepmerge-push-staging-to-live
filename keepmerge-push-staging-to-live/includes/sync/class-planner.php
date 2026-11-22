@@ -67,6 +67,11 @@ final class Planner {
 	const MANIFEST_BATCH = 500;
 
 	/**
+	 * Smallest manifest batch the adaptive size goes down to.
+	 */
+	const MANIFEST_MIN_BATCH = 25;
+
+	/**
 	 * Gate reasons and problems kept per row.
 	 */
 	const MAX_REASONS = 5;
@@ -199,7 +204,7 @@ final class Planner {
 		++$cursor['steps'];
 		$error = null;
 
-		while ( 'done' !== $cursor['stage'] && microtime( true ) < $deadline ) {
+		while ( 'done' !== $cursor['stage'] && ! Limits::over( $deadline ) ) {
 			$before = $cursor['stage'];
 			switch ( $cursor['stage'] ) {
 				case 'export':
@@ -233,7 +238,7 @@ final class Planner {
 			if ( null !== $error ) {
 				break;
 			}
-			if ( $before === $cursor['stage'] && microtime( true ) >= $deadline ) {
+			if ( $before === $cursor['stage'] && Limits::over( $deadline ) ) {
 				break;
 			}
 		}
@@ -346,7 +351,7 @@ final class Planner {
 		while ( $cursor['pos'] < $total ) {
 			if ( ++$batch > self::EXPORT_BATCH ) {
 				$batch = 0;
-				if ( microtime( true ) >= $deadline ) {
+				if ( Limits::over( $deadline ) ) {
 					break;
 				}
 			}
@@ -457,12 +462,15 @@ final class Planner {
 	 * @return WP_Error|null
 	 */
 	private static function stage_manifest( array $plan, array &$cursor, $client, $deadline ) {
-		while ( microtime( true ) < $deadline ) {
-			$rows = Plan_Store::items_with_status( (int) $plan['id'], 'pending', (int) $cursor['after'], self::MANIFEST_BATCH );
+		// Adaptive batch (blueprint §13): halved when live deferred entries for its own time budget or
+		// memory guard, doubled again (up to the maximum) after an answer without any.
+		$batch = isset( $cursor['mbatch'] ) ? max( self::MANIFEST_MIN_BATCH, min( self::MANIFEST_BATCH, (int) $cursor['mbatch'] ) ) : self::MANIFEST_BATCH;
+		while ( ! Limits::over( $deadline ) ) {
+			$rows = Plan_Store::items_with_status( (int) $plan['id'], 'pending', (int) $cursor['after'], $batch );
 			if ( empty( $rows ) && $cursor['after'] > 0 ) {
 				// Rows live deferred (its own time budget) are asked for again from the start.
 				$cursor['after'] = 0;
-				$rows            = Plan_Store::items_with_status( (int) $plan['id'], 'pending', 0, self::MANIFEST_BATCH );
+				$rows            = Plan_Store::items_with_status( (int) $plan['id'], 'pending', 0, $batch );
 			}
 			if ( empty( $rows ) && $cursor['live_done'] ) {
 				$cursor['stage'] = 'taken';
@@ -504,11 +512,13 @@ final class Planner {
 			}
 
 			$progress = false;
+			$deferred = 0;
 			foreach ( $rows as $row ) {
 				$cursor['after'] = max( (int) $cursor['after'], (int) $row['id'] );
 				$answer          = isset( $answers[ $row['uuid'] ] ) ? $answers[ $row['uuid'] ] : array( 'state' => 'missing' );
 				$state           = isset( $answer['state'] ) && in_array( $answer['state'], array( 'found', 'missing', 'excluded', 'deferred' ), true ) ? $answer['state'] : 'missing';
 				if ( 'deferred' === $state ) {
+					++$deferred;
 					continue;
 				}
 				$progress = true;
@@ -532,6 +542,9 @@ final class Planner {
 					)
 				);
 			}
+
+			$batch            = $deferred > 0 ? max( self::MANIFEST_MIN_BATCH, (int) floor( $batch / 2 ) ) : min( self::MANIFEST_BATCH, $batch * 2 );
+			$cursor['mbatch'] = $batch;
 
 			$changes = isset( $data['live_changes'] ) && is_array( $data['live_changes'] ) ? $data['live_changes'] : array();
 			foreach ( isset( $changes['items'] ) && is_array( $changes['items'] ) ? $changes['items'] : array() as $change ) {
@@ -565,7 +578,7 @@ final class Planner {
 	private static function stage_taken( array $plan, array &$cursor, $client, $deadline ) {
 		$fingerprints = null;
 
-		while ( microtime( true ) < $deadline ) {
+		while ( ! Limits::over( $deadline ) ) {
 			$rows = Plan_Store::items_with_status( (int) $plan['id'], 'manifested', (int) $cursor['after'], self::MANIFEST_BATCH );
 			if ( empty( $rows ) ) {
 				$cursor['stage'] = 'titles';
@@ -634,7 +647,7 @@ final class Planner {
 	 * @return WP_Error|null
 	 */
 	private static function stage_titles( array $plan, array &$cursor, $client, $deadline ) {
-		while ( microtime( true ) < $deadline ) {
+		while ( ! Limits::over( $deadline ) ) {
 			$rows = Plan_Store::items_with_status( (int) $plan['id'], 'manifested', (int) $cursor['after'], self::MANIFEST_BATCH );
 			if ( empty( $rows ) ) {
 				$cursor['stage'] = 'code';
@@ -703,7 +716,7 @@ final class Planner {
 	private static function stage_classify( array $plan, array &$cursor, $deadline ) {
 		$source_woo = Guard::active();
 
-		while ( microtime( true ) < $deadline ) {
+		while ( ! Limits::over( $deadline ) ) {
 			$rows = Plan_Store::items_with_status( (int) $plan['id'], 'manifested', 0, self::EXPORT_BATCH );
 			if ( empty( $rows ) ) {
 				$cursor['stage'] = 'closure';

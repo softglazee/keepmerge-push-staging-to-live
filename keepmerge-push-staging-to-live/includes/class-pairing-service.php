@@ -654,6 +654,9 @@ final class Pairing_Service {
 	 * @return array
 	 */
 	private static function revoke_row( array $row, $event ) {
+		// An apply this pairing's source was driving stops here; the live administrator resumes it on
+		// live or rolls back what was applied (test plan I-08).
+		Apply\Recovery::interrupt_running( 'pairing_revoked', (int) $row['id'] );
 		Receiver_User::delete( (int) $row['receiver_user_id'], (int) $row['default_author_id'] );
 		Nonce_Store::forget_pairing( (int) $row['id'] );
 

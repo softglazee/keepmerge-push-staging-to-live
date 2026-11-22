@@ -326,7 +326,7 @@ final class Media_Receiver {
 				$answers[] = self::answer( $row );
 				continue;
 			}
-			if ( microtime( true ) > $deadline ) {
+			if ( Limits::over( $deadline ) ) {
 				$later[] = $ref;
 				continue;
 			}
@@ -1014,7 +1014,7 @@ final class Media_Receiver {
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the folders still in use.
-		$cursors = $wpdb->get_col( $wpdb->prepare( "SELECT cursor_json FROM %i WHERE side = %s AND state IN ('open','receiving','staged','awaiting_review','snapshotting','applying','failed_partial')", Tables::table_name( 'pushes' ), self::SIDE ) );
+		$cursors = $wpdb->get_col( $wpdb->prepare( "SELECT cursor_json FROM %i WHERE side = %s AND state IN ('open','receiving','staged','awaiting_review','snapshotting','applying','failed_partial','interrupted','rolling_back')", Tables::table_name( 'pushes' ), self::SIDE ) );
 		$in_use  = array();
 		foreach ( is_array( $cursors ) ? $cursors : array() as $json ) {
 			$cursor = json_decode( (string) $json, true );

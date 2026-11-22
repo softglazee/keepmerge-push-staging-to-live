@@ -679,6 +679,17 @@ final class Push_Runner {
 		$status = isset( $data['remote_status'] ) ? (int) $data['remote_status'] : 0;
 		$code   = $answer->get_error_code();
 
+		$busy = 503 === $status && isset( $data['remote_code'] ) && 'server_busy' === $data['remote_code'];
+		if ( $busy && (int) $pending['to'] - (int) $pending['from'] > 1 ) {
+			// Live stopped the batch at its time budget or memory guard (blueprint §13): smaller
+			// batches from here; the items it staged already are answered from its rows.
+			$p['batch_size']  = max( 1, intdiv( (int) $pending['to'] - (int) $pending['from'], 2 ) );
+			$p['batch_bytes'] = max( self::MIN_BATCH_BYTES, intdiv( (int) $p['batch_bytes'], 2 ) );
+			$p['pending']     = null;
+			self::log( $cursor, 'halved', array( 'batch' => $p['batch_size'] ) );
+			return self::next( 'retry' );
+		}
+
 		if ( 413 === $status ) {
 			$size = (int) $pending['to'] - (int) $pending['from'];
 			if ( $size > 1 ) {
@@ -758,9 +769,15 @@ final class Push_Runner {
 			}
 			$live            = isset( $answer['data']['state'] ) ? sanitize_key( (string) $answer['data']['state'] ) : '';
 			$p['live_state'] = $live;
-			if ( ! in_array( $live, array( 'applied', 'failed_partial' ), true ) ) {
-				// Still under review (or being applied by a live administrator).
-				return self::next( 'stop', 'awaiting_review' );
+			if ( in_array( $live, array( 'rolling_back', 'rolled_back' ), true ) ) {
+				self::log( $cursor, 'failed', array( 'code' => 'push_' . $live ) );
+				return self::next( 'stop', 'failed', new WP_Error( 'push_' . $live, Remote_Client::message( 'push_' . $live ) ) );
+			}
+			if ( 'applied' !== $live ) {
+				// Still under review, being applied by a live administrator, or waiting for their
+				// decision after a failure or an interruption.
+				$waiting = in_array( $live, array( 'failed_partial', 'interrupted' ), true ) ? new WP_Error( 'push_' . $live, Remote_Client::message( 'push_' . $live ) ) : null;
+				return self::next( 'stop', 'awaiting_review', $waiting );
 			}
 			$p['phase'] = 'apply';
 			self::log( $cursor, 'reviewed', array( 'state' => $live ) );
@@ -807,9 +824,16 @@ final class Push_Runner {
 				self::log( $cursor, 'awaiting_review', array( 'held' => (int) $p['apply']['held'] ) );
 				return self::next( 'stop', 'awaiting_review' );
 			}
-			if ( 'failed_partial' === $live ) {
-				self::log( $cursor, 'failed', array( 'code' => 'failed_partial' ) );
-				return self::next( 'stop', 'failed', new WP_Error( 'failed_partial', __( 'An item could not be written on live, so live stopped the push. A live administrator decides on live\'s Pushes screen what happens next.', 'keepmerge-push-staging-to-live' ) ) );
+			if ( in_array( $live, array( 'failed_partial', 'interrupted' ), true ) ) {
+				// A live administrator decides on live (Retry, Skip, Resume or Roll back); "Check
+				// status" here collects the results once live has applied the push.
+				$p['phase'] = 'review';
+				self::log( $cursor, 'failed', array( 'code' => 'push_' . $live ) );
+				return self::next( 'stop', 'awaiting_review', new WP_Error( 'push_' . $live, Remote_Client::message( 'push_' . $live ) ) );
+			}
+			if ( in_array( $live, array( 'rolling_back', 'rolled_back' ), true ) ) {
+				self::log( $cursor, 'failed', array( 'code' => 'push_' . $live ) );
+				return self::next( 'stop', 'failed', new WP_Error( 'push_' . $live, Remote_Client::message( 'push_' . $live ) ) );
 			}
 			if ( 'applied' === $live ) {
 				if ( ! empty( $data['more'] ) && microtime( true ) < $deadline - 1 ) {

@@ -121,6 +121,20 @@ final class Applier {
 			return self::error( 'push_' . $state, 409 );
 		}
 
+		if ( 'interrupted' === $state ) {
+			$apply = self::cursor( $session );
+			if ( 'remote' !== $apply['actor'] ) {
+				// A live administrator decides how this push goes on (resume or roll back on live).
+				return self::answer( $session, $after );
+			}
+			// The source drove this apply: it may resume it (blueprint §12.2 resume rules).
+			$resumed = Recovery::resume( $session, 'remote', 0 );
+			if ( is_wp_error( $resumed ) ) {
+				return 'push_locked' === $resumed->get_error_code() ? self::error( 'push_locked', 409 ) : self::answer( Push_Session::find( (string) $session['push_uuid'] ), $after );
+			}
+			$session = $resumed;
+		}
+
 		if ( in_array( $state, array( 'staged', 'awaiting_review' ), true ) ) {
 			$session = self::gate( $session );
 			if ( 'awaiting_review' === $session['state'] ) {
@@ -175,6 +189,10 @@ final class Applier {
 			if ( null !== $refusal ) {
 				return $refusal;
 			}
+		} elseif ( 'interrupted' === $state ) {
+			return new WP_Error( 'push_interrupted', __( 'This push stopped without finishing. Resume it (or roll it back) first.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
+		} elseif ( 'failed_partial' === $state ) {
+			return new WP_Error( 'push_failed_partial', __( 'This push stopped at an item. Retry the item, skip it, or roll the push back.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
 		} elseif ( 'applied' !== $state ) {
 			return new WP_Error( 'nothing_to_continue', __( 'This push is not waiting for review on this site.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
 		}
@@ -303,7 +321,7 @@ final class Applier {
 	 * @param array $session Session.
 	 * @return WP_Error|null
 	 */
-	private static function approval_rights( array $session ) {
+	public static function approval_rights( array $session ) {
 		foreach ( Review::held_items( $session ) as $item ) {
 			if ( 'approve' !== $item['review'] || ! in_array( $item['status'], array( 'held', 'applying' ), true ) ) {
 				continue;
@@ -325,7 +343,7 @@ final class Applier {
 	 * @return array|WP_Error The session after the step.
 	 */
 	private static function run( array $session ) {
-		$raw   = self::raw_cursor( (int) $session['id'] );
+		$raw   = Push_Session::raw_cursor( (int) $session['id'] );
 		$apply = self::cursor( $session );
 		$now   = time();
 		if ( (int) $apply['busy_until'] > $now ) {
@@ -333,7 +351,10 @@ final class Applier {
 		}
 		$budget              = Limits::time_budget();
 		$apply['busy_until'] = $now + $budget + 15;
-		if ( ! self::claim( (int) $session['id'], $raw, $apply ) ) {
+		$claimed             = json_decode( $raw, true );
+		$claimed             = is_array( $claimed ) ? $claimed : array();
+		$claimed['apply']    = $apply;
+		if ( ! Push_Session::claim_cursor( (int) $session['id'], $raw, $claimed ) ) {
 			return self::error( 'push_busy', 409 );
 		}
 
@@ -345,15 +366,14 @@ final class Applier {
 		}
 
 		wp_raise_memory_limit( 'admin' );
-		$deadline = microtime( true ) + max( 1, $budget - 2 );
+		$deadline = Limits::deadline( 2 );
 		$cap      = (int) apply_filters( 'softglaze_sp_apply_step_items', self::STEP_ITEMS );
 		$cap      = max( 1, min( self::STEP_ITEMS, $cap ) );
-		$memory   = Limits::memory_limit_bytes();
 		$state    = (string) $session['state'];
 		$fields   = array();
 		$items    = 0;
 
-		while ( microtime( true ) < $deadline && $items < $cap && ( $memory < 1 || memory_get_usage() < 0.7 * $memory ) ) {
+		while ( $items < $cap && ! Limits::over( $deadline ) ) {
 			$outcome = self::next( $session, $apply );
 			if ( 'idle' === $outcome ) {
 				continue;
@@ -378,6 +398,12 @@ final class Applier {
 		if ( 'snapshotting' === $state && 'snapshot' !== $apply['pass'] ) {
 			$state = 'applying';
 		}
+		$stored = Push_Session::find( (string) $session['push_uuid'] );
+		if ( is_array( $stored ) && 'interrupted' === $stored['state'] && in_array( $state, self::RUNNING, true ) ) {
+			// The window closed or the pairing was revoked while this step ran: the push stays
+			// interrupted for the live administrator's decision (its progress is kept).
+			$state = 'interrupted';
+		}
 		Push_Lock::heartbeat( (string) $session['push_uuid'] );
 		$apply['busy_until'] = 0;
 		$fields['state']     = $state;
@@ -386,6 +412,9 @@ final class Applier {
 		}
 		if ( 'failed_partial' === $state ) {
 			$fields['error_code'] = (string) $apply['error'];
+		}
+		if ( 'applied' === $state ) {
+			$fields['error_code'] = '';
 		}
 		self::save( $session, $apply, $fields );
 		return Push_Session::find( (string) $session['push_uuid'] );
@@ -409,8 +438,13 @@ final class Applier {
 					$apply['idx']   = 0;
 					return 'applying';
 				}
+				self::mark( $apply );
 				$apply['pos'] = (int) $row['id'];
-				$taken        = self::snapshot_row( $session, $row );
+				$taken        = self::guarded(
+					static function () use ( $session, $row ) {
+						return self::snapshot_row( $session, $row );
+					}
+				);
 				if ( is_wp_error( $taken ) ) {
 					return self::fail( $session, $apply, $row, $taken );
 				}
@@ -437,12 +471,17 @@ final class Applier {
 					return 'idle';
 				}
 				$row = self::row( (int) $apply['order'][ (int) $apply['idx'] ] );
+				self::mark( $apply );
 				++$apply['idx'];
 				if ( null === $row || (int) $row['local_object_id'] > 0 || ! self::processable( $row ) || '' === Scope::space( (string) $row['object_type'] ) ) {
 					// Options and units have no ID to allocate: they are written in place.
 					return 'idle';
 				}
-				$allocated = self::allocate_row( $session, $row );
+				$allocated = self::guarded(
+					static function () use ( $session, $row ) {
+						return self::allocate_row( $session, $row );
+					}
+				);
 				if ( is_wp_error( $allocated ) ) {
 					return self::skip_or_fail( $session, $apply, $row, $allocated );
 				}
@@ -459,13 +498,13 @@ final class Applier {
 					++$apply['idx'];
 					return 'idle';
 				}
+				self::mark( $apply );
 				if ( 'applying' === $row['status'] ) {
-					// A step that died in the middle of this item (blueprint §12.2): apply it again only
-					// when live still holds what the snapshot recorded.
-					// TODO(Phase 8): an item whose hash is neither pre_hash nor post_hash is a decision for the live admin.
-					$again = self::recover_row( $row );
-					if ( is_wp_error( $again ) ) {
-						return self::fail( $session, $apply, $row, $again );
+					// A step that died in the middle of this item (blueprint §12.2 resume rules).
+					$again = self::recover( $session, $row );
+					if ( 'failed' === $again ) {
+						++$apply['idx'];
+						return self::fail( $session, $apply, $row, new WP_Error( 'interrupted_item', 'interrupted_item' ) );
 					}
 					$row = self::row( (int) $row['id'] );
 				}
@@ -473,7 +512,11 @@ final class Applier {
 					++$apply['idx'];
 					return 'idle';
 				}
-				$written = self::write_row( $session, $row );
+				$written = self::guarded(
+					static function () use ( $session, $row ) {
+						return self::write_row( $session, $row );
+					}
+				);
 				++$apply['idx'];
 				++$apply['done'];
 				if ( is_wp_error( $written ) ) {
@@ -489,9 +532,14 @@ final class Applier {
 					$apply['pos']  = 0;
 					return 'idle';
 				}
+				self::mark( $apply );
 				$apply['pos'] = (int) $row['id'];
 				++$apply['done'];
-				$adopted = self::adopt_row( $session, $row );
+				$adopted = self::guarded(
+					static function () use ( $session, $row ) {
+						return self::adopt_row( $session, $row );
+					}
+				);
 				if ( is_wp_error( $adopted ) ) {
 					return self::skip_or_fail( $session, $apply, $row, $adopted );
 				}
@@ -555,6 +603,22 @@ final class Applier {
 	 * @return true|WP_Error
 	 */
 	private static function allocate_row( array $session, array $row ) {
+		$space = Scope::space( (string) $row['object_type'] );
+		$found = Identity::find( $space, (string) $row['uuid'] );
+		if ( 1 === count( $found ) ) {
+			// A step that died after creating this placeholder and before recording it: the object
+			// with the item's UUID is that placeholder (a new item's UUID was unknown on live when it
+			// was staged), so it is recorded instead of a second one being made.
+			self::update_row(
+				(int) $row['id'],
+				array(
+					'action'          => 'created',
+					'local_object_id' => (int) $found[0],
+				)
+			);
+			self::$index = null;
+			return true;
+		}
 		$ctx = Item_Context::build( $session, $row, self::index( $session ), array(), true );
 		if ( is_wp_error( $ctx ) ) {
 			return $ctx;
@@ -644,7 +708,7 @@ final class Applier {
 		$base_groups = 'product' === $kind ? Woo_Product::base_groups( $ctx, $groups ) : array();
 		Sync_State::record_base( (int) $session['pairing_id'], (string) $row['uuid'], $kind, '' === $space ? 0 : $live_id, $post, $base_groups, (int) $session['id'] );
 
-		self::applied( $row, $final, $live_id, $post, $warnings );
+		self::applied( $row, $final, $live_id, $post, $warnings, $groups );
 		return $final;
 	}
 
@@ -673,19 +737,121 @@ final class Applier {
 	}
 
 	/**
-	 * A row left in "applying" by a step that died: live still holds the snapshot → apply again.
+	 * A row left in "applying" by a step that died (blueprint §12.2): live's hash equals the
+	 * intended post-apply hash (the staging hash in post_hash) → the write finished, it is recorded
+	 * as applied without writing again; it equals the snapshot's pre_hash (or the row is a
+	 * placeholder) → processed again; anything else → a decision for the live administrator.
+	 *
+	 * @param array $session Session.
+	 * @param array $row     Row (light or full).
+	 * @return string applied, again or failed.
+	 */
+	public static function recover( array $session, array $row ) {
+		$row = self::row( (int) $row['id'] );
+		if ( null === $row || 'applying' !== $row['status'] ) {
+			return 'again';
+		}
+		$kind = (string) $row['object_type'];
+		$ref  = Snapshot_Store::ref( $kind, $row );
+		$item = Items::export( $kind, $ref, Export_Context::destination() );
+		$now  = null === $item ? '' : (string) $item['hash'];
+
+		$intended = (string) $row['post_hash'];
+		$trashed  = 'trash' === $row['action'] && '' === $now;
+		if ( $trashed || ( '' !== $intended && '' !== $now && hash_equals( $intended, $now ) ) ) {
+			$live_id = 'option' === $kind || 'widgets' === $kind ? 0 : (int) $ref;
+			$space   = Scope::space( $kind );
+			if ( '' !== $space && $live_id > 0 && ! $trashed ) {
+				Identity::stamp( $space, $live_id, (string) $row['uuid'] );
+			}
+			$groups = array();
+			if ( 'product' === $kind && null !== $item ) {
+				$ctx          = new Item_Context();
+				$ctx->row     = $row;
+				$ctx->kind    = $kind;
+				$ctx->live_id = $live_id;
+				$groups       = Woo_Product::base_groups( $ctx, (array) $item['groups'] );
+			}
+			Sync_State::record_base( (int) $session['pairing_id'], (string) $row['uuid'], $kind, '' === $space ? 0 : $live_id, $now, $groups, (int) $session['id'] );
+			$final = $trashed ? 'trashed' : ( 'created' === $row['action'] ? 'created' : ( 'option' === $kind ? ( empty( $row['pre_image']['raw']['options'][ $ref ]['exists'] ) ? 'option_added' : 'option_set' ) : ( 'widgets' === $kind ? 'option_set' : 'updated' ) ) );
+			self::applied( $row, $final, $live_id, $now, array( 'recovered' ), null === $item ? array() : (array) $item['groups'] );
+			return 'applied';
+		}
+		if ( 'created' === $row['action'] || ( '' !== (string) $row['pre_hash'] && hash_equals( (string) $row['pre_hash'], $now ) ) || ( '' === (string) $row['pre_hash'] && ! empty( $row['pre_image']['absent'] ) && '' === $now ) ) {
+			self::reset_row( $row );
+			return 'again';
+		}
+		self::update_row(
+			(int) $row['id'],
+			array(
+				'status' => 'failed',
+				'error'  => 'interrupted_item',
+			)
+		);
+		return 'failed';
+	}
+
+	/**
+	 * Puts a row back to be processed by the passes (Retry, resume).
 	 *
 	 * @param array $row Row.
-	 * @return true|WP_Error
+	 * @return void
 	 */
-	private static function recover_row( array $row ) {
-		$kind = (string) $row['object_type'];
-		$now  = self::current_hash( $kind, Snapshot_Store::ref( $kind, $row ) );
-		if ( 'created' === $row['action'] || hash_equals( (string) $row['pre_hash'], $now ) ) {
-			self::update_row( (int) $row['id'], array( 'status' => '' !== (string) $row['review'] ? 'held' : 'staged' ) );
-			return true;
+	public static function reset_row( array $row ) {
+		self::update_row(
+			(int) $row['id'],
+			array(
+				'status' => '' !== (string) $row['review'] ? 'held' : 'staged',
+				'error'  => '',
+			)
+		);
+	}
+
+	/**
+	 * Marks a row skipped with a reason (Skip this item).
+	 *
+	 * @param array  $row  Row.
+	 * @param string $code Reason.
+	 * @return void
+	 */
+	public static function skip_row( array $row, $code ) {
+		self::update_row(
+			(int) $row['id'],
+			array(
+				'status' => 'skipped',
+				'error'  => sanitize_key( $code ),
+			)
+		);
+	}
+
+	/**
+	 * Runs one item's work; anything it throws stops the push at that item (blueprint §10.4)
+	 * instead of ending the request with the row half done.
+	 *
+	 * @param callable $work Work.
+	 * @return mixed|WP_Error
+	 */
+	private static function guarded( $work ) {
+		try {
+			return call_user_func( $work );
+		} catch ( \Throwable $e ) {
+			// The message can carry content; only the fact is kept.
+			return new WP_Error( 'item_exception', 'item_exception' );
 		}
-		return new WP_Error( 'interrupted_item', 'interrupted_item' );
+	}
+
+	/**
+	 * Remembers where the cursor was before the current row (Retry goes back there).
+	 *
+	 * @param array $apply Cursor (changed).
+	 * @return void
+	 */
+	private static function mark( array &$apply ) {
+		$apply['mark'] = array(
+			'pass' => (string) $apply['pass'],
+			'idx'  => (int) $apply['idx'],
+			'pos'  => (int) $apply['pos'],
+		);
 	}
 
 	/**
@@ -768,6 +934,11 @@ final class Applier {
 	private static function skip_or_fail( array $session, array &$apply, array $row, WP_Error $error ) {
 		$code = sanitize_key( (string) $error->get_error_code() );
 		if ( in_array( $code, self::SKIPS, true ) ) {
+			$fresh = self::row( (int) $row['id'] );
+			if ( null !== $fresh && 'created' === $fresh['action'] && (int) $fresh['local_object_id'] > 0 ) {
+				// A placeholder whose item is not written after all does not stay on live as a draft.
+				Raw_Restore::remove( $fresh );
+			}
 			self::update_row(
 				(int) $row['id'],
 				array(
@@ -782,9 +953,8 @@ final class Applier {
 	}
 
 	/**
-	 * A failed item: the push stops as failed_partial (blueprint §10.4).
-	 *
-	 * TODO(Phase 8): the live admin chooses Retry, Skip this item and continue, or Roll back.
+	 * A failed item: the push stops as failed_partial (blueprint §10.4); the live administrator
+	 * chooses Retry, Skip this item and continue, or Roll back (Apply\Recovery, Rollback_Runner).
 	 *
 	 * @param array    $session Session.
 	 * @param array    $apply   Cursor (changed).
@@ -802,7 +972,15 @@ final class Applier {
 				'error'  => $code,
 			)
 		);
-		$apply['error'] = $code;
+		$apply['error']  = $code;
+		$apply['failed'] = array_merge(
+			isset( $apply['mark'] ) && is_array( $apply['mark'] ) ? $apply['mark'] : array(
+				'pass' => (string) $apply['pass'],
+				'idx'  => (int) $apply['idx'],
+				'pos'  => (int) $apply['pos'],
+			),
+			array( 'row' => (int) $row['id'] )
+		);
 		Audit_Log::write(
 			'push_failed',
 			array(
@@ -831,13 +1009,18 @@ final class Applier {
 	 * @param int    $live_id  Live object ID.
 	 * @param string $hash     Live's post-apply hash.
 	 * @param array  $warnings Warning codes.
+	 * @param array  $groups   Live's product group hashes after the write (the rollback tells an
+	 *                         order placed since from a content edit by the live-owned group).
 	 * @return void
 	 */
-	private static function applied( array $row, $action, $live_id, $hash, array $warnings ) {
+	private static function applied( array $row, $action, $live_id, $hash, array $warnings, array $groups = array() ) {
 		$transfer = array(
 			'staging_hash' => (string) $row['post_hash'],
 			'warnings'     => array_values( array_slice( $warnings, 0, 20 ) ),
 		);
+		if ( isset( $groups['live_owned'] ) && is_string( $groups['live_owned'] ) ) {
+			$transfer['post_groups'] = array( 'live_owned' => $groups['live_owned'] );
+		}
 		self::update_row(
 			(int) $row['id'],
 			array(
@@ -1191,39 +1374,6 @@ final class Applier {
 		$cursor['apply']       = $apply;
 		$fields['cursor_json'] = $cursor;
 		Push_Session::update( (int) $session['id'], $fields );
-	}
-
-	/**
-	 * The cursor as stored.
-	 *
-	 * @param int $id Session row ID.
-	 * @return string
-	 */
-	private static function raw_cursor( $id ) {
-		global $wpdb;
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the exact stored text for the compare-and-swap.
-		return (string) $wpdb->get_var( $wpdb->prepare( 'SELECT cursor_json FROM %i WHERE id = %d AND side = %s', Tables::table_name( 'pushes' ), absint( $id ), self::SIDE ) );
-	}
-
-	/**
-	 * Claims a step: writes the cursor only if nobody changed it since it was read.
-	 *
-	 * @param int    $id    Session row ID.
-	 * @param string $raw   Cursor as read.
-	 * @param array  $apply Claimed apply cursor.
-	 * @return bool
-	 */
-	private static function claim( $id, $raw, array $apply ) {
-		global $wpdb;
-
-		$cursor = json_decode( $raw, true );
-		$cursor = is_array( $cursor ) ? $cursor : array();
-
-		$cursor['apply'] = $apply;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; compare-and-swap on the cursor so one step runs at a time.
-		$updated = $wpdb->query( $wpdb->prepare( 'UPDATE %i SET cursor_json = %s WHERE id = %d AND side = %s AND cursor_json = %s', Tables::table_name( 'pushes' ), (string) wp_json_encode( $cursor ), absint( $id ), self::SIDE, (string) $raw ) );
-		return 1 === (int) $updated;
 	}
 
 	/**

@@ -1,14 +1,16 @@
 import { createElement, Fragment, useCallback, useEffect, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { ChevronRight, History, Inbox, RefreshCw, Send } from 'lucide-react';
+import Alert from '../components/Alert';
 import Badge from '../components/Badge';
 import Card from '../components/Card';
+import ConfirmDialog from '../components/ConfirmDialog';
 import DataTable from '../components/DataTable';
 import EmptyState from '../components/EmptyState';
 import LoadError from '../components/LoadError';
 import PanelHead from '../components/PanelHead';
 import { SkeletonCard } from '../components/Skeleton';
-import { errorMessage, getPushes } from '../api';
+import { errorMessage, getPushes, releasePushLock } from '../api';
 import { number } from './send/plan-labels';
 import { pushStateInfo } from './send/push-labels';
 import { dateTime } from './receive/time';
@@ -68,9 +70,8 @@ function fileCell( done, total, renamed ) {
  *
  * On live each session shows its state (an interrupted one has had no heartbeat for 5
  * minutes), what was staged, applied, held for review or refused; Details opens one push with
- * the review of its held items and "Continue apply on this site" (blueprint §10.5).
- *
- * TODO(Phase 8): resume, release a stale lock, roll back.
+ * the review of its held items and "Continue apply on this site" (blueprint §10.5), and recovery
+ * (Resume, Retry, Skip, Roll back). A stale push lock can be released here (typed domain).
  *
  * @param {Object}   props
  * @param {Function} props.notify Toast.
@@ -80,6 +81,9 @@ export default function PushesScreen( { notify } ) {
 	const [ data, setData ] = useState( null );
 	const [ error, setError ] = useState( '' );
 	const [ loading, setLoading ] = useState( false );
+	const [ releasing, setReleasing ] = useState( false );
+	const [ typed, setTyped ] = useState( '' );
+	const [ releaseError, setReleaseError ] = useState( '' );
 
 	const load = useCallback( () => {
 		setLoading( true );
@@ -298,10 +302,82 @@ export default function PushesScreen( { notify } ) {
 	];
 
 	const heldTotal = data.received.filter( ( row ) => 'awaiting_review' === row.state || 'staged' === row.state ).reduce( ( sum, row ) => sum + row.received.held, 0 );
+	const stopped = data.received.filter( ( row ) => [ 'interrupted', 'failed_partial' ].includes( row.state ) || ( 'rolling_back' === row.state && row.interrupted ) ).length;
+	const lock = data.lock;
+	const lockMatches = typed.trim().toLowerCase() === data.host;
+
+	const release = () => {
+		const confirm = typed.trim();
+		setReleasing( false );
+		setReleaseError( '' );
+		releasePushLock( confirm )
+			.then( () => notify( 'success', __( 'The push lock is released.', 'keepmerge-push-staging-to-live' ) ) )
+			.catch( ( err ) => setReleaseError( errorMessage( err ) ) )
+			.finally( load );
+	};
 
 	return (
 		<div>
 			{ head }
+			{ stopped > 0 && (
+				<Alert tone="warning" title={ __( 'Pushes waiting for your decision', 'keepmerge-push-staging-to-live' ) }>
+					<p className="sgsp-m-0">
+						{ sprintf(
+							/* translators: %s: number of pushes. */
+							_n(
+								'%s push stopped before it finished. Open it to resume it, retry or skip the failed item, or roll it back. The staging site is not needed for any of these.',
+								'%s pushes stopped before they finished. Open each to resume it, retry or skip the failed item, or roll it back. The staging site is not needed for any of these.',
+								stopped,
+								'keepmerge-push-staging-to-live'
+							),
+							number( stopped )
+						) }
+					</p>
+				</Alert>
+			) }
+			{ lock && lock.releasable && (
+				<Alert tone="warning" title={ __( 'A push holds this site\'s push lock', 'keepmerge-push-staging-to-live' ) }>
+					<p className="sgsp-m-0">
+						{ lock.fresh
+							? __( 'The push that holds it is not running any more. No other push can open until the lock is released.', 'keepmerge-push-staging-to-live' )
+							: sprintf(
+									/* translators: %s: date and time. */
+									__( 'Its last heartbeat was %s, more than 5 minutes ago. No other push can open until the lock is released. Release it only if that push has stopped; a push waiting for review or for a decision can still be continued later.', 'keepmerge-push-staging-to-live' ),
+									dateTime( lock.heartbeat )
+							  ) }
+					</p>
+					{ releaseError && <p className="sgsp-m-0">{ releaseError }</p> }
+					<div className="sgsp-decisionbar__actions">
+						<button type="button" className="sgsp-button sgsp-button--secondary" onClick={ () => setReleasing( true ) }>
+							{ __( 'Release lock…', 'keepmerge-push-staging-to-live' ) }
+						</button>
+					</div>
+				</Alert>
+			) }
+			{ releasing && (
+				<ConfirmDialog
+					title={ __( 'Release the push lock?', 'keepmerge-push-staging-to-live' ) }
+					confirmLabel={ __( 'Release lock', 'keepmerge-push-staging-to-live' ) }
+					destructive
+					confirmDisabled={ ! lockMatches }
+					onConfirm={ release }
+					onCancel={ () => setReleasing( false ) }
+				>
+					<p>
+						{ __( 'A push that was still receiving items ends (nothing of it was written). A push that was being applied is marked interrupted, so you can resume or roll it back later.', 'keepmerge-push-staging-to-live' ) }
+					</p>
+					<div className="sgsp-field">
+						<label className="sgsp-field__label" htmlFor="sgsp-release-domain">
+							{ sprintf(
+								/* translators: %s: this site's host. */
+								__( 'Type %s to confirm', 'keepmerge-push-staging-to-live' ),
+								data.host
+							) }
+						</label>
+						<input id="sgsp-release-domain" className="sgsp-input" type="text" autoComplete="off" spellCheck="false" value={ typed } onChange={ ( event ) => setTyped( event.target.value ) } />
+					</div>
+				</ConfirmDialog>
+			) }
 			{ data.received.length > 0 && (
 				<Card
 					icon={ Inbox }

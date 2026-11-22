@@ -12,6 +12,7 @@ import { number } from '../send/plan-labels';
 import { pushStateInfo, reasonLabel, size } from '../send/push-labels';
 import { dateTime } from '../receive/time';
 import HeldReview from './HeldReview';
+import RecoveryCard from './RecoveryCard';
 import { kindName } from './labels';
 
 const RUNNING = [ 'snapshotting', 'applying' ];
@@ -19,9 +20,8 @@ const RUNNING = [ 'snapshotting', 'applying' ];
 /**
  * One push received on this site (blueprint §16 Pushes, destination): what was applied, skipped,
  * held and refused, the snapshot size, the review of held items, and "Continue apply on this
- * site" (typed domain) that writes the push from this administrator's own session (§10.5).
- *
- * TODO(Phase 8): Resume, release a stale lock, Roll back.
+ * site" (typed domain) that writes the push from this administrator's own session (§10.5), and
+ * recovery: Resume, Retry, Skip, Roll back (RecoveryCard, §10.4, §11, §12).
  *
  * @param {Object}   props
  * @param {number}   props.id     Push row ID.
@@ -176,18 +176,9 @@ export default function PushDetail( { id, onBack, notify } ) {
 						</div>
 					</div>
 				) }
-				{ 'failed_partial' === push.state && (
-					<Alert tone="danger" title={ __( 'Stopped at an item', 'keepmerge-push-staging-to-live' ) }>
-						<p className="sgsp-m-0">
-							{ sprintf(
-								/* translators: %s: error code. */
-								__( 'An item could not be written (%s). Everything applied before it stays applied and has its snapshot.', 'keepmerge-push-staging-to-live' ),
-								push.error || push.apply.error
-							) }
-						</p>
-					</Alert>
-				) }
 			</Card>
+
+			<RecoveryCard push={ push } notify={ notify } onChanged={ load } />
 
 			{ reviewing && (
 				<Card

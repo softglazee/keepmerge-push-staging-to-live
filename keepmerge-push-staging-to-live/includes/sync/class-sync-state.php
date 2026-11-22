@@ -121,6 +121,56 @@ final class Sync_State {
 	}
 
 	/**
+	 * Live, inside a rollback (blueprint §11.3): puts a UUID's row back to what it was before the
+	 * push, as the snapshot recorded it, or removes it when there was none.
+	 *
+	 * @param int        $pairing_id Pairing row ID.
+	 * @param string     $uuid       UUID.
+	 * @param array|null $before     The row as Sync_State::find() returned it before the push.
+	 * @return bool
+	 */
+	public static function restore( $pairing_id, $uuid, $before ) {
+		global $wpdb;
+
+		$table = Tables::table_name( 'sync_state' );
+		if ( ! is_array( $before ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+			return false !== $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE pairing_id = %d AND uuid = %s', $table, absint( $pairing_id ), (string) $uuid ) );
+		}
+
+		$confidence = isset( $before['match_confidence'] ) && in_array( $before['match_confidence'], self::CONFIDENCES, true ) ? (string) $before['match_confidence'] : '';
+		$base_hash  = isset( $before['base_hash'] ) && 1 === preg_match( '/\A[0-9a-f]{64}\z/', (string) $before['base_hash'] ) ? (string) $before['base_hash'] : '';
+		$base_gmt   = isset( $before['base_gmt'] ) && is_string( $before['base_gmt'] ) && 1 === preg_match( '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\z/', $before['base_gmt'] ) ? $before['base_gmt'] : null;
+		$groups     = isset( $before['base_groups'] ) && is_string( $before['base_groups'] ) ? $before['base_groups'] : '';
+		$decoded    = '' === $groups ? array() : json_decode( $groups, true );
+		$groups     = is_array( $decoded ) && ! empty( $decoded ) ? (string) wp_json_encode( $decoded ) : '';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; one prepared upsert.
+		$result = $wpdb->query(
+			$wpdb->prepare(
+				'INSERT INTO %i (pairing_id, uuid, object_type, object_id, remote_object_id, base_hash, base_groups, base_gmt, last_push_id, match_confidence) VALUES (%d, %s, %s, %d, %d, %s, %s, %s, %d, %s)
+				ON DUPLICATE KEY UPDATE object_type = VALUES(object_type), object_id = VALUES(object_id), remote_object_id = VALUES(remote_object_id), base_hash = VALUES(base_hash), base_groups = VALUES(base_groups), base_gmt = VALUES(base_gmt), last_push_id = VALUES(last_push_id), match_confidence = VALUES(match_confidence)',
+				$table,
+				absint( $pairing_id ),
+				substr( (string) $uuid, 0, 191 ),
+				isset( $before['object_type'] ) ? substr( (string) $before['object_type'], 0, 32 ) : '',
+				isset( $before['object_id'] ) ? absint( $before['object_id'] ) : 0,
+				isset( $before['remote_object_id'] ) ? absint( $before['remote_object_id'] ) : 0,
+				$base_hash,
+				$groups,
+				null === $base_gmt ? '1970-01-01 00:00:00' : $base_gmt,
+				isset( $before['last_push_id'] ) ? absint( $before['last_push_id'] ) : 0,
+				$confidence
+			)
+		);
+		if ( null === $base_gmt ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; a row without a base had no base date either.
+			$wpdb->query( $wpdb->prepare( 'UPDATE %i SET base_gmt = NULL WHERE pairing_id = %d AND uuid = %s', $table, absint( $pairing_id ), (string) $uuid ) );
+		}
+		return false !== $result;
+	}
+
+	/**
 	 * Deletes a pairing's rows that carry no base hash (a baseline that starts again). Rows with
 	 * a base hash come from pushes and stay.
 	 *

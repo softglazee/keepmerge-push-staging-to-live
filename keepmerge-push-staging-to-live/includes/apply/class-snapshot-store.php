@@ -316,6 +316,107 @@ final class Snapshot_Store {
 	}
 
 	/**
+	 * Copies a replaced file back from the push's snapshot folder (blueprint §11.3 file_replaced)
+	 * and checks the result against the SHA-256 the snapshot recorded.
+	 *
+	 * @param array  $session Session.
+	 * @param string $rel     Snapshot path relative to the plugin's uploads folder (snapshots/<hex>/<ref>.bin).
+	 * @param string $file_rel Path of the file relative to the uploads base.
+	 * @param string $sha256  SHA-256 of the file before the push.
+	 * @return true|WP_Error
+	 */
+	public static function restore_file( array $session, $rel, $file_rel, $sha256 ) {
+		$base = Media_Receiver::uploads_base();
+		if ( is_wp_error( $base ) ) {
+			return $base;
+		}
+		$dir = self::folder( $session, false );
+		if ( ! is_string( $dir ) || '' === $dir || 1 !== preg_match( '#\Asnapshots/[0-9a-f]{32}/[0-9]{1,9}\.bin\z#', (string) $rel ) || basename( $dir ) !== explode( '/', (string) $rel )[1] ) {
+			return new WP_Error( 'snapshot_missing', 'snapshot_missing' );
+		}
+		$source = $dir . '/' . basename( (string) $rel );
+		if ( ! is_file( $source ) || ! hash_equals( (string) $sha256, (string) hash_file( 'sha256', $source ) ) ) {
+			return new WP_Error( 'snapshot_missing', 'snapshot_missing' );
+		}
+		if ( '' !== \SoftGlaze\SafePush\Transfer\Path_Guard::reason( (string) $file_rel ) ) {
+			return new WP_Error( 'path_refused', 'path_refused' );
+		}
+		$target = $base . '/' . $file_rel;
+		if ( is_link( $target ) || ! is_dir( dirname( $target ) ) || ! Media_Receiver::is_inside( dirname( $target ), $base ) ) {
+			return new WP_Error( 'path_refused', 'path_refused' );
+		}
+		$fs = Media_Receiver::direct_filesystem();
+		if ( is_wp_error( $fs ) ) {
+			return $fs;
+		}
+		if ( ! $fs->copy( $source, $target, true, FS_CHMOD_FILE ) ) {
+			return new WP_Error( 'storage_unwritable', 'storage_unwritable' );
+		}
+		return hash_equals( (string) $sha256, (string) hash_file( 'sha256', $target ) ) ? true : new WP_Error( 'checksum_mismatch', 'checksum_mismatch' );
+	}
+
+	/**
+	 * Deletes a push's snapshot folder (retention, blueprint §11.4).
+	 *
+	 * @param array $session Session.
+	 * @return bool Whether a folder was deleted.
+	 */
+	public static function delete_folder( array $session ) {
+		$dir = self::folder( $session, false );
+		if ( ! is_string( $dir ) || '' === $dir ) {
+			return false;
+		}
+		$fs = Media_Receiver::direct_filesystem();
+		return ! is_wp_error( $fs ) && (bool) $fs->delete( $dir, true, 'd' );
+	}
+
+	/**
+	 * Deletes snapshot folders that no push names any more (their push was pruned or is gone),
+	 * at most 20 per run.
+	 *
+	 * @return int Folders deleted.
+	 */
+	public static function prune_orphans() {
+		global $wpdb;
+
+		$base = Media_Receiver::uploads_base();
+		if ( is_wp_error( $base ) ) {
+			return 0;
+		}
+		$snaps = $base . '/' . Installer::UPLOADS_DIR . '/snapshots';
+		if ( ! is_dir( $snaps ) || ! Media_Receiver::is_inside( $snaps, $base ) ) {
+			return 0;
+		}
+		$fs = Media_Receiver::direct_filesystem();
+		if ( is_wp_error( $fs ) ) {
+			return 0;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the folders sessions still name.
+		$cursors = $wpdb->get_col( $wpdb->prepare( 'SELECT cursor_json FROM %i WHERE side = %s', Tables::table_name( 'pushes' ), self::SIDE ) );
+		$named   = array();
+		foreach ( is_array( $cursors ) ? $cursors : array() as $json ) {
+			$cursor = json_decode( (string) $json, true );
+			if ( is_array( $cursor ) && isset( $cursor['snap'] ) && is_string( $cursor['snap'] ) && empty( $cursor['pruned'] ) ) {
+				$named[ $cursor['snap'] ] = true;
+			}
+		}
+
+		$deleted = 0;
+		$list    = $fs->dirlist( $snaps, false, false );
+		foreach ( is_array( $list ) ? $list : array() as $name => $info ) {
+			$name = (string) $name;
+			if ( $deleted >= 20 || 1 !== preg_match( '/\A[0-9a-f]{32}\z/', $name ) || ! isset( $info['type'] ) || 'd' !== $info['type'] || isset( $named[ $name ] ) ) {
+				continue;
+			}
+			if ( $fs->delete( $snaps . '/' . $name, true, 'd' ) ) {
+				++$deleted;
+			}
+		}
+		return $deleted;
+	}
+
+	/**
 	 * Size of a push's snapshots: the pre-images in its rows and the files in its folder.
 	 *
 	 * @param array $session Session.

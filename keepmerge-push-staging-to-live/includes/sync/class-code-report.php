@@ -112,7 +112,7 @@ final class Code_Report {
 		$end  = min( $total, $cursor + self::PAGE_SIZE );
 		$next = $cursor;
 		for ( $i = $cursor; $i < $end; $i++ ) {
-			if ( $i > $cursor && microtime( true ) > $deadline ) {
+			if ( $i > $cursor && Limits::over( $deadline ) ) {
 				break;
 			}
 			$out[] = self::file_entry( $files['root'], $files['paths'][ $i ] );
@@ -274,7 +274,7 @@ final class Code_Report {
 			\RecursiveIteratorIterator::CATCH_GET_CHILD
 		);
 		foreach ( $iterator as $file ) {
-			if ( null !== $deadline && microtime( true ) > $deadline ) {
+			if ( null !== $deadline && Limits::over( $deadline ) ) {
 				$truncated = true;
 				break;
 			}
@@ -424,7 +424,7 @@ final class Code_Report {
 		}
 
 		$error = null;
-		while ( in_array( $record['state'], array( 'inventory', 'running' ), true ) && microtime( true ) < $deadline ) {
+		while ( in_array( $record['state'], array( 'inventory', 'running' ), true ) && ! Limits::over( $deadline ) ) {
 			$record['state'] = 'running';
 			$error           = self::compare_page( $record, $client );
 			if ( null !== $error ) {

@@ -155,6 +155,10 @@ final class Receive_Window {
 			return false;
 		}
 
+		// An apply the source was driving can no longer be called: it waits for the live
+		// administrator (resume on live, or roll back), test plan I-07.
+		Apply\Recovery::interrupt_running( 'window_closed' );
+
 		$args = array( 'details' => array( 'reason' => sanitize_key( $reason ) ) );
 		if ( '' !== $actor_type ) {
 			$args['actor_type'] = $actor_type;

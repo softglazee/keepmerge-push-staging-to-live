@@ -460,6 +460,10 @@ final class Remote_Controller {
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
 		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
+		}
 
 		$body = self::decode_body( $request, self::BASELINE_MAX_BYTES );
 		if ( is_wp_error( $body ) ) {
@@ -492,6 +496,10 @@ final class Remote_Controller {
 		$context = Remote_Permission::context( $request );
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
 		}
 
 		$body = self::decode_body( $request, self::MANIFEST_MAX_BYTES );
@@ -532,6 +540,10 @@ final class Remote_Controller {
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
 		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
+		}
 
 		$body = self::decode_body( $request, self::FETCH_MAX_BYTES );
 		if ( is_wp_error( $body ) ) {
@@ -561,6 +573,10 @@ final class Remote_Controller {
 		$context = Remote_Permission::context( $request );
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
 		}
 
 		$body = self::decode_body( $request, self::CODE_MANIFEST_MAX_BYTES );
@@ -604,6 +620,10 @@ final class Remote_Controller {
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
 		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
+		}
 
 		$body = self::decode_body( $request, Push_Session::MAX_OPEN_BYTES );
 		if ( is_wp_error( $body ) ) {
@@ -646,6 +666,10 @@ final class Remote_Controller {
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
 		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
+		}
 
 		$body = self::decode_body( $request, Push_Session::MAX_BATCH_BYTES, self::ITEMS_DEPTH );
 		if ( is_wp_error( $body ) ) {
@@ -674,6 +698,10 @@ final class Remote_Controller {
 		$context = Remote_Permission::context( $request );
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
 		}
 
 		$body = self::decode_body( $request, Applier::MAX_BODY );
@@ -729,6 +757,10 @@ final class Remote_Controller {
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
 		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
+		}
 
 		$body = self::decode_body( $request, Media_Receiver::FILES_MAX_BYTES );
 		if ( is_wp_error( $body ) ) {
@@ -755,6 +787,10 @@ final class Remote_Controller {
 		$context = Remote_Permission::context( $request );
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
 		}
 
 		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
@@ -785,6 +821,10 @@ final class Remote_Controller {
 		if ( null === $context ) {
 			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
 		}
+		$busy = self::busy();
+		if ( null !== $busy ) {
+			return $busy;
+		}
 
 		$body = self::decode_body( $request, Media_Receiver::COMMIT_MAX_BYTES );
 		if ( is_wp_error( $body ) ) {
@@ -798,6 +838,28 @@ final class Remote_Controller {
 
 		$result = Media_Receiver::commit( $session, $context['pairing'], (string) $request->get_param( 'ref' ) );
 		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * The memory guard every working remote handler checks before it starts (blueprint §13): above
+	 * 70 % of memory_limit the request does nothing and answers 503 server_busy with Retry-After, so
+	 * the source tries again (its client retries 5xx with backoff, then pauses with Resume). The
+	 * time budget is checked inside each handler's own loop.
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function busy() {
+		if ( Limits::memory_ok() ) {
+			return null;
+		}
+		return new WP_Error(
+			'server_busy',
+			'server_busy',
+			array(
+				'status'      => 503,
+				'retry_after' => 30,
+			)
+		);
 	}
 
 	/**

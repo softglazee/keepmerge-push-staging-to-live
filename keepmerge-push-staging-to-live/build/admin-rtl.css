@@ -2892,6 +2892,56 @@
 	}
 }
 
+/* Rollback and recovery (Phase 8) ------------------------------------ */
+
+.sgsp-rollback__counts {
+	margin: 0 0 var(--sgsp-space-3);
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: var(--sgsp-space-1);
+	font-size: 13px;
+	color: var(--sgsp-slate-800);
+}
+
+.sgsp-rollback__counts strong {
+	font-variant-numeric: tabular-nums;
+}
+
+.sgsp-rollback__conflicts {
+	margin: var(--sgsp-space-3) 0;
+	padding: var(--sgsp-space-3);
+	border: 1px solid var(--sgsp-slate-200);
+	border-radius: var(--sgsp-radius-control);
+	display: grid;
+	gap: var(--sgsp-space-2);
+	max-height: 260px;
+	overflow-y: auto;
+	min-width: 0;
+}
+
+.sgsp-rollback__conflicts .sgsp-checkbox span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.sgsp-rollback__filtered {
+	margin: var(--sgsp-space-2) 0 0;
+	padding-right: var(--sgsp-space-4);
+	overflow-wrap: anywhere;
+}
+
+.sgsp-detail > .sgsp-card + .sgsp-card,
+.sgsp-detail > .sgsp-card + .sgsp-alert,
+.sgsp-wrap .sgsp-alert + .sgsp-card {
+	margin-top: var(--sgsp-space-4);
+}
+
+.sgsp-rollback__conflicts .sgsp-checkbox__meta {
+	font-family: inherit;
+	font-size: 12px;
+}
+
 @media (min-width: 1280px) {
 	.xl\:sgsp-col-span-2 {
 		grid-column: span 2 / span 2;

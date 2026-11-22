@@ -70,6 +70,18 @@ export function pushStateInfo( state, interrupted = false ) {
 			__( 'Expired', 'keepmerge-push-staging-to-live' ),
 			'neutral',
 		],
+		interrupted: [
+			__( 'Interrupted', 'keepmerge-push-staging-to-live' ),
+			'warning',
+		],
+		rolling_back: [
+			__( 'Rolling back', 'keepmerge-push-staging-to-live' ),
+			'info',
+		],
+		rolled_back: [
+			__( 'Rolled back', 'keepmerge-push-staging-to-live' ),
+			'neutral',
+		],
 	};
 	const entry = map[ state ] || [ state, 'neutral' ];
 	return { label: entry[ 0 ], tone: entry[ 1 ] };
@@ -210,6 +222,46 @@ export function reasonLabel( code, field = '' ) {
 		),
 		write_failed: __(
 			'WordPress could not save it on live.',
+			'keepmerge-push-staging-to-live'
+		),
+		item_exception: __(
+			'Writing it stopped with an error on live.',
+			'keepmerge-push-staging-to-live'
+		),
+		interrupted_item: __(
+			'The apply stopped while this item was being written; live holds neither its old nor its new version.',
+			'keepmerge-push-staging-to-live'
+		),
+		admin_skipped: __(
+			'Skipped by a live administrator after it failed; it was put back as it was.',
+			'keepmerge-push-staging-to-live'
+		),
+		edited_on_live: __(
+			'Edited on this site after the push.',
+			'keepmerge-push-staging-to-live'
+		),
+		ordered_since_push: __(
+			'A product the push created that was ordered since.',
+			'keepmerge-push-staging-to-live'
+		),
+		file_changed: __(
+			'The file was replaced on this site after the push.',
+			'keepmerge-push-staging-to-live'
+		),
+		snapshots_pruned: __(
+			'Its snapshots were removed by the retention setting, so it can no longer be rolled back.',
+			'keepmerge-push-staging-to-live'
+		),
+		already_rolled_back: __(
+			'It was rolled back already.',
+			'keepmerge-push-staging-to-live'
+		),
+		nothing_to_roll_back: __(
+			'Nothing of it was written on this site.',
+			'keepmerge-push-staging-to-live'
+		),
+		restore_filtered: __(
+			'Your own HTML filter would change it when it is put back.',
 			'keepmerge-push-staging-to-live'
 		),
 	};

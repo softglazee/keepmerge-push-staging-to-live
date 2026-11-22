@@ -7,6 +7,9 @@
 
 namespace SoftGlaze\SafePush\Cli;
 
+use SoftGlaze\SafePush\Apply\Recovery;
+use SoftGlaze\SafePush\Apply\Rollback_Runner;
+use SoftGlaze\SafePush\Audit_Log;
 use SoftGlaze\SafePush\Installer;
 use SoftGlaze\SafePush\Pairing_Service;
 use SoftGlaze\SafePush\Receive_Window;
@@ -15,6 +18,7 @@ use SoftGlaze\SafePush\Sync\Classifier;
 use SoftGlaze\SafePush\Sync\Plan_Store;
 use SoftGlaze\SafePush\Sync\Planner;
 use SoftGlaze\SafePush\Transfer\Push_Runner;
+use SoftGlaze\SafePush\Transfer\Push_Session;
 use WP_CLI;
 use WP_Error;
 
@@ -23,15 +27,306 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Pairs this site, controls the receive window, builds dry-run plans and pushes them from the
- * command line.
+ * Pairs this site, controls the receive window, builds dry-run plans, pushes them, lists pushes,
+ * rolls a received push back and reads the audit log from the command line.
  *
  * Shell access implies full trust on this site; every change is still audited with the actor
  * "cli", and destructive commands ask first unless --yes is given.
- *
- * TODO(Phase 8): pushes, rollback, audit.
  */
 final class Command {
+
+	/**
+	 * Lists the pushes this site received (live) and sent (staging), newest first.
+	 *
+	 * Received pushes show their state on this site, including pushes that stopped
+	 * (interrupted, failed_partial) or wait for review (awaiting_review): decide
+	 * them under Tools > Staging Push > Pushes, or roll them back with
+	 * wp keepmerge rollback.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--side=<side>]
+	 * : Which pushes.
+	 * ---
+	 * default: all
+	 * options:
+	 *   - received
+	 *   - sent
+	 *   - all
+	 * ---
+	 *
+	 * [--format=<format>]
+	 * : Output format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 *   - csv
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp keepmerge pushes
+	 *     wp keepmerge pushes --side=received --format=json
+	 *
+	 * @param array $args       Positional arguments (unused).
+	 * @param array $assoc_args Associative arguments.
+	 * @return void
+	 */
+	public function pushes( $args, $assoc_args ) {
+		unset( $args );
+		$side = isset( $assoc_args['side'] ) ? (string) $assoc_args['side'] : 'all';
+		$rows = array();
+
+		if ( 'sent' !== $side ) {
+			foreach ( Push_Session::recent( 50 ) as $push ) {
+				$counts = $push['received'];
+				$rows[] = array(
+					'side'     => 'received',
+					'id'       => (int) $push['id'],
+					'push'     => (string) $push['push'],
+					'state'    => (string) $push['state'],
+					'started'  => null === $push['started_at'] ? '-' : gmdate( 'Y-m-d H:i', (int) $push['started_at'] ),
+					'other'    => '' === (string) $push['source_url'] ? '-' : (string) $push['source_url'],
+					'items'    => (int) $push['items'],
+					'applied'  => (int) $counts['applied'],
+					'skipped'  => (int) $counts['skipped'],
+					'failed'   => (int) $counts['failed'],
+					'held'     => (int) $counts['held'],
+					'rollback' => '' === $push['rollback']['pass'] ? '-' : (string) $push['rollback']['pass'],
+				);
+			}
+		}
+		if ( 'received' !== $side ) {
+			foreach ( Push_Runner::recent( 50 ) as $push ) {
+				$applied = isset( $push['applied'] ) && is_array( $push['applied'] ) ? $push['applied'] : array();
+				$rows[]  = array(
+					'side'     => 'sent',
+					'id'       => (int) $push['id'],
+					'push'     => (string) $push['push'],
+					'state'    => (string) $push['state'],
+					'started'  => empty( $push['started_at'] ) ? '-' : gmdate( 'Y-m-d H:i', (int) $push['started_at'] ),
+					'other'    => isset( $push['host'] ) ? (string) $push['host'] : '-',
+					'items'    => isset( $push['sent'] ) ? (int) $push['sent'] : 0,
+					'applied'  => isset( $applied['applied'] ) ? (int) $applied['applied'] : 0,
+					'skipped'  => isset( $applied['skipped'] ) ? (int) $applied['skipped'] : 0,
+					'failed'   => isset( $applied['failed'] ) ? (int) $applied['failed'] : 0,
+					'held'     => isset( $push['held_total'] ) ? (int) $push['held_total'] : 0,
+					'rollback' => '-',
+				);
+			}
+		}
+
+		$format = isset( $assoc_args['format'] ) ? (string) $assoc_args['format'] : 'table';
+		if ( empty( $rows ) && 'table' === $format ) {
+			WP_CLI::line( 'No pushes on this site.' );
+			return;
+		}
+		WP_CLI\Utils\format_items( $format, $rows, array( 'side', 'id', 'push', 'state', 'started', 'other', 'items', 'applied', 'skipped', 'failed', 'held', 'rollback' ) );
+	}
+
+	/**
+	 * Rolls back a push this site received.
+	 *
+	 * Shows the preview first: items restored to their snapshot, items the
+	 * push created that are removed (posts and products go to the Trash),
+	 * files put back, and conflicts (items edited on this site after the
+	 * push), which are skipped unless named with --include. Runs as the
+	 * administrator given with --user, in time-boxed steps, in reverse apply
+	 * order. Orders and stock are never touched. A rolled-back push cannot be
+	 * rolled back again.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <push-uuid>
+	 * : The push ID (see wp keepmerge pushes --side=received).
+	 *
+	 * [--include=<uuids>]
+	 * : Comma-separated item IDs listed as conflicts that are rolled back
+	 * anyway (the edit made on this site after the push is lost).
+	 *
+	 * [--yes]
+	 * : Roll back without asking. This site's domain is confirmed for you.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp keepmerge rollback 3f1c2a3b-0000-4000-8000-000000000000 --user=admin
+	 *     wp keepmerge rollback 3f1c2a3b-0000-4000-8000-000000000000 --user=admin --yes
+	 *     wp keepmerge rollback 3f1c2a3b-0000-4000-8000-000000000000 --user=admin --include=9f1c2a3b-1111-4111-8111-111111111111
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Associative arguments.
+	 * @return void
+	 */
+	public function rollback( $args, $assoc_args ) {
+		$uuid    = isset( $args[0] ) ? strtolower( trim( (string) $args[0] ) ) : '';
+		$session = wp_is_uuid( $uuid, 4 ) ? Push_Session::find( $uuid ) : null;
+		if ( null === $session ) {
+			WP_CLI::error( 'No push with this ID was received on this site. See wp keepmerge pushes --side=received.' );
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			WP_CLI::error( 'Run the rollback as an administrator of this site with --user=<login>: it writes the snapshots back as that user, as the Pushes screen does.' );
+		}
+
+		$session = Recovery::detect( $session );
+		$preview = Rollback_Runner::preview( $session );
+		if ( ! $preview['can'] ) {
+			WP_CLI::error( $preview['message'] );
+		}
+
+		WP_CLI::line( sprintf( 'Push %s (%s), state %s.', $session['push_uuid'], 'rolling_back' === $session['state'] ? 'a rollback that stopped continues' : 'rollback preview', $session['state'] ) );
+		WP_CLI::line( sprintf( 'Restore %d item(s) to their snapshot, remove %d item(s) the push created, put back %d file(s), remove %d file(s) the push added if unused. Conflicts (edited on this site after the push): %d. Done already: %d.', $preview['restore'], $preview['remove'], $preview['files_restore'], $preview['files_remove'], $preview['conflict_count'], $preview['done'] ) );
+		if ( ! empty( $preview['conflicts'] ) ) {
+			WP_CLI\Utils\format_items( 'table', $preview['conflicts'], array( 'uuid', 'kind', 'type', 'title', 'live_id', 'reason' ) );
+		}
+		if ( ! empty( $preview['filtered'] ) ) {
+			WP_CLI::warning( sprintf( '%d item(s) would be restored through your own HTML filter (your user lacks unfiltered_html or edit_css), so they come back filtered.', count( $preview['filtered'] ) ) );
+		}
+
+		$include = array();
+		if ( isset( $assoc_args['include'] ) && '' !== trim( (string) $assoc_args['include'] ) ) {
+			$include = array_values( array_filter( array_map( 'trim', explode( ',', strtolower( (string) $assoc_args['include'] ) ) ) ) );
+		}
+		WP_CLI::confirm( sprintf( 'Roll back push %s on %s? %d conflict(s) are %s.', $session['push_uuid'], $preview['host'], $preview['conflict_count'], empty( $include ) ? 'skipped' : 'skipped except the ' . count( $include ) . ' named' ), $assoc_args );
+
+		$result = null;
+		for ( $i = 0; $i < 10000; $i++ ) {
+			$result = Rollback_Runner::run( $session, $include, get_current_user_id(), 'cli' );
+			if ( is_wp_error( $result ) ) {
+				$this->fail( $result );
+			}
+			if ( 'rolled_back' === $result['state'] ) {
+				break;
+			}
+			$session = Push_Session::find( $session['push_uuid'] );
+		}
+
+		$counts = is_array( $result ) ? $result['rollback']['counts'] : array();
+		$parts  = array();
+		foreach ( $counts as $name => $count ) {
+			$parts[] = $name . ' ' . (int) $count;
+		}
+		WP_CLI::line( 'Result: ' . ( empty( $parts ) ? 'nothing to do' : implode( ', ', $parts ) ) . '.' );
+		if ( is_array( $result ) && 'rolled_back' === $result['state'] ) {
+			WP_CLI::success( 'The push is rolled back. Push again from staging to bring its changes back.' );
+			return;
+		}
+		WP_CLI::error( 'The rollback did not finish. Run the command again to continue it.' );
+	}
+
+	/**
+	 * Prints this site's audit log, newest first.
+	 *
+	 * Never contains secrets, content or option values (only events, IDs,
+	 * counts and reasons).
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--since=<date>]
+	 * : Only events on or after this day (UTC), as YYYY-MM-DD.
+	 *
+	 * [--event=<event>]
+	 * : Only this event, for example push_applied, rollback_done, auth_failed.
+	 *
+	 * [--result=<result>]
+	 * : Only this result.
+	 * ---
+	 * options:
+	 *   - ok
+	 *   - denied
+	 *   - error
+	 * ---
+	 *
+	 * [--limit=<number>]
+	 * : Most events to print.
+	 * ---
+	 * default: 100
+	 * ---
+	 *
+	 * [--format=<format>]
+	 * : Output format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 *   - csv
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp keepmerge audit --since=2026-11-01
+	 *     wp keepmerge audit --event=rollback_done --format=json
+	 *     wp keepmerge audit --result=denied --limit=20
+	 *
+	 * @param array $args       Positional arguments (unused).
+	 * @param array $assoc_args Associative arguments.
+	 * @return void
+	 */
+	public function audit( $args, $assoc_args ) {
+		unset( $args );
+		$filters = array();
+		if ( isset( $assoc_args['since'] ) ) {
+			$since = Audit_Log::valid_date( (string) $assoc_args['since'] );
+			if ( '' === $since ) {
+				WP_CLI::error( 'Use --since=YYYY-MM-DD.' );
+			}
+			$filters['from'] = $since;
+		}
+		if ( isset( $assoc_args['event'] ) ) {
+			$event = sanitize_key( (string) $assoc_args['event'] );
+			if ( ! in_array( $event, Audit_Log::EVENTS, true ) ) {
+				WP_CLI::error( 'Unknown event. Events: ' . implode( ', ', Audit_Log::EVENTS ) );
+			}
+			$filters['event'] = $event;
+		}
+		if ( isset( $assoc_args['result'] ) ) {
+			$filters['result'] = sanitize_key( (string) $assoc_args['result'] );
+		}
+		$limit = isset( $assoc_args['limit'] ) ? max( 1, min( 5000, absint( $assoc_args['limit'] ) ) ) : 100;
+
+		$rows = array();
+		$page = 0;
+		$more = true;
+		while ( $more ) {
+			++$page;
+			$found = Audit_Log::query( $filters, $page );
+			foreach ( $found['rows'] as $row ) {
+				if ( count( $rows ) >= $limit ) {
+					break;
+				}
+				$rows[] = array(
+					'id'      => (int) $row['id'],
+					'time'    => (string) $row['created_gmt'],
+					'event'   => (string) $row['event'],
+					'result'  => (string) $row['result'],
+					'actor'   => (string) $row['actor_type'] . ( '' === $row['actor'] ? '' : ':' . $row['actor'] ),
+					'pairing' => (int) $row['pairing_id'],
+					'object'  => trim( $row['object_type'] . ' ' . $row['object_ref'] ),
+					'ip'      => (string) $row['ip'],
+					'details' => empty( $row['details'] ) ? '' : (string) wp_json_encode( $row['details'] ),
+				);
+			}
+			$more = count( $rows ) < $limit && $page < (int) $found['pages'];
+		}
+
+		$format = isset( $assoc_args['format'] ) ? (string) $assoc_args['format'] : 'table';
+		if ( empty( $rows ) && 'table' === $format ) {
+			WP_CLI::line( 'No audit events match.' );
+			return;
+		}
+		$columns = array( 'id', 'time', 'event', 'result', 'actor', 'pairing', 'object', 'ip', 'details' );
+		if ( 'csv' === $format ) {
+			// Spreadsheet formula triggers neutralised, as in the screen's CSV export.
+			WP_CLI::line( rtrim( Audit_Log::csv_line( $columns ), "\r\n" ) );
+			foreach ( $rows as $row ) {
+				WP_CLI::line( rtrim( Audit_Log::csv_line( array_values( $row ) ), "\r\n" ) );
+			}
+			return;
+		}
+		WP_CLI\Utils\format_items( $format, $rows, $columns );
+	}
 
 	/**
 	 * Shows this site's ID, the receive window, the pairings that receive on this site and the
@@ -561,6 +856,11 @@ final class Command {
 
 			case 'awaiting_review':
 				WP_CLI::line( $line );
+				if ( is_array( $push['error'] ) && in_array( $push['error']['code'], array( 'push_failed_partial', 'push_interrupted' ), true ) ) {
+					// Live stopped the apply: its administrator decides there (retry, skip, resume, roll back).
+					WP_CLI::warning( sprintf( '%s Live\'s Pushes screen: %s. Afterwards run: wp keepmerge push --plan=%d', $push['error']['message'], (string) $push['live_pushes'], (int) $push['id'] ) );
+					return;
+				}
 				WP_CLI::warning(
 					sprintf(
 						'%d item(s) are waiting for review on live. Nothing was written there yet. An administrator of %s decides them under Tools > Staging Push > Pushes (%s) and clicks "Continue apply on this site"; then run: wp keepmerge push --plan=%d',

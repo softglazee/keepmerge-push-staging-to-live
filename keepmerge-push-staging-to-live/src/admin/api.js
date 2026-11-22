@@ -385,3 +385,40 @@ export function continueApply( id, confirm ) {
 		data: { confirm },
 	} );
 }
+
+// Destination recovery (blueprint §10.4, §11, §12): every write needs this site's domain typed.
+export function getRollbackPreview( id ) {
+	return apiFetch( { path: `${ BASE }/pushes/${ id }/rollback-preview` } );
+}
+
+export function rollbackStep( id, confirm, include ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/${ id }/rollback`,
+		method: 'POST',
+		data: { confirm, include },
+	} );
+}
+
+export function resumePush( id, confirm ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/${ id }/resume`,
+		method: 'POST',
+		data: { confirm },
+	} );
+}
+
+export function skipFailedItem( id, confirm, uuid ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/${ id }/skip-item`,
+		method: 'POST',
+		data: { confirm, uuid },
+	} );
+}
+
+export function releasePushLock( confirm ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/lock/release`,
+		method: 'POST',
+		data: { confirm },
+	} );
+}

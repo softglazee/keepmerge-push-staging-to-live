@@ -42,25 +42,48 @@ final class Cron {
 	/**
 	 * The prune itself.
 	 *
-	 * Audit rows past retention, expired pairing keys and approvals (with their receivers), a
-	 * receive window whose time is up, nonces older than 900 s and spent throttle rows; the rest
-	 * of the list arrives with the data it prunes.
+	 * Blueprint §14.5, every part bounded per run: audit rows past retention, expired pairing keys
+	 * and approvals (with their receivers), a receive window whose time is up, nonces older than
+	 * 900 s, spent throttle rows, expired plans, push sessions never applied within 24 hours, applies
+	 * whose lock went stale (marked interrupted), temporary folders older than 24 hours, and the
+	 * item rows and snapshot files of pushes past the snapshot retention (never the newest pushes).
 	 *
-	 * @return void
+	 * @return array Counts of what was pruned (for WP-CLI and tests).
 	 */
 	public static function daily_prune() {
 		$settings = Settings::get();
-		Audit_Log::prune( (int) $settings['audit_days'] );
-
-		Pairing_Service::cleanup_expired();
+		$out      = array(
+			'audit'    => Audit_Log::prune( (int) $settings['audit_days'] ),
+			'pairings' => Pairing_Service::cleanup_expired(),
+		);
 		Receive_Window::is_open();
-		Nonce_Store::prune( 5000 );
+		$out['nonces'] = Nonce_Store::prune( 5000 );
 		Throttle::prune();
 		Sync\Plan_Store::prune( 0 );
-		Transfer\Push_Session::expire_old( 50 );
-		Transfer\Media_Receiver::prune_temp();
+		$out['expired']     = Transfer\Push_Session::expire_old( 50 );
+		$out['interrupted'] = self::detect_stale();
+		$out['temp']        = Transfer\Media_Receiver::prune_temp();
+		$out['retention']   = Transfer\Push_Session::prune_retention( (int) $settings['snapshot_days'] );
+		return $out;
+	}
 
-		// TODO(Phase 8): push_items rows and snapshot files past retention (never the newest
-		// push's snapshot).
+	/**
+	 * Applies whose lock went stale without anybody looking at them are marked interrupted.
+	 *
+	 * @return int Sessions marked.
+	 */
+	private static function detect_stale() {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+		$uuids = $wpdb->get_col( $wpdb->prepare( "SELECT push_uuid FROM %i WHERE side = 'destination' AND state IN ('snapshotting','applying') LIMIT 20", Tables::table_name( 'pushes' ) ) );
+		$done  = 0;
+		foreach ( is_array( $uuids ) ? $uuids : array() as $uuid ) {
+			$session = Transfer\Push_Session::find( (string) $uuid );
+			if ( null !== $session && 'interrupted' === Apply\Recovery::detect( $session )['state'] ) {
+				++$done;
+			}
+		}
+		return $done;
 	}
 }

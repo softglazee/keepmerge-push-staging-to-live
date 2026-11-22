@@ -78,7 +78,7 @@ final class Manifest {
 		$counts   = array_fill_keys( array( 'found', 'missing', 'excluded', 'deferred' ), 0 );
 
 		foreach ( $items as $entry ) {
-			if ( microtime( true ) > $deadline ) {
+			if ( Limits::over( $deadline ) ) {
 				$out[] = array(
 					'uuid'  => $entry['uuid'],
 					'state' => 'deferred',
@@ -168,7 +168,7 @@ final class Manifest {
 		$counts   = array_fill_keys( array( 'found', 'missing', 'excluded', 'deferred' ), 0 );
 
 		foreach ( $items as $entry ) {
-			if ( microtime( true ) > $deadline ) {
+			if ( Limits::over( $deadline ) ) {
 				$out[] = array(
 					'uuid'  => $entry['uuid'],
 					'state' => 'deferred',
@@ -364,7 +364,7 @@ final class Manifest {
 		$items = array();
 		$last  = $cursor;
 		foreach ( $rows as $row ) {
-			if ( microtime( true ) > $deadline ) {
+			if ( Limits::over( $deadline ) ) {
 				return array(
 					'items'       => $items,
 					'next_cursor' => $last,

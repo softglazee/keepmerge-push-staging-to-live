@@ -661,6 +661,20 @@ final class Remote_Client {
 				return __( 'The live site refused the files of this push because they do not fit the push it has on record. Abort this push, then plan and push again.', 'keepmerge-push-staging-to-live' );
 			case 'chunk_hash_mismatch':
 				return __( 'A part of a file arrived on live damaged several times in a row. Check the network between the two sites, then resume.', 'keepmerge-push-staging-to-live' );
+			case 'address_refused':
+				return __( 'Keepmerge refused to connect: the live site\'s address resolves to a private, local or reserved network address, or to this site itself. Use the live site\'s public HTTPS address (port 443) in the pairing key, then connect again.', 'keepmerge-push-staging-to-live' );
+			case 'server_busy':
+				return __( 'The live site stopped this request at its time or memory limit before doing any more work. Keepmerge sends smaller batches and tries again; if this repeats, raise PHP\'s memory_limit on live or resume later.', 'keepmerge-push-staging-to-live' );
+			case 'push_busy':
+				return __( 'A step of this push is running on the live site right now. The next step asks again.', 'keepmerge-push-staging-to-live' );
+			case 'failed_partial':
+			case 'push_failed_partial':
+				return __( 'An item could not be written on live, so live stopped the push there. A live administrator decides on live\'s Pushes screen: retry the item, skip it, or roll the push back. Then use "Check status" here.', 'keepmerge-push-staging-to-live' );
+			case 'push_interrupted':
+				return __( 'The apply on live stopped without finishing (live lost its heartbeat, its receive window was closed, or the pairing was revoked). A live administrator resumes it or rolls it back on live\'s Pushes screen. Then use "Check status" here.', 'keepmerge-push-staging-to-live' );
+			case 'push_rolling_back':
+			case 'push_rolled_back':
+				return __( 'A live administrator rolled this push back on live. Live now holds what it had before the push. Create a new plan to push again.', 'keepmerge-push-staging-to-live' );
 			case 'code_report_disabled':
 				return __( 'The live site does not allow code report requests. Switch on "Allow code report requests" in the live site\'s Settings tab to see the report.', 'keepmerge-push-staging-to-live' );
 			case 'transport_unpinned':

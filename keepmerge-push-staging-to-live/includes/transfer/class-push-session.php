@@ -8,6 +8,7 @@
 namespace SoftGlaze\SafePush\Transfer;
 
 use SoftGlaze\SafePush\Audit_Log;
+use SoftGlaze\SafePush\Limits;
 use SoftGlaze\SafePush\Settings;
 use SoftGlaze\SafePush\Tables;
 use WP_Error;
@@ -23,9 +24,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * wait for the apply of Phase 7.
  *
  * States: open → receiving → staged → [awaiting_review] → snapshotting → applying → applied
- * (Apply\Applier, Phase 7); aborted (by its source, before apply), expired (24 hours without
- * apply: rows purged), failed (the final pass found the items not matching the plan),
- * failed_partial (an item failed during the apply; TODO(Phase 8): retry, skip, roll back).
+ * (Apply\Applier); aborted (by its source, before apply), expired (24 hours without apply: rows
+ * purged), failed (the final pass found the items not matching the plan), failed_partial (an item
+ * failed during the apply: retry, skip or roll back), interrupted (the apply stopped without a
+ * heartbeat, or its window closed or pairing was revoked: resume or roll back; Apply\Recovery),
+ * rolling_back → rolled_back (Apply\Rollback_Runner).
  *
  * Idempotency (blueprint §12.2): a batch is identified by (push, seq) and must name the same
  * UUIDs when sent again; an item by (push, uuid), the table's unique key. A batch sent again
@@ -44,7 +47,12 @@ final class Push_Session {
 	 * States in which a session holds the destination lock (blueprint §10.1): receiving, waiting
 	 * for review or apply, or being applied.
 	 */
-	const LOCK_STATES = array( 'open', 'receiving', 'staged', 'awaiting_review', 'snapshotting', 'applying', 'failed_partial' );
+	const LOCK_STATES = array( 'open', 'receiving', 'staged', 'awaiting_review', 'snapshotting', 'applying', 'failed_partial', 'interrupted', 'rolling_back' );
+
+	/**
+	 * Final states: nothing more happens to such a session (retention may prune its snapshots).
+	 */
+	const FINAL_STATES = array( 'applied', 'rolled_back', 'aborted', 'expired', 'failed' );
 
 	/**
 	 * States in which nothing was written yet and the session may still expire or be aborted.
@@ -219,7 +227,8 @@ final class Push_Session {
 			return self::error( 'push_not_found', 404 );
 		}
 		self::expire_if_due( $session );
-		return self::find( $session['push_uuid'] );
+		$session = self::find( $session['push_uuid'] );
+		return null === $session ? self::error( 'push_not_found', 404 ) : \SoftGlaze\SafePush\Apply\Recovery::detect( $session );
 	}
 
 	/**
@@ -306,17 +315,33 @@ final class Push_Session {
 		// Files come before items (blueprint §12.1): the first batch ends the files phase.
 		Media_Receiver::close_files( $session );
 
-		$push_id = (int) $session['id'];
-		$stager  = new Item_Stager(
+		$push_id  = (int) $session['id'];
+		$stager   = new Item_Stager(
 			$pairing,
 			self::known( $push_id ),
 			static function ( array $refs ) use ( $push_id ) {
 				return Media_Receiver::rows( $push_id, $refs );
 			}
 		);
-		$results = array();
-		$batch   = array_fill_keys( self::STATUSES, 0 );
+		$results  = array();
+		$batch    = array_fill_keys( self::STATUSES, 0 );
+		$deadline = Limits::deadline( 3 );
+		$position = 0;
 		foreach ( array_values( $body['items'] ) as $raw ) {
+			if ( $position++ > 0 && Limits::over( $deadline ) ) {
+				// Out of time or memory (blueprint §13): the items staged so far stay, the batch keeps
+				// its number, and the source sends the same batch again; items already stored are
+				// answered from their rows (idempotent by push and UUID).
+				Push_Lock::heartbeat( $session['push_uuid'] );
+				return new WP_Error(
+					'server_busy',
+					'server_busy',
+					array(
+						'status'      => 503,
+						'retry_after' => 5,
+					)
+				);
+			}
 			$identity = Item_Stager::identity( $raw );
 			$uuid     = $identity['uuid'];
 			if ( isset( $existing[ $uuid ] ) ) {
@@ -433,10 +458,45 @@ final class Push_Session {
 	}
 
 	/**
-	 * Expires sessions older than 24 hours that were not applied: staged rows purged, temporary
-	 * folder deleted, lock released (daily prune; blueprint §14.5).
+	 * Ends a session that never wrote anything on live, from live itself (a live administrator
+	 * released its stale lock): staged rows purged, temporary folder deleted, lock released.
 	 *
-	 * TODO(Phase 8): retention of applied pushes.
+	 * @param array  $session Session (open, receiving, staged or awaiting_review).
+	 * @param string $reason  Reason for the audit.
+	 * @param int    $user_id User.
+	 * @return void
+	 */
+	public static function abort_local( array $session, $reason, $user_id ) {
+		Media_Receiver::delete_temp( $session );
+		$purged = self::purge( (int) $session['id'] );
+		self::update(
+			(int) $session['id'],
+			array(
+				'state'        => 'aborted',
+				'finished_gmt' => gmdate( 'Y-m-d H:i:s' ),
+				'error_code'   => sanitize_key( $reason ),
+			)
+		);
+		Push_Lock::release( (string) $session['push_uuid'] );
+		Audit_Log::write(
+			'push_aborted',
+			array(
+				'actor_id'    => absint( $user_id ),
+				'pairing_id'  => (int) $session['pairing_id'],
+				'object_type' => 'push',
+				'object_ref'  => (string) $session['push_uuid'],
+				'details'     => array(
+					'reason' => sanitize_key( $reason ),
+					'purged' => $purged,
+				),
+			)
+		);
+	}
+
+	/**
+	 * Expires sessions older than 24 hours that were not applied: staged rows purged, temporary
+	 * folder deleted, lock released (daily prune; blueprint §14.5). Retention of applied pushes is
+	 * prune_retention().
 	 *
 	 * @param int $limit Most sessions per call.
 	 * @return int Sessions expired.
@@ -478,8 +538,11 @@ final class Push_Session {
 			'push'          => (string) $session['push_uuid'],
 			'state'         => (string) $session['state'],
 			'apply'         => \SoftGlaze\SafePush\Apply\Applier::progress( $session ),
-			// Interrupted: the source stopped in the middle of sending (no heartbeat for 5 minutes).
-			'interrupted'   => in_array( $session['state'], array( 'open', 'receiving' ), true ) && 'stale' === $lock,
+			'rollback'      => \SoftGlaze\SafePush\Apply\Rollback_Runner::progress( $session ),
+			// Interrupted: the apply stopped (stored state), or the source stopped in the middle of
+			// sending, or a rollback stopped (no heartbeat for 5 minutes).
+			'interrupted'   => 'interrupted' === $session['state'] || ( in_array( $session['state'], array( 'open', 'receiving', 'rolling_back' ), true ) && 'none' !== $lock && 'fresh' !== $lock ) || ( 'rolling_back' === $session['state'] && 'none' === $lock ),
+			'pruned'        => ! empty( $cursor['pruned'] ),
 			'lock'          => $lock,
 			'items'         => (int) $session['counts']['items'],
 			'declared'      => $session['counts']['declared'],
@@ -538,6 +601,117 @@ final class Push_Session {
 	}
 
 	/**
+	 * The cursor of a session exactly as stored (for a compare-and-swap).
+	 *
+	 * @param int $id Session row ID.
+	 * @return string
+	 */
+	public static function raw_cursor( $id ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the exact stored text for the compare-and-swap.
+		return (string) $wpdb->get_var( $wpdb->prepare( 'SELECT cursor_json FROM %i WHERE id = %d AND side = %s', Tables::table_name( 'pushes' ), absint( $id ), self::SIDE ) );
+	}
+
+	/**
+	 * Claims a step of a session: writes the cursor only if nobody changed it since it was read,
+	 * so two requests never run the same session's step at once.
+	 *
+	 * @param int    $id     Session row ID.
+	 * @param string $raw    Cursor as read with raw_cursor().
+	 * @param array  $cursor Cursor to store.
+	 * @return bool
+	 */
+	public static function claim_cursor( $id, $raw, array $cursor ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; compare-and-swap on the cursor.
+		$updated = $wpdb->query( $wpdb->prepare( 'UPDATE %i SET cursor_json = %s WHERE id = %d AND side = %s AND cursor_json = %s', Tables::table_name( 'pushes' ), (string) wp_json_encode( $cursor ), absint( $id ), self::SIDE, (string) $raw ) );
+		return 1 === (int) $updated;
+	}
+
+	/**
+	 * Retention of applied pushes (blueprint §11.4, §14.5): pushes in a final state whose snapshots
+	 * are older than the retention lose their item rows (snapshots included) and their snapshot
+	 * folder, in bounded batches. The newest pushes with snapshots are kept whatever their age (at
+	 * least 3, never the newest one); sessions waiting for a decision (failed_partial, interrupted,
+	 * rolling_back) are never pruned. The pushes row stays as history, marked pruned.
+	 *
+	 * @param int $days   Retention in days (7–180).
+	 * @param int $keep   Newest pushes kept whatever their age (at least 3).
+	 * @param int $budget Most item rows deleted in this run.
+	 * @return array{sessions:int,rows:int,folders:int}
+	 */
+	public static function prune_retention( $days, $keep = 3, $budget = 10000 ) {
+		global $wpdb;
+
+		$days   = min( 180, max( 7, absint( $days ) ) );
+		$keep   = max( 3, absint( $keep ) );
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+		$table  = Tables::table_name( 'pushes' );
+		$items  = Tables::table_name( 'push_items' );
+		$out    = array(
+			'sessions' => 0,
+			'rows'     => 0,
+			'folders'  => 0,
+		);
+
+		// The newest destination pushes that wrote something keep their snapshots whatever their age.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+		$newest  = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM %i WHERE side = %s AND state IN ('applied','rolled_back','failed_partial','interrupted','rolling_back') ORDER BY id DESC LIMIT %d", $table, self::SIDE, $keep ) );
+		$protect = array_map( 'intval', is_array( $newest ) ? $newest : array() );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+		$top       = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT MAX(id) FROM %i WHERE side = %s', $table, self::SIDE ) );
+		$protect[] = $top;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; final sessions past retention, oldest first.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, push_uuid, cursor_json FROM %i WHERE side = %s AND state IN ('applied','rolled_back','aborted','expired','failed') AND COALESCE(finished_gmt, started_gmt) < %s ORDER BY id ASC LIMIT 50", $table, self::SIDE, $cutoff ), ARRAY_A );
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			if ( in_array( (int) $row['id'], $protect, true ) ) {
+				continue;
+			}
+			$cursor = json_decode( (string) $row['cursor_json'], true );
+			$cursor = is_array( $cursor ) ? $cursor : array();
+			while ( $out['rows'] < $budget ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; bounded batch delete.
+				$n            = (int) $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE push_id = %d AND side = %s LIMIT %d', $items, (int) $row['id'], self::SIDE, 500 ) );
+				$out['rows'] += $n;
+				if ( $n < 500 ) {
+					break;
+				}
+			}
+			if ( $out['rows'] >= $budget ) {
+				// The rest of this push waits for the next run.
+				break;
+			}
+			if ( empty( $cursor['pruned'] ) ) {
+				$session = self::find( (string) $row['push_uuid'] );
+				if ( null !== $session && \SoftGlaze\SafePush\Apply\Snapshot_Store::delete_folder( $session ) ) {
+					++$out['folders'];
+				}
+				self::cursor_set( (int) $row['id'], array( 'pruned' => time() ) );
+				++$out['sessions'];
+			}
+		}
+
+		// Source pushes that ended long ago: their plan rows and file rows.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+		$sent = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM %i WHERE side = 'source' AND state IN ('done','failed','aborted') AND COALESCE(finished_gmt, started_gmt) < %s ORDER BY id ASC LIMIT 50", $table, $cutoff ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+		$newest_sent = (int) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(id) FROM %i WHERE side = 'source'", $table ) );
+		foreach ( is_array( $sent ) ? $sent : array() as $id ) {
+			if ( (int) $id === $newest_sent || $out['rows'] >= $budget ) {
+				continue;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; bounded batch delete.
+			$out['rows'] += (int) $wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE push_id = %d AND side IN ('source','source_file') LIMIT %d", $items, absint( $id ), 5000 ) );
+		}
+
+		$out['folders'] += \SoftGlaze\SafePush\Apply\Snapshot_Store::prune_orphans();
+		return $out;
+	}
+
+	/**
 	 * A session (destination side) by UUID, counts and cursor decoded, or null.
 	 *
 	 * @param string $push_uuid UUID.
@@ -567,7 +741,8 @@ final class Push_Session {
 		}
 		$session = self::decode_session( $row );
 		self::expire_if_due( $session );
-		return self::find( (string) $session['push_uuid'] );
+		$session = self::find( (string) $session['push_uuid'] );
+		return null === $session ? null : \SoftGlaze\SafePush\Apply\Recovery::detect( $session );
 	}
 
 	/**
@@ -613,6 +788,33 @@ final class Push_Session {
 			'unfiltered_html' => current_user_can( 'unfiltered_html' ),
 			'edit_css'        => current_user_can( 'edit_css' ),
 		);
+
+		// Recovery (blueprint §10.4, §12): what the live administrator can do with this push.
+		$failed = null;
+		$apply  = isset( $session['cursor_json']['apply'] ) && is_array( $session['cursor_json']['apply'] ) ? $session['cursor_json']['apply'] : array();
+		if ( 'failed_partial' === $session['state'] && isset( $apply['failed']['row'] ) ) {
+			$row = \SoftGlaze\SafePush\Apply\Rollback_Runner::row( (int) $apply['failed']['row'] );
+			if ( null !== $row && 'failed' === $row['status'] ) {
+				$failed = array(
+					'uuid'    => (string) $row['uuid'],
+					'kind'    => (string) $row['object_type'],
+					'type'    => isset( $row['payload']['type'] ) ? (string) $row['payload']['type'] : '',
+					'title'   => \SoftGlaze\SafePush\Apply\Review::title( (string) $row['object_type'], $row['payload'] ),
+					'reason'  => (string) $row['error'],
+					'live_id' => (int) $row['local_object_id'],
+				);
+			}
+		}
+		$refusal            = \SoftGlaze\SafePush\Apply\Rollback_Runner::refusal( $session );
+		$out['failed_item'] = $failed;
+		$out['lock_view']   = \SoftGlaze\SafePush\Apply\Recovery::lock_view();
+		$out['recovery']    = array(
+			'resume'          => 'interrupted' === $session['state'],
+			'retry'           => 'failed_partial' === $session['state'] && null !== $failed,
+			'skip'            => 'failed_partial' === $session['state'] && null !== $failed,
+			'rollback'        => null === $refusal,
+			'rollback_reason' => null === $refusal ? '' : $refusal->get_error_code(),
+		);
 		return $out;
 	}
 
@@ -645,7 +847,11 @@ final class Push_Session {
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$session = self::decode_session( $row );
 			self::expire_if_due( $session );
-			$item               = self::present( self::find( $session['push_uuid'] ) );
+			$fresh = self::find( $session['push_uuid'] );
+			if ( null === $fresh ) {
+				continue;
+			}
+			$item               = self::present( \SoftGlaze\SafePush\Apply\Recovery::detect( $fresh ) );
 			$item['source_url'] = (string) $row['source_url'];
 			$item['pairing']    = (string) $row['pairing_uuid'];
 			$out[]              = $item;
