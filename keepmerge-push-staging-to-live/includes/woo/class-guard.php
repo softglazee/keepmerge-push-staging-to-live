@@ -17,7 +17,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Every list is a denylist: an exporter or a remote handler asks this class whether something
  * is out of bounds, never the other way round.
  *
- * TODO(Phase 7): HPOS compatibility declaration on before_woocommerce_init (blueprint §7 rule 8).
+ * It also declares compatibility with WooCommerce's order storage (HPOS) on before_woocommerce_init
+ * (blueprint §7 rule 8): HPOS on or off makes no difference because orders are never touched.
  */
 final class Guard {
 
@@ -135,6 +136,18 @@ final class Guard {
 	 * Upload folders whose files are never part of a push (downloadable product files).
 	 */
 	const PROTECTED_UPLOAD_DIRS = array( 'woocommerce_uploads' );
+
+	/**
+	 * Hook: before_woocommerce_init. Declares HPOS (custom_order_tables) compatibility through
+	 * WooCommerce's own API, only when WooCommerce provides it.
+	 *
+	 * @return void
+	 */
+	public static function declare_hpos_compatibility() {
+		if ( class_exists( '\Automattic\WooCommerce\Utilities\FeaturesUtil' ) ) {
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', SOFTGLAZE_SP_FILE, true );
+		}
+	}
 
 	/**
 	 * Whether WooCommerce is active on this site.

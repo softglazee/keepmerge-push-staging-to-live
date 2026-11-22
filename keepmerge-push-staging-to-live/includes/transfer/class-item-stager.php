@@ -493,6 +493,14 @@ final class Item_Stager {
 			}
 		}
 
+		// What the source manages for this item (outside the data and its hash), so live never
+		// clears something the source simply does not include (blueprint §6.2, Phase 7).
+		$problem = array();
+		$extra   = self::envelope_extras( $id['kind'], $raw, $data, $problem );
+		if ( null === $extra ) {
+			return $this->refuse( $out, $problem[0], $problem[1] );
+		}
+
 		$out['refs'] = $this->resolve_refs( $id, $refs );
 		$this->structural( $id['kind'], $data, $out['refs'] );
 
@@ -502,6 +510,7 @@ final class Item_Stager {
 		$out['groups'] = $groups;
 		$out['gate']   = array_slice( $gate, 0, self::MAX_GATE_REASONS );
 		$out['media']  = $media;
+		$out['extra']  = $extra;
 		$out['status'] = empty( $gate ) ? 'staged' : 'held';
 
 		$this->remember( $id, $out['status'] );
@@ -579,6 +588,7 @@ final class Item_Stager {
 			'groups'   => array(),
 			'refs'     => array(),
 			'media'    => null,
+			'extra'    => array(),
 			'identity' => $id,
 		);
 	}
@@ -599,6 +609,7 @@ final class Item_Stager {
 		$out['refs']   = array();
 		$out['gate']   = array();
 		$out['media']  = null;
+		$out['extra']  = array();
 		$this->remember( $out['identity'], 'refused' );
 		return $this->finish( $out );
 	}
@@ -1406,6 +1417,102 @@ final class Item_Stager {
 		);
 	}
 
+	/**
+	 * The envelope's extra fields, each read by name: scope (taxonomies the source includes for
+	 * the item, its own excluded meta entries), item_ids (a menu's item IDs on the source, in item
+	 * order, so parents resolve inside the unit), group_hashes (a product's group hashes on the
+	 * source, the base of a group live keeps) and live_hash (live's hash of the item when the plan
+	 * was made, so the apply skips an item live changed since: blueprint §5 data safety). Absent
+	 * fields stay absent.
+	 *
+	 * @param string $kind    Kind.
+	 * @param array  $raw     Envelope.
+	 * @param array  $data    Cleaned data.
+	 * @param array  $problem Problem (out).
+	 * @return array|null
+	 */
+	private static function envelope_extras( $kind, array $raw, array $data, array &$problem ) {
+		$out = array();
+
+		if ( isset( $raw['scope'] ) ) {
+			$scope = $raw['scope'];
+			if ( ! is_array( $scope ) ) {
+				$problem = array( 'invalid_field', 'scope' );
+				return null;
+			}
+			$clean = array();
+			if ( isset( $scope['taxonomies'] ) ) {
+				if ( ! self::rule_ok( $scope['taxonomies'], 'list' ) || count( $scope['taxonomies'] ) > 50 ) {
+					$problem = array( 'invalid_field', 'scope' );
+					return null;
+				}
+				foreach ( $scope['taxonomies'] as $taxonomy ) {
+					if ( ! is_string( $taxonomy ) || 1 !== preg_match( '/\A[a-z0-9_-]{1,32}\z/', $taxonomy ) ) {
+						$problem = array( 'invalid_field', 'scope' );
+						return null;
+					}
+				}
+				$clean['taxonomies'] = array_values( array_unique( $scope['taxonomies'] ) );
+			}
+			if ( isset( $scope['meta_skip'] ) ) {
+				if ( ! self::rule_ok( $scope['meta_skip'], 'list' ) || count( $scope['meta_skip'] ) > 200 ) {
+					$problem = array( 'invalid_field', 'scope' );
+					return null;
+				}
+				foreach ( $scope['meta_skip'] as $entry ) {
+					if ( ! is_string( $entry ) || 1 !== preg_match( '/\A[A-Za-z0-9_.:-]{1,191}\*?\z/', $entry ) ) {
+						$problem = array( 'invalid_field', 'scope' );
+						return null;
+					}
+				}
+				$clean['meta_skip'] = array_values( array_unique( $scope['meta_skip'] ) );
+			}
+			$out['scope'] = $clean;
+		}
+
+		if ( isset( $raw['live_hash'] ) ) {
+			if ( ! is_string( $raw['live_hash'] ) || 1 !== preg_match( '/\A(?:[0-9a-f]{64})?\z/', $raw['live_hash'] ) ) {
+				$problem = array( 'invalid_field', 'live_hash' );
+				return null;
+			}
+			if ( '' !== $raw['live_hash'] ) {
+				$out['live_hash'] = $raw['live_hash'];
+			}
+		}
+
+		if ( 'menu' === $kind && isset( $raw['item_ids'] ) ) {
+			$ids   = $raw['item_ids'];
+			$items = isset( $data['items'] ) && is_array( $data['items'] ) ? $data['items'] : array();
+			if ( ! self::rule_ok( $ids, 'ids' ) || count( $ids ) !== count( $items ) || in_array( 0, $ids, true ) || count( array_unique( $ids ) ) !== count( $ids ) ) {
+				$problem = array( 'invalid_field', 'item_ids' );
+				return null;
+			}
+			$out['item_ids'] = array_values( $ids );
+		}
+
+		if ( 'product' === $kind && isset( $raw['group_hashes'] ) ) {
+			$hashes = $raw['group_hashes'];
+			if ( ! is_array( $hashes ) ) {
+				$problem = array( 'invalid_field', 'group_hashes' );
+				return null;
+			}
+			$clean = array();
+			foreach ( self::GROUP_NAMES as $name ) {
+				if ( ! isset( $hashes[ $name ] ) ) {
+					continue;
+				}
+				if ( ! is_string( $hashes[ $name ] ) || 1 !== preg_match( '/\A[0-9a-f]{64}\z/', $hashes[ $name ] ) ) {
+					$problem = array( 'invalid_field', 'group_hashes' );
+					return null;
+				}
+				$clean[ $name ] = $hashes[ $name ];
+			}
+			$out['group_hashes'] = $clean;
+		}
+
+		return $out;
+	}
+
 	// --- references --------------------------------------------------------------------------
 
 	/**
@@ -1557,7 +1664,7 @@ final class Item_Stager {
 				$value = is_array( $value ) && isset( $value[ $part ] ) ? $value[ $part ] : 0;
 			}
 			if ( is_int( $value ) && $value > 0 && ! in_array( $path, $paths, true ) ) {
-				// TODO(Phase 7): an unmapped ID field is written as 0 (or kept), never as this number.
+				// Reported only: the apply writes an unmapped ID field as 0 (Reference_Mapper::rewrite()), never as this number.
 				$this->warn( 'unmapped_reference', str_replace( '/', '.', $path ) );
 			}
 		}

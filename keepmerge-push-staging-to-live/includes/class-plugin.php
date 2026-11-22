@@ -58,6 +58,9 @@ final class Plugin {
 
 		add_action( Cron::HOOK, array( Cron::class, 'daily_prune' ) );
 
+		// WooCommerce is optional: the hook only fires when it is active (blueprint §7 rule 8).
+		add_action( 'before_woocommerce_init', array( Woo\Guard::class, 'declare_hpos_compatibility' ) );
+
 		// The receiver lock-down applies whether or not the window is open (blueprint §5.8).
 		Receiver_User::register_hooks();
 		Rest\Remote_Controller::register_hooks();

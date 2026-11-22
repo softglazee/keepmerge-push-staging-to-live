@@ -15,9 +15,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Object identity (blueprint §6.1): a UUID v4 in the meta key _softglaze_sp_uuid, post meta for
  * post-like objects and term meta for terms and menus. Options and units are identified by name.
  *
- * Reading is safe on both sites. Writing (assign(), adopt()) is for the source only in this
- * version: live receives its UUIDs through a push (blueprint §6.4 step 6), so nothing a remote
- * request triggers calls the writing methods.
+ * Reading is safe on both sites. assign(), adopt(), renew() and dedupe() are for the source only:
+ * live receives its UUIDs through a push (blueprint §6.4 step 6), written by stamp() inside an
+ * apply after the item's snapshot (so a rollback can remove them).
  */
 final class Identity {
 
@@ -90,6 +90,27 @@ final class Identity {
 		$uuid = wp_generate_uuid4();
 		self::write( $space, $id, $uuid );
 		return $uuid;
+	}
+
+	/**
+	 * Live, inside an apply: gives an object the UUID the push names for it (blueprint §6.4 step 6).
+	 *
+	 * @param string $space 'post' or 'term'.
+	 * @param int    $id    Object ID.
+	 * @param string $uuid  UUID.
+	 * @return bool
+	 */
+	public static function stamp( $space, $id, $uuid ) {
+		if ( ! is_string( $uuid ) || ! wp_is_uuid( $uuid, 4 ) || ! self::exists( $space, $id ) ) {
+			return false;
+		}
+		$existing = self::get( $space, $id );
+		if ( '' !== $existing ) {
+			// A UUID another pairing gave this object stays: the pairing's sync state links it.
+			return strtolower( $uuid ) === $existing;
+		}
+		self::write( $space, $id, strtolower( $uuid ) );
+		return true;
 	}
 
 	/**

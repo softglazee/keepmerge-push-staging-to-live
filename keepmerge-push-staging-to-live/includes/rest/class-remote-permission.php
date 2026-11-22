@@ -62,12 +62,14 @@ final class Remote_Permission {
 
 	const ROUTE_PUSH_COMMIT = 'push_commit';
 
+	const ROUTE_PUSH_APPLY = 'push_apply';
+
 	/**
 	 * Routes an active pairing answers with its long-term credentials (threat model §5.1: R1,
-	 * the read-only routes R4 to R7, the push routes R8, R9, R13, R15 and the media routes R10 to
-	 * R12). The pairing routes R2 and R3 end with approval.
+	 * the read-only routes R4 to R7, the push routes R8, R9, R13, R14, R15 and the media routes R10
+	 * to R12). The pairing routes R2 and R3 end with approval.
 	 */
-	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST, self::ROUTE_PUSH, self::ROUTE_PUSH_GET, self::ROUTE_PUSH_ITEMS, self::ROUTE_PUSH_ABORT, self::ROUTE_PUSH_FILES, self::ROUTE_PUSH_CHUNK, self::ROUTE_PUSH_COMMIT );
+	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST, self::ROUTE_PUSH, self::ROUTE_PUSH_GET, self::ROUTE_PUSH_ITEMS, self::ROUTE_PUSH_ABORT, self::ROUTE_PUSH_FILES, self::ROUTE_PUSH_CHUNK, self::ROUTE_PUSH_COMMIT, self::ROUTE_PUSH_APPLY );
 
 	const SET_BOOTSTRAP = 'bootstrap';
 
@@ -240,6 +242,16 @@ final class Remote_Permission {
 	 */
 	public static function check_push_commit( WP_REST_Request $request ) {
 		return self::check( $request, self::ROUTE_PUSH_COMMIT );
+	}
+
+	/**
+	 * Chain for POST /remote/push/{id}/apply (R14).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push_apply( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH_APPLY );
 	}
 
 	/**

@@ -343,3 +343,45 @@ export function abortPush( id ) {
 export function getPushes() {
 	return apiFetch( { path: `${ BASE }/pushes` } );
 }
+
+/**
+ * One push: a push sent from this site, or a push received here in detail (counts, held items
+ * with their reasons, snapshot size).
+ *
+ * @param {number} id Push row ID.
+ * @return {Promise} The push.
+ */
+export function getPush( id ) {
+	return apiFetch( { path: `${ BASE }/pushes/${ id }` } );
+}
+
+/**
+ * Decisions on held items of a push received here: approve, filtered or skip per item UUID.
+ * Approving needs unfiltered_html (and edit_css for global styles CSS); the server checks.
+ *
+ * @param {number} id        Push row ID.
+ * @param {Object} decisions UUID => decision.
+ * @return {Promise} { decided, undecided, items }.
+ */
+export function decideHeld( id, decisions ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/${ id }/held`,
+		method: 'POST',
+		data: { decisions },
+	} );
+}
+
+/**
+ * One time-boxed step of "Continue apply on this site" (typed domain checked on the server).
+ *
+ * @param {number} id      Push row ID.
+ * @param {string} confirm This site's domain as typed.
+ * @return {Promise} Apply state with the push detail.
+ */
+export function continueApply( id, confirm ) {
+	return apiFetch( {
+		path: `${ BASE }/pushes/${ id }/continue`,
+		method: 'POST',
+		data: { confirm },
+	} );
+}

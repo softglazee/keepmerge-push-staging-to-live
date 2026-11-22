@@ -22,8 +22,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * of its life (abort, expiry). Nothing here touches live's content: the rows are staged and
  * wait for the apply of Phase 7.
  *
- * States: open → receiving → staged; aborted (by its source, before apply), expired (24 hours
- * without apply: rows purged), failed (the final pass found the items not matching the plan).
+ * States: open → receiving → staged → [awaiting_review] → snapshotting → applying → applied
+ * (Apply\Applier, Phase 7); aborted (by its source, before apply), expired (24 hours without
+ * apply: rows purged), failed (the final pass found the items not matching the plan),
+ * failed_partial (an item failed during the apply; TODO(Phase 8): retry, skip, roll back).
  *
  * Idempotency (blueprint §12.2): a batch is identified by (push, seq) and must name the same
  * UUIDs when sent again; an item by (push, uuid), the table's unique key. A batch sent again
@@ -37,6 +39,17 @@ final class Push_Session {
 	 * States in which a session still receives or waits for apply.
 	 */
 	const LIVE_STATES = array( 'open', 'receiving', 'staged' );
+
+	/**
+	 * States in which a session holds the destination lock (blueprint §10.1): receiving, waiting
+	 * for review or apply, or being applied.
+	 */
+	const LOCK_STATES = array( 'open', 'receiving', 'staged', 'awaiting_review', 'snapshotting', 'applying', 'failed_partial' );
+
+	/**
+	 * States in which nothing was written yet and the session may still expire or be aborted.
+	 */
+	const UNAPPLIED_STATES = array( 'open', 'receiving', 'staged', 'awaiting_review', 'failed' );
 
 	/**
 	 * Row actions and the counts a session declares for them.
@@ -69,6 +82,11 @@ final class Push_Session {
 	const TTL = DAY_IN_SECONDS;
 
 	const STATUSES = array( 'staged', 'held', 'pending_media', 'refused' );
+
+	/**
+	 * Row statuses an apply gives (Apply\Applier).
+	 */
+	const APPLY_STATUSES = array( 'applying', 'applied', 'skipped', 'failed' );
 
 	/**
 	 * POST /remote/push: opens (or, for the same push sent again, returns) a session.
@@ -127,7 +145,7 @@ final class Push_Session {
 			if ( null !== $holder && self::expire_if_due( $holder ) ) {
 				$holder = null;
 			}
-			if ( null === $holder || ! in_array( $holder['state'], self::LIVE_STATES, true ) ) {
+			if ( null === $holder || ! in_array( $holder['state'], self::LOCK_STATES, true ) ) {
 				// The lock names a session that no longer runs: it protects nothing.
 				Push_Lock::clear_dead( $lock['push_uuid'] );
 			} else {
@@ -385,8 +403,8 @@ final class Push_Session {
 		if ( 'expired' === $session['state'] ) {
 			return self::error( 'push_expired', 410 );
 		}
-		if ( ! in_array( $session['state'], array( 'open', 'receiving', 'staged', 'failed' ), true ) ) {
-			// TODO(Phase 7): applying and applied sessions are never aborted from the source.
+		if ( ! in_array( $session['state'], self::UNAPPLIED_STATES, true ) ) {
+			// Once the apply started, only a live administrator can end it (Phase 8 roll back).
 			return self::error( 'push_applying', 409 );
 		}
 
@@ -428,7 +446,7 @@ final class Push_Session {
 
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - self::TTL );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$uuids = $wpdb->get_col( $wpdb->prepare( "SELECT push_uuid FROM %i WHERE side = %s AND state IN ('open','receiving','staged','failed') AND started_gmt < %s ORDER BY id ASC LIMIT %d", Tables::table_name( 'pushes' ), self::SIDE, $cutoff, max( 1, absint( $limit ) ) ) );
+		$uuids = $wpdb->get_col( $wpdb->prepare( "SELECT push_uuid FROM %i WHERE side = %s AND state IN ('open','receiving','staged','awaiting_review','failed') AND started_gmt < %s ORDER BY id ASC LIMIT %d", Tables::table_name( 'pushes' ), self::SIDE, $cutoff, max( 1, absint( $limit ) ) ) );
 
 		$done = 0;
 		foreach ( is_array( $uuids ) ? $uuids : array() as $uuid ) {
@@ -456,8 +474,10 @@ final class Push_Session {
 		$lock    = Push_Lock::state_for( $session['push_uuid'] );
 
 		return array(
+			'id'            => (int) $session['id'],
 			'push'          => (string) $session['push_uuid'],
 			'state'         => (string) $session['state'],
+			'apply'         => \SoftGlaze\SafePush\Apply\Applier::progress( $session ),
 			// Interrupted: the source stopped in the middle of sending (no heartbeat for 5 minutes).
 			'interrupted'   => in_array( $session['state'], array( 'open', 'receiving' ), true ) && 'stale' === $lock,
 			'lock'          => $lock,
@@ -532,6 +552,71 @@ final class Push_Session {
 	}
 
 	/**
+	 * A session (destination side) by row ID, counts and cursor decoded, or null.
+	 *
+	 * @param int $id Row ID.
+	 * @return array|null
+	 */
+	public static function find_by_id( $id ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the session changes between requests.
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND side = %s', Tables::table_name( 'pushes' ), absint( $id ), self::SIDE ), ARRAY_A );
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+		$session = self::decode_session( $row );
+		self::expire_if_due( $session );
+		return self::find( (string) $session['push_uuid'] );
+	}
+
+	/**
+	 * A received session as the live Pushes tab shows it in detail (blueprint §16): counts, the
+	 * held items with their reasons (plain text), the items skipped, failed or refused, and the
+	 * snapshot size.
+	 *
+	 * @param array $session Session.
+	 * @return array
+	 */
+	public static function detail( array $session ) {
+		global $wpdb;
+
+		$out = self::present( $session );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own tables; credential columns are never selected.
+		$source = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT remote_url FROM %i WHERE id = %d', Tables::table_name( 'pairings' ), absint( $session['pairing_id'] ) ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the rows that did not go through, for the detail screen.
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT uuid, object_type, action, status, error, payload, local_object_id FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') AND status IN ('skipped','failed','refused') ORDER BY id ASC LIMIT 200", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE ), ARRAY_A );
+		$items = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$payload = json_decode( (string) $row['payload'], true );
+			$parts   = explode( ':', (string) $row['error'], 2 );
+			$items[] = array(
+				'uuid'    => (string) $row['uuid'],
+				'kind'    => (string) $row['object_type'],
+				'type'    => is_array( $payload ) && isset( $payload['type'] ) ? (string) $payload['type'] : '',
+				'title'   => is_array( $payload ) && isset( $payload['title'] ) ? (string) $payload['title'] : ( 'option' === $row['object_type'] && is_array( $payload ) && isset( $payload['type'] ) ? (string) $payload['type'] : '' ),
+				'status'  => (string) $row['status'],
+				'reason'  => $parts[0],
+				'live_id' => (int) $row['local_object_id'],
+			);
+		}
+
+		$out['source_url']     = $source;
+		$out['host']           = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		$out['held_items']     = \SoftGlaze\SafePush\Apply\Review::held_items( $session );
+		$out['undecided']      = \SoftGlaze\SafePush\Apply\Review::undecided( $session );
+		$out['snapshot_bytes'] = \SoftGlaze\SafePush\Apply\Snapshot_Store::size( $session );
+		$out['problems']       = $items;
+		$out['can']            = array(
+			'unfiltered_html' => current_user_can( 'unfiltered_html' ),
+			'edit_css'        => current_user_can( 'edit_css' ),
+		);
+		return $out;
+	}
+
+	/**
 	 * Whether any push row on this site (either side) has this UUID.
 	 *
 	 * @param string $push_uuid UUID.
@@ -577,7 +662,7 @@ final class Push_Session {
 	public static function counts_by_status( $push_id ) {
 		global $wpdb;
 
-		$out = array_fill_keys( self::STATUSES, 0 );
+		$out = array_fill_keys( array_merge( self::STATUSES, self::APPLY_STATUSES ), 0 );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; item rows only (files are counted by Media_Receiver).
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT status, COUNT(*) AS n FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') GROUP BY status", Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE ), ARRAY_A );
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
@@ -599,7 +684,7 @@ final class Push_Session {
 			return true;
 		}
 		$started = strtotime( (string) $session['started_gmt'] . ' UTC' );
-		if ( ! in_array( $session['state'], array( 'open', 'receiving', 'staged', 'failed' ), true ) || false === $started || time() - $started < self::TTL ) {
+		if ( ! in_array( $session['state'], self::UNAPPLIED_STATES, true ) || false === $started || time() - $started < self::TTL ) {
 			return false;
 		}
 
@@ -841,6 +926,11 @@ final class Push_Session {
 				// The attachment's files on live: final paths and refs of the committed files.
 				$payload['media'] = $staged['media'];
 			}
+			foreach ( array( 'scope', 'item_ids', 'group_hashes', 'live_hash' ) as $name ) {
+				if ( isset( $staged['extra'][ $name ] ) ) {
+					$payload[ $name ] = $staged['extra'][ $name ];
+				}
+			}
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; INSERT IGNORE keeps the first row of a UUID (items are idempotent by push and UUID).
@@ -940,11 +1030,11 @@ final class Push_Session {
 	 * @param array $fields state, cursor_json, finished_gmt, error_code.
 	 * @return void
 	 */
-	private static function update( $id, array $fields ) {
+	public static function update( $id, array $fields ) {
 		global $wpdb;
 
 		$data = array();
-		foreach ( array( 'state', 'finished_gmt', 'error_code' ) as $name ) {
+		foreach ( array( 'state', 'finished_gmt', 'error_code', 'error_detail' ) as $name ) {
 			if ( isset( $fields[ $name ] ) ) {
 				$data[ $name ] = (string) $fields[ $name ];
 			}

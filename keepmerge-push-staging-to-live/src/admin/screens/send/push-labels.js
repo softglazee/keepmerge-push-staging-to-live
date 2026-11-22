@@ -29,6 +29,33 @@ export function pushStateInfo( state, interrupted = false ) {
 			__( 'Staged on live', 'keepmerge-push-staging-to-live' ),
 			'success',
 		],
+		awaiting_review: [
+			__(
+				'Waiting for review on live',
+				'keepmerge-push-staging-to-live'
+			),
+			'warning',
+		],
+		snapshotting: [
+			__( 'Taking snapshots', 'keepmerge-push-staging-to-live' ),
+			'info',
+		],
+		applying: [
+			__( 'Applying on live', 'keepmerge-push-staging-to-live' ),
+			'info',
+		],
+		applied: [
+			__( 'Applied', 'keepmerge-push-staging-to-live' ),
+			'success',
+		],
+		done: [
+			__( 'Applied on live', 'keepmerge-push-staging-to-live' ),
+			'success',
+		],
+		failed_partial: [
+			__( 'Stopped at an item', 'keepmerge-push-staging-to-live' ),
+			'danger',
+		],
 		failed: [ __( 'Stopped', 'keepmerge-push-staging-to-live' ), 'danger' ],
 		aborted: [
 			__( 'Aborted', 'keepmerge-push-staging-to-live' ),
@@ -147,6 +174,42 @@ export function reasonLabel( code, field = '' ) {
 		),
 		file_refused: __(
 			'The live site refused one of its files (its content does not match its type).',
+			'keepmerge-push-staging-to-live'
+		),
+		changed_during_push: __(
+			'Changed on the live site after the plan was made, so live kept its own version.',
+			'keepmerge-push-staging-to-live'
+		),
+		review_skipped: __(
+			'Skipped by a live administrator in the review.',
+			'keepmerge-push-staging-to-live'
+		),
+		dependency_skipped: __(
+			'Uses an item that was not created on live, so it was not written.',
+			'keepmerge-push-staging-to-live'
+		),
+		reference_missing: __(
+			'Uses an item the live site no longer has.',
+			'keepmerge-push-staging-to-live'
+		),
+		reference_mismatch: __(
+			'Its references did not match its data, so live did not write it.',
+			'keepmerge-push-staging-to-live'
+		),
+		path_taken: __(
+			'Another file took its file name on live in the meantime.',
+			'keepmerge-push-staging-to-live'
+		),
+		woocommerce_inactive: __(
+			'WooCommerce is not active on the live site.',
+			'keepmerge-push-staging-to-live'
+		),
+		attribute_missing: __(
+			'Uses a product attribute the live site does not have.',
+			'keepmerge-push-staging-to-live'
+		),
+		write_failed: __(
+			'WordPress could not save it on live.',
 			'keepmerge-push-staging-to-live'
 		),
 	};
@@ -357,6 +420,30 @@ export function logLine( entry ) {
 			return __(
 				'Aborted: live removed what it had staged for this push.',
 				'keepmerge-push-staging-to-live'
+			);
+		case 'awaiting_review':
+			return sprintf(
+				/* translators: %s: number of items. */
+				__(
+					'%s items are waiting for review on live. Nothing was written there; a live administrator finishes the push.',
+					'keepmerge-push-staging-to-live'
+				),
+				number( entry.held )
+			);
+		case 'reviewed':
+			return __(
+				'A live administrator finished the push on live.',
+				'keepmerge-push-staging-to-live'
+			);
+		case 'done':
+			return sprintf(
+				/* translators: 1: items applied, 2: items skipped. */
+				__(
+					'Applied on live: %1$s items written, %2$s skipped.',
+					'keepmerge-push-staging-to-live'
+				),
+				number( entry.applied || 0 ),
+				number( entry.skipped || 0 )
 			);
 		default:
 			return entry.event;

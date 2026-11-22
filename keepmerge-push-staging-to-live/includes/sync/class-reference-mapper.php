@@ -161,6 +161,42 @@ final class Reference_Mapper {
 	private $hits = 0;
 
 	/**
+	 * Rewrite mode (live, Phase 7): path => array( kind, staging ID, live ID ). Null in scan and
+	 * hash mode, which never look at it.
+	 *
+	 * @var array|null
+	 */
+	private $rewrite = null;
+
+	/**
+	 * Rewrite mode: locations whose ID changed.
+	 *
+	 * @var int
+	 */
+	private $changed = 0;
+
+	/**
+	 * Rewrite mode: ID fields set to 0 because no sidecar entry named them.
+	 *
+	 * @var int
+	 */
+	private $zeroed = 0;
+
+	/**
+	 * Rewrite mode: paths found whose sidecar entry named another kind or ID than the value there.
+	 *
+	 * @var string[]
+	 */
+	private $mismatches = array();
+
+	/**
+	 * Rewrite mode: paths of the map that the walk met.
+	 *
+	 * @var array<string,bool>
+	 */
+	private $seen = array();
+
+	/**
 	 * Merged rules.
 	 *
 	 * @var array|null
@@ -212,6 +248,172 @@ final class Reference_Mapper {
 			'block_types' => $types,
 			'hash_form'   => $form,
 		);
+	}
+
+	/**
+	 * Live's half of blueprint §8.3: walks an item's typed data the same way scan() does, so every
+	 * path is the one the source recorded, and writes live's ID at each location the map names.
+	 * Only those locations change; block content is serialized again only when a block reference
+	 * really changed, and a JSON string only when an ID inside it changed. A location the map does
+	 * not name keeps its value inside content (blocks, HTML, shortcodes, builder JSON), and becomes
+	 * 0 in an ID field (it named nothing on the source). A map entry whose kind or staging ID
+	 * differs from what is found at its path is reported as a mismatch (the caller refuses the item).
+	 *
+	 * @param string $kind Item kind.
+	 * @param array  $data Typed data (as staged).
+	 * @param array  $map  path => array( 'kind' => string, 'id' => int, 'live' => int ).
+	 * @return array{data:array,changed:int,zeroed:int,mismatches:string[],missing:string[]}
+	 */
+	public function rewrite( $kind, array $data, array $map ) {
+		$this->rewrite    = $map;
+		$this->changed    = 0;
+		$this->zeroed     = 0;
+		$this->mismatches = array();
+		$this->seen       = array();
+		$this->refs       = array();
+		$this->unmapped   = array();
+
+		$out = $this->walk_kind( (string) $kind, $data );
+
+		$missing = array_values( array_diff( array_keys( $map ), array_keys( $this->seen ) ) );
+		$result  = array(
+			'data'       => is_array( $out ) ? $out : $data,
+			'changed'    => $this->changed,
+			'zeroed'     => $this->zeroed,
+			'mismatches' => $this->mismatches,
+			'missing'    => $missing,
+		);
+
+		$this->rewrite = null;
+		return $result;
+	}
+
+	/**
+	 * Rewrite mode: live's ID for a location, or the value as found.
+	 *
+	 * @param string $path  Path.
+	 * @param string $kind  Kind the walk expects there.
+	 * @param int    $id    ID found there.
+	 * @return int
+	 */
+	private function new_id( $path, $kind, $id ) {
+		if ( ! isset( $this->rewrite[ $path ] ) ) {
+			return (int) $id;
+		}
+		$this->seen[ $path ] = true;
+		$entry               = $this->rewrite[ $path ];
+		if ( (string) $entry['kind'] !== (string) $kind || (int) $entry['id'] !== (int) $id ) {
+			$this->mismatches[] = $path;
+			return (int) $id;
+		}
+		if ( (int) $entry['live'] !== (int) $id ) {
+			++$this->changed;
+		}
+		return (int) $entry['live'];
+	}
+
+	/**
+	 * Rewrite mode: a JSON document stored as a string (page builders). Encoded again only when an
+	 * ID inside it changed; empty objects stay objects.
+	 *
+	 * @param string $path  Path of the string.
+	 * @param string $value JSON text.
+	 * @param int    $depth Depth.
+	 * @return string
+	 */
+	private function rewrite_json( $path, $value, $depth ) {
+		$decoded = json_decode( $value, false, Normalizer::MAX_DEPTH );
+		if ( ! is_array( $decoded ) && ! is_object( $decoded ) ) {
+			return $value;
+		}
+		$tree    = self::json_tree( $decoded, 0 );
+		$changed = $this->changed;
+		$form    = $this->generic( $path . '/json', $tree, $depth + 1 );
+		if ( $this->changed === $changed ) {
+			return $value;
+		}
+		$json = wp_json_encode( $form );
+		return is_string( $json ) ? $json : $value;
+	}
+
+	/**
+	 * Decoded JSON as arrays, with empty objects kept as objects so they are written back as {}.
+	 *
+	 * @param mixed $value Decoded value.
+	 * @param int   $depth Depth.
+	 * @return mixed
+	 */
+	private static function json_tree( $value, $depth ) {
+		if ( $depth > Normalizer::MAX_DEPTH ) {
+			return $value;
+		}
+		if ( is_object( $value ) ) {
+			$props = get_object_vars( $value );
+			if ( empty( $props ) ) {
+				return $value;
+			}
+			$value = $props;
+		}
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		foreach ( $value as $key => $item ) {
+			$value[ $key ] = self::json_tree( $item, $depth + 1 );
+		}
+		return $value;
+	}
+
+	/**
+	 * Rewrite mode: block content with live's IDs (parse_blocks() format kept for
+	 * serialize_blocks()); paths as blocks() builds them.
+	 *
+	 * @param string $path   Path.
+	 * @param array  $blocks Blocks from parse_blocks().
+	 * @param string $prefix Block path prefix.
+	 * @return array
+	 */
+	private function rewrite_blocks( $path, array $blocks, $prefix = '' ) {
+		$rules = self::rules();
+		$out   = $blocks;
+
+		foreach ( $blocks as $index => $block ) {
+			$at    = '' === $prefix ? (string) $index : $prefix . '.' . $index;
+			$name  = isset( $block['blockName'] ) && is_string( $block['blockName'] ) ? $block['blockName'] : null;
+			$attrs = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
+
+			if ( null !== $name ) {
+				$block_rules = isset( $rules['blocks'][ $name ] ) ? $rules['blocks'][ $name ] : array();
+				if ( 0 === strpos( $name, 'woocommerce/' ) ) {
+					$block_rules = array_merge( self::WOO_BLOCK_ATTRS, $block_rules );
+				}
+				foreach ( $block_rules as $attr => $spec ) {
+					if ( ! array_key_exists( $attr, $attrs ) ) {
+						continue;
+					}
+					if ( 'nav' === $spec ) {
+						$kind = isset( $attrs['kind'] ) ? (string) $attrs['kind'] : 'post-type';
+						if ( 'custom' === $kind ) {
+							continue;
+						}
+						$spec = 'taxonomy' === $kind ? 'term' : 'post';
+					}
+					$attrs[ $attr ] = $this->apply_spec( $path . '/' . $at . '/attrs/' . $attr, $spec, $attrs[ $attr ] );
+				}
+				$out[ $index ]['attrs'] = $attrs;
+			}
+
+			$pieces = isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ? $block['innerContent'] : array();
+			foreach ( $pieces as $i => $piece ) {
+				if ( is_string( $piece ) ) {
+					$out[ $index ]['innerContent'][ $i ] = $this->chunk( $path . '/' . $at . '/html/' . $i, $piece );
+				}
+			}
+			if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				$out[ $index ]['innerBlocks'] = $this->rewrite_blocks( $path, $block['innerBlocks'], $at );
+			}
+		}
+
+		return $out;
 	}
 
 	/**
@@ -595,6 +797,9 @@ final class Reference_Mapper {
 			if ( ( '{' !== $first && '[' !== $first ) || strlen( $value ) > 4194304 || ( false === strpos( $value, '"id"' ) && false === strpos( $value, '"url"' ) ) ) {
 				return $value;
 			}
+			if ( null !== $this->rewrite ) {
+				return $this->rewrite_json( $path, $value, $depth );
+			}
 			$decoded = json_decode( $value, true, Normalizer::MAX_DEPTH );
 			if ( ! is_array( $decoded ) ) {
 				return $value;
@@ -625,7 +830,12 @@ final class Reference_Mapper {
 		}
 
 		$out = $value;
-		if ( isset( $value['url'], $value['id'] ) && is_string( $value['url'] ) && self::positive_id( $value['id'] ) ) {
+		if ( null !== $this->rewrite && isset( $value['url'], $value['id'] ) && is_string( $value['url'] ) && self::positive_id( $value['id'] ) ) {
+			// Live does not look the URL up again: only a location the source recorded changes,
+			// and builder data the source could not map is left as it is.
+			$new       = $this->new_id( $path . '/id', 'attachment', (int) $value['id'] );
+			$out['id'] = is_int( $value['id'] ) ? $new : (string) $new;
+		} elseif ( isset( $value['url'], $value['id'] ) && is_string( $value['url'] ) && self::positive_id( $value['id'] ) ) {
 			$id        = (int) $value['id'];
 			$found     = (int) attachment_url_to_postid( (string) call_user_func( $this->url_fn, $value['url'] ) );
 			$out['id'] = $found === $id ? $this->id_at( $path . '/id', 'attachment', $value['id'] ) : $this->unmapped_at( $path . '/id', $value['id'] );
@@ -654,6 +864,17 @@ final class Reference_Mapper {
 		}
 
 		$before = $this->hits;
+
+		if ( null !== $this->rewrite ) {
+			$changed = $this->changed;
+			if ( false !== strpos( $value, '<!-- wp:' ) ) {
+				$blocks = $this->rewrite_blocks( $path . '/blocks', parse_blocks( $value ) );
+				// serialize_blocks() only when a block reference changed (blueprint §8.3).
+				return $this->changed === $changed ? $value : serialize_blocks( $blocks );
+			}
+			$text = $this->chunk( $path . '/html', $value );
+			return $this->changed === $changed ? $value : $text;
+		}
 
 		if ( false !== strpos( $value, '<!-- wp:' ) ) {
 			$tree = $this->blocks( $path . '/blocks', parse_blocks( $value ) );
@@ -810,9 +1031,10 @@ final class Reference_Mapper {
 		$kind  = rtrim( $spec, '[]' );
 		$parts = explode( ',', $value );
 		foreach ( $parts as $i => $part ) {
-			$part = trim( $part );
-			if ( self::positive_id( $part ) ) {
-				$parts[ $i ] = $this->location( $path . '/' . $i, $kind, (int) $part );
+			$trim = trim( $part );
+			if ( self::positive_id( $trim ) ) {
+				$token       = $this->location( $path . '/' . $i, $kind, (int) $trim );
+				$parts[ $i ] = null !== $this->rewrite ? str_replace( $trim, $token, $part ) : $token;
 			}
 		}
 		return implode( ',', $parts );
@@ -857,6 +1079,17 @@ final class Reference_Mapper {
 	 * @return mixed
 	 */
 	private function id_list( $path, $kind, $value ) {
+		if ( is_string( $value ) && null !== $this->rewrite ) {
+			$parts   = explode( ',', $value );
+			$changed = $this->changed;
+			foreach ( $parts as $i => $part ) {
+				$trim = trim( $part );
+				if ( self::positive_id( $trim ) ) {
+					$parts[ $i ] = str_replace( $trim, (string) $this->new_id( $path . '/' . $i, $kind, (int) $trim ), $part );
+				}
+			}
+			return $this->changed === $changed ? $value : implode( ',', $parts );
+		}
 		if ( is_string( $value ) ) {
 			$parts = explode( ',', $value );
 			foreach ( $parts as $i => $part ) {
@@ -889,6 +1122,16 @@ final class Reference_Mapper {
 		if ( ! self::positive_id( $value ) ) {
 			return $value;
 		}
+		if ( null !== $this->rewrite ) {
+			if ( ! isset( $this->rewrite[ $path ] ) ) {
+				// An ID field without a sidecar entry pointed to nothing on the source: it is never
+				// written as the source's number, which may name another object here.
+				++$this->zeroed;
+				return is_int( $value ) ? 0 : '0';
+			}
+			$new = $this->new_id( $path, $kind, (int) $value );
+			return is_int( $value ) ? $new : (string) $new;
+		}
 		$token = $this->location( $path, $kind, (int) $value );
 		return null === $this->canon_fn ? $value : $token;
 	}
@@ -919,6 +1162,9 @@ final class Reference_Mapper {
 	 */
 	public function location( $path, $kind, $id ) {
 		++$this->hits;
+		if ( null !== $this->rewrite ) {
+			return (string) $this->new_id( $path, $kind, (int) $id );
+		}
 		$space  = isset( self::KIND_SPACE[ $kind ] ) ? self::KIND_SPACE[ $kind ] : 'post';
 		$exists = Identity::exists( $space, $id );
 

@@ -1014,7 +1014,7 @@ final class Media_Receiver {
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the folders still in use.
-		$cursors = $wpdb->get_col( $wpdb->prepare( "SELECT cursor_json FROM %i WHERE side = %s AND state IN ('open','receiving','staged')", Tables::table_name( 'pushes' ), self::SIDE ) );
+		$cursors = $wpdb->get_col( $wpdb->prepare( "SELECT cursor_json FROM %i WHERE side = %s AND state IN ('open','receiving','staged','awaiting_review','snapshotting','applying','failed_partial')", Tables::table_name( 'pushes' ), self::SIDE ) );
 		$in_use  = array();
 		foreach ( is_array( $cursors ) ? $cursors : array() as $json ) {
 			$cursor = json_decode( (string) $json, true );
@@ -1044,11 +1044,9 @@ final class Media_Receiver {
 
 	/**
 	 * The committed (or already present) file of a ref, for apply: absolute path of the
-	 * temporary file, or '' for a file live already has.
-	 *
-	 * TODO(Phase 7): the attachment step moves this file to its final path after checking that
-	 * realpath() of the target folder lies inside the uploads base, and rewrites URLs of renamed
-	 * files with rewrites().
+	 * temporary file, or '' for a file live already has. The attachment applier moves it to its
+	 * final path after checking that realpath() of the target folder lies inside the uploads base
+	 * (Apply\Appliers\Attachment).
 	 *
 	 * @param array $session Session.
 	 * @param int   $ref     Ref.
@@ -1057,6 +1055,65 @@ final class Media_Receiver {
 	public static function committed_file( array $session, $ref ) {
 		$dir = self::temp_dir( $session, false );
 		return is_string( $dir ) && '' !== $dir ? $dir . '/' . absint( $ref ) . '.bin' : '';
+	}
+
+	/**
+	 * The uploads base directory for the apply (normalised, no trailing slash).
+	 *
+	 * @return string|WP_Error
+	 */
+	public static function uploads_base() {
+		return self::base();
+	}
+
+	/**
+	 * WP_Filesystem with the direct method only, for the apply (moves and snapshot copies).
+	 *
+	 * @return \WP_Filesystem_Base|WP_Error
+	 */
+	public static function direct_filesystem() {
+		return self::filesystem();
+	}
+
+	/**
+	 * Whether a path resolves inside a base folder (both through realpath()).
+	 *
+	 * @param string $path Path.
+	 * @param string $base Base folder.
+	 * @return bool
+	 */
+	public static function is_inside( $path, $base ) {
+		return self::inside( $path, $base );
+	}
+
+	/**
+	 * Writes index.php and the deny rule into a Keepmerge folder (the snapshots folder too).
+	 *
+	 * @param \WP_Filesystem_Base $fs     Filesystem.
+	 * @param string              $folder Folder.
+	 * @return bool
+	 */
+	public static function protect_folder( $fs, $folder ) {
+		return self::protect( $fs, $folder );
+	}
+
+	/**
+	 * Every file row of a session (for the apply), keyed by ref.
+	 *
+	 * @param int $push_id Session row ID.
+	 * @return array<int,array>
+	 */
+	public static function all_rows( $push_id ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the push's file rows.
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, seq, status, decision, transfer, error FROM %i WHERE push_id = %d AND side = %s AND object_type = %s ORDER BY seq ASC', Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE, self::KIND ), ARRAY_A );
+		$out  = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$decoded                = self::decode_row( $row );
+			$out[ $decoded['ref'] ] = $decoded;
+		}
+		return $out;
 	}
 
 	// --- reading file rows ---------------------------------------------------------------------

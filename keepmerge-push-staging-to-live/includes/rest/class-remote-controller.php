@@ -7,6 +7,7 @@
 
 namespace SoftGlaze\SafePush\Rest;
 
+use SoftGlaze\SafePush\Apply\Applier;
 use SoftGlaze\SafePush\Audit_Log;
 use SoftGlaze\SafePush\Installer;
 use SoftGlaze\SafePush\Limits;
@@ -37,8 +38,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * version has status, pair/confirm and pair/finalize; the four read-only routes of an active
  * pairing: baseline, manifest, items/fetch and code-manifest (the last only while live's
  * "Allow code report requests" is on); the push session routes push, push/{id},
- * push/{id}/items and push/{id}/abort, which stage items in Keepmerge's own tables and never
- * write live's content, options or sync state (Phase 5); and the media routes push/{id}/files,
+ * push/{id}/items and push/{id}/abort, which stage items in Keepmerge's own tables (Phase 5);
+ * push/{id}/apply, the only remote route that writes live's content, after the snapshot and as
+ * the receiver user so core's filters apply, and never for a push with held items (Phase 7);
+ * and the media routes push/{id}/files,
  * push/{id}/files/{ref}/chunks/{n} and push/{id}/files/{ref}/commit, which write only into the
  * push's own temporary folder under uploads/keepmerge-push-staging-to-live/tmp/ (Phase 6). The
  * read-only routes write only what the chain writes for every request (the nonce, the last-used
@@ -218,6 +221,17 @@ final class Remote_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'push_items' ),
 				'permission_callback' => array( Remote_Permission::class, 'check_push_items' ),
+				'args'                => $args,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push/' . $id . '/apply',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'apply_push' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push_apply' ),
 				'args'                => $args,
 			)
 		);
@@ -644,6 +658,35 @@ final class Remote_Controller {
 		}
 
 		$result = Push_Session::receive( $session, $context['pairing'], $body );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * POST /remote/push/{id}/apply (R14): one time-boxed step of the apply as the receiver user
+	 * (blueprint §10.3). A push with held items answers awaiting_review and writes nothing; a live
+	 * administrator finishes it from live (§10.5). Body (at most 1 KB): after, the row cursor of
+	 * the item results the source has already recorded.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function apply_push( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, Applier::MAX_BODY );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
+		if ( is_wp_error( $session ) ) {
+			return $session;
+		}
+
+		$result = Applier::remote( $session, $body );
 		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
 	}
 

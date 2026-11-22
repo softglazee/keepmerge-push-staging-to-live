@@ -17,12 +17,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Every query on sync_state (blueprint §6.1, §14.1): per pairing, a UUID's local object, the
  * remote object it is linked to, how it was matched, and (on live, from Phase 7) the base hash.
  *
- * On the source the baseline writes rows here; it is the only table it writes besides the UUID
- * meta of its own objects. Live reads its rows for base hashes and never writes them in this
- * version (blueprint §6.4 step 3).
- *
- * TODO(Phase 7): live writes base_hash and, for products, base_groups (JSON group => hash) after
- * each apply and adopt; the planner's per-group three-way reads base_groups from the manifest.
+ * On the source the baseline writes rows here (and an applied push links the source's objects to
+ * live's IDs as "pushed"); it is the only table it writes besides the UUID meta of its own
+ * objects. Live writes a row only inside an apply (Apply\Applier): the base hash both sites agree
+ * on after the push and, for products, base_groups (JSON group => hash), which the manifest
+ * returns to the planner's per-group three-way (blueprint §6.4 step 3, §10.3).
  */
 final class Sync_State {
 
@@ -67,6 +66,54 @@ final class Sync_State {
 				absint( $object_id ),
 				absint( $remote_object_id ),
 				$confidence
+			)
+		);
+
+		return false !== $result;
+	}
+
+	/**
+	 * Live, inside an apply: the base of a UUID after the push (blueprint §10.3 step 3). The row
+	 * links the UUID to live's object as "pushed".
+	 *
+	 * @param int    $pairing_id  Pairing row ID.
+	 * @param string $uuid        UUID, option:<name> or unit:<name>.
+	 * @param string $object_type Kind.
+	 * @param int    $object_id   Live object ID (0 for options and units).
+	 * @param string $base_hash   Base hash (64 hex, or '' when the object is no longer an item).
+	 * @param array  $base_groups Product group => hash.
+	 * @param int    $push_id     Push row ID.
+	 * @return bool
+	 */
+	public static function record_base( $pairing_id, $uuid, $object_type, $object_id, $base_hash, array $base_groups, $push_id ) {
+		global $wpdb;
+
+		if ( '' === (string) $uuid || ( '' !== (string) $base_hash && 1 !== preg_match( '/\A[0-9a-f]{64}\z/', (string) $base_hash ) ) ) {
+			return false;
+		}
+		$groups = array();
+		foreach ( $base_groups as $name => $hash ) {
+			if ( is_string( $name ) && is_string( $hash ) && 1 === preg_match( '/\A[0-9a-f]{64}\z/', $hash ) ) {
+				$groups[ sanitize_key( $name ) ] = $hash;
+			}
+		}
+		ksort( $groups, SORT_STRING );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; one prepared upsert.
+		$result = $wpdb->query(
+			$wpdb->prepare(
+				'INSERT INTO %i (pairing_id, uuid, object_type, object_id, remote_object_id, base_hash, base_groups, base_gmt, last_push_id, match_confidence) VALUES (%d, %s, %s, %d, 0, %s, %s, %s, %d, %s)
+				ON DUPLICATE KEY UPDATE object_type = VALUES(object_type), object_id = VALUES(object_id), base_hash = VALUES(base_hash), base_groups = VALUES(base_groups), base_gmt = VALUES(base_gmt), last_push_id = VALUES(last_push_id), match_confidence = VALUES(match_confidence)',
+				Tables::table_name( 'sync_state' ),
+				absint( $pairing_id ),
+				substr( (string) $uuid, 0, 191 ),
+				substr( (string) $object_type, 0, 32 ),
+				absint( $object_id ),
+				(string) $base_hash,
+				empty( $groups ) ? '' : (string) wp_json_encode( $groups ),
+				gmdate( 'Y-m-d H:i:s' ),
+				absint( $push_id ),
+				'pushed'
 			)
 		);
 

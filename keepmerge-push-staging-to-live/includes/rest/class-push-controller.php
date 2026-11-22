@@ -7,6 +7,8 @@
 
 namespace SoftGlaze\SafePush\Rest;
 
+use SoftGlaze\SafePush\Apply\Applier;
+use SoftGlaze\SafePush\Apply\Review;
 use SoftGlaze\SafePush\Plugin;
 use SoftGlaze\SafePush\Transfer\Push_Runner;
 use SoftGlaze\SafePush\Transfer\Push_Session;
@@ -21,11 +23,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Routes under keepmerge/v1/admin/pushes (threat model §5.2): start a push with the live domain typed and
- * checked here (†), run it step by step, abort it before apply, and the history of both sides.
- * Every route needs manage_options and the wp_rest nonce; every input is read by name.
+ * checked here (†), run it step by step, abort it before apply, and the history of both sides. On
+ * the destination: a received push in detail, the decisions on its held items, and "Continue
+ * apply on this site" (†, blueprint §10.5). Every route needs manage_options and the wp_rest
+ * nonce; every input is read by name.
  *
- * TODO(Phase 7): GET pushes/{id} on the destination with the held items, held decisions and
- * "Continue apply on this site". TODO(Phase 8): resume, skip-item, lock release, rollback.
+ * TODO(Phase 8): resume, skip-item, lock release, rollback.
  */
 final class Push_Controller {
 
@@ -95,6 +98,37 @@ final class Push_Controller {
 
 		register_rest_route(
 			$ns,
+			self::BASE . '/(?P<id>[0-9]{1,18})/held',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'held' ),
+				'permission_callback' => $permission,
+				'args'                => array(
+					'decisions' => array(
+						'type' => 'object',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::BASE . '/(?P<id>[0-9]{1,18})/continue',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'continue_apply' ),
+				'permission_callback' => $permission,
+				'args'                => array(
+					'confirm' => array(
+						'type'      => 'string',
+						'maxLength' => 253,
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
 			self::BASE . '/(?P<id>[0-9]{1,18})/abort',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -154,11 +188,85 @@ final class Push_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function get_push( WP_REST_Request $request ) {
-		$row = Push_Runner::find( absint( $request->get_param( 'id' ) ) );
-		if ( null === $row ) {
-			return new WP_Error( 'push_not_found', __( 'This push does not exist on this site.', 'keepmerge-push-staging-to-live' ), array( 'status' => 404 ) );
+		$id  = absint( $request->get_param( 'id' ) );
+		$row = Push_Runner::find( $id );
+		if ( null !== $row ) {
+			return rest_ensure_response( Push_Runner::present( $row ) );
 		}
-		return rest_ensure_response( Push_Runner::present( $row ) );
+		$session = Push_Session::find_by_id( $id );
+		if ( null === $session ) {
+			return self::not_found();
+		}
+		return rest_ensure_response( array_merge( array( 'side' => 'destination' ), Push_Session::detail( $session ) ) );
+	}
+
+	/**
+	 * POST /admin/pushes/{id}/held: decisions on held items of a push received here (approve as
+	 * is, apply with WordPress's HTML filter, skip). Approving needs unfiltered_html (and edit_css
+	 * for global styles with CSS), checked per item.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function held( WP_REST_Request $request ) {
+		$session = Push_Session::find_by_id( absint( $request->get_param( 'id' ) ) );
+		if ( null === $session ) {
+			return self::not_found();
+		}
+		$raw       = $request->get_param( 'decisions' );
+		$decisions = array();
+		if ( is_array( $raw ) ) {
+			foreach ( $raw as $uuid => $decision ) {
+				$decisions[ sanitize_text_field( (string) $uuid ) ] = is_string( $decision ) ? sanitize_key( $decision ) : '';
+			}
+		}
+		$result = Review::decide( $session, $decisions, get_current_user_id() );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * POST /admin/pushes/{id}/continue †: one time-boxed step of a reviewed push, run from this
+	 * administrator's own session. The domain the admin typed is compared with this site's host.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function continue_apply( WP_REST_Request $request ) {
+		$session = Push_Session::find_by_id( absint( $request->get_param( 'id' ) ) );
+		if ( null === $session ) {
+			return self::not_found();
+		}
+		$confirm = $request->get_param( 'confirm' );
+		$typed   = strtolower( trim( is_string( $confirm ) ? sanitize_text_field( $confirm ) : '' ) );
+		$host    = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		if ( '' === $host || ! hash_equals( $host, $typed ) ) {
+			return new WP_Error(
+				'confirm_mismatch',
+				/* translators: %s: this site's host name. */
+				sprintf( __( 'Type this site\'s domain exactly as shown (%s) to continue the apply.', 'keepmerge-push-staging-to-live' ), $host ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = Applier::admin_continue( $session, get_current_user_id() );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$fresh = Push_Session::find_by_id( (int) $session['id'] );
+		return rest_ensure_response(
+			array_merge(
+				$result,
+				array( 'detail' => null === $fresh ? null : array_merge( array( 'side' => 'destination' ), Push_Session::detail( $fresh ) ) )
+			)
+		);
+	}
+
+	/**
+	 * The not-found error.
+	 *
+	 * @return WP_Error
+	 */
+	private static function not_found() {
+		return new WP_Error( 'push_not_found', __( 'This push does not exist on this site.', 'keepmerge-push-staging-to-live' ), array( 'status' => 404 ) );
 	}
 
 	/**

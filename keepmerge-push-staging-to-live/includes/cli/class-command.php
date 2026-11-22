@@ -14,6 +14,7 @@ use SoftGlaze\SafePush\Source_Pairing;
 use SoftGlaze\SafePush\Sync\Classifier;
 use SoftGlaze\SafePush\Sync\Plan_Store;
 use SoftGlaze\SafePush\Sync\Planner;
+use SoftGlaze\SafePush\Transfer\Push_Runner;
 use WP_CLI;
 use WP_Error;
 
@@ -22,12 +23,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Pairs this site, controls the receive window and builds dry-run plans from the command line.
+ * Pairs this site, controls the receive window, builds dry-run plans and pushes them from the
+ * command line.
  *
  * Shell access implies full trust on this site; every change is still audited with the actor
  * "cli", and destructive commands ask first unless --yes is given.
  *
- * TODO(Phase 5–8): push, pushes, rollback, audit.
+ * TODO(Phase 8): pushes, rollback, audit.
  */
 final class Command {
 
@@ -457,6 +459,126 @@ final class Command {
 			return;
 		}
 		WP_CLI\Utils\format_items( 'table', $rows, array( 'item', 'kind', 'type', 'local_id', 'live_id', 'class', 'action', 'groups', 'badges', 'warnings' ) );
+	}
+
+	/**
+	 * Pushes a plan to the live site and lets live apply it.
+	 *
+	 * Sends the items the plan decided (and their files); live applies them
+	 * after a snapshot of each. Stops with a message when live holds items for
+	 * review: an administrator of the live site decides them there and
+	 * finishes the push.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--plan=<id>]
+	 * : A plan made on the Send tab with its conflicts decided, or a push that
+	 * is paused or still running (it continues). Default: a new plan of every
+	 * included type, which must need no decision.
+	 *
+	 * [--pairing=<uuid>]
+	 * : Pairing UUID for a new plan. Default: the first active pairing this
+	 * site sends through.
+	 *
+	 * [--yes]
+	 * : Push without asking. The live domain is confirmed for you.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp keepmerge push --yes
+	 *     wp keepmerge push --plan=42
+	 *
+	 * @param array $args       Positional arguments (unused).
+	 * @param array $assoc_args Associative arguments.
+	 * @return void
+	 */
+	public function push( $args, $assoc_args ) {
+		unset( $args );
+
+		$plan_id = isset( $assoc_args['plan'] ) ? absint( $assoc_args['plan'] ) : 0;
+		$running = $plan_id > 0 ? Push_Runner::find( $plan_id ) : null;
+
+		if ( null === $running ) {
+			if ( $plan_id > 0 ) {
+				$plan = Planner::usable( $plan_id );
+			} else {
+				$uuid = isset( $assoc_args['pairing'] ) ? strtolower( trim( (string) $assoc_args['pairing'] ) ) : '';
+				if ( '' === $uuid ) {
+					foreach ( Source_Pairing::list_pairings() as $pairing ) {
+						if ( 'active' === $pairing['status'] ) {
+							$uuid = $pairing['uuid'];
+							break;
+						}
+					}
+				}
+				if ( '' === $uuid ) {
+					WP_CLI::error( 'This site has no active pairing to a live site. See wp keepmerge status.' );
+				}
+				WP_CLI::line( 'Planning...' );
+				$plan = Planner::run( $uuid, array(), get_current_user_id() );
+			}
+			if ( is_wp_error( $plan ) ) {
+				$this->fail( $plan );
+			}
+			if ( 'planned' !== $plan['state'] ) {
+				WP_CLI::error( 'This plan is not ready to push. Run the command again, or make a plan on the Send tab.' );
+			}
+			$counts = is_array( $plan['counts'] ) ? $plan['counts'] : array();
+			if ( ! empty( $counts['undecided'] ) || ! empty( $counts['blocked'] ) ) {
+				WP_CLI::error( sprintf( 'Plan %d has %d conflict(s) to decide and %d blocked item(s). Decide them on the Send tab, then run: wp keepmerge push --plan=%d', (int) $plan['id'], (int) ( isset( $counts['undecided'] ) ? $counts['undecided'] : 0 ), (int) ( isset( $counts['blocked'] ) ? $counts['blocked'] : 0 ), (int) $plan['id'] ) );
+			}
+
+			$pairing = Source_Pairing::find( isset( $plan['cursor_json']['pairing'] ) ? (string) $plan['cursor_json']['pairing'] : '' );
+			$host    = is_array( $pairing ) ? strtolower( (string) wp_parse_url( (string) $pairing['remote_url'], PHP_URL_HOST ) ) : '';
+			if ( '' === $host ) {
+				WP_CLI::error( 'The pairing of this plan is gone. See wp keepmerge status.' );
+			}
+			WP_CLI::confirm( sprintf( 'Push plan %d to %s? Live takes a snapshot of every item first; items it holds for review wait for its administrator.', (int) $plan['id'], $host ), $assoc_args );
+
+			$push = Push_Runner::start( (int) $plan['id'], $host, get_current_user_id() );
+			if ( is_wp_error( $push ) ) {
+				$this->fail( $push );
+			}
+			$plan_id = (int) $push['id'];
+		}
+
+		$push = Push_Runner::run( $plan_id );
+		if ( is_wp_error( $push ) ) {
+			$this->fail( $push );
+		}
+
+		$applied = isset( $push['applied'] ) && is_array( $push['applied'] ) ? $push['applied'] : array();
+		$line    = sprintf( 'Push %d (%s): %d item(s) sent; on live %d applied, %d skipped, %d failed; refused when staged %d.', (int) $push['id'], (string) $push['push'], (int) $push['sent'], (int) ( isset( $applied['applied'] ) ? $applied['applied'] : 0 ), (int) ( isset( $applied['skipped'] ) ? $applied['skipped'] : 0 ), (int) ( isset( $applied['failed'] ) ? $applied['failed'] : 0 ), (int) $push['counts']['refused'] );
+
+		switch ( $push['state'] ) {
+			case 'done':
+				WP_CLI::line( $line );
+				foreach ( $push['problems'] as $problem ) {
+					WP_CLI::line( sprintf( '  %s %s: %s (%s)', $problem['kind'], '' === $problem['title'] ? $problem['uuid'] : $problem['title'], $problem['status'], $problem['reason'] ) );
+				}
+				WP_CLI::success( 'The push is applied on live.' );
+				return;
+
+			case 'awaiting_review':
+				WP_CLI::line( $line );
+				WP_CLI::warning(
+					sprintf(
+						'%d item(s) are waiting for review on live. Nothing was written there yet. An administrator of %s decides them under Tools > Staging Push > Pushes (%s) and clicks "Continue apply on this site"; then run: wp keepmerge push --plan=%d',
+						(int) ( isset( $push['apply']['held'] ) ? $push['apply']['held'] : $push['held_total'] ),
+						(string) $push['host'],
+						(string) $push['live_pushes'],
+						(int) $push['id']
+					)
+				);
+				return;
+
+			case 'paused':
+				WP_CLI::error( sprintf( 'The push is paused (%s): %s Resume with: wp keepmerge push --plan=%d', is_array( $push['error'] ) ? $push['error']['code'] : '', is_array( $push['error'] ) ? $push['error']['message'] : '', (int) $push['id'] ) );
+				return;
+
+			default:
+				WP_CLI::error( sprintf( 'The push stopped (%s): %s', is_array( $push['error'] ) ? $push['error']['code'] : (string) $push['state'], is_array( $push['error'] ) ? $push['error']['message'] : '' ) );
+		}
 	}
 
 	/**

@@ -1,6 +1,6 @@
 import { createElement, Fragment, useCallback, useEffect, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { History, Inbox, RefreshCw, Send } from 'lucide-react';
+import { ChevronRight, History, Inbox, RefreshCw, Send } from 'lucide-react';
 import Badge from '../components/Badge';
 import Card from '../components/Card';
 import DataTable from '../components/DataTable';
@@ -12,6 +12,7 @@ import { errorMessage, getPushes } from '../api';
 import { number } from './send/plan-labels';
 import { pushStateInfo } from './send/push-labels';
 import { dateTime } from './receive/time';
+import PushDetail from './pushes/PushDetail';
 
 /**
  * Host name of a URL for compact display.
@@ -66,16 +67,16 @@ function fileCell( done, total, renamed ) {
  * Pushes tab: sessions received on this site (live) and pushes sent from it (staging).
  *
  * On live each session shows its state (an interrupted one has had no heartbeat for 5
- * minutes), what was staged, what will need review and what was refused. Nothing here applies
- * anything yet.
+ * minutes), what was staged, applied, held for review or refused; Details opens one push with
+ * the review of its held items and "Continue apply on this site" (blueprint §10.5).
  *
- * TODO(Phase 7): push detail, review of held items, "Continue apply on this site".
  * TODO(Phase 8): resume, release a stale lock, roll back.
  *
- * @param {Object} props
- * @param {Object} props.overview Overview data (unused; the tab loads its own).
+ * @param {Object}   props
+ * @param {Function} props.notify Toast.
  */
-export default function PushesScreen() {
+export default function PushesScreen( { notify } ) {
+	const [ selected, setSelected ] = useState( 0 );
 	const [ data, setData ] = useState( null );
 	const [ error, setError ] = useState( '' );
 	const [ loading, setLoading ] = useState( false );
@@ -92,6 +93,19 @@ export default function PushesScreen() {
 	useEffect( () => {
 		load();
 	}, [ load ] );
+
+	if ( selected ) {
+		return (
+			<PushDetail
+				id={ selected }
+				notify={ notify }
+				onBack={ () => {
+					setSelected( 0 );
+					load();
+				} }
+			/>
+		);
+	}
 
 	const head = (
 		<PanelHead
@@ -147,7 +161,7 @@ export default function PushesScreen() {
 
 	const state = ( row ) => {
 		const info = pushStateInfo( row.state, row.interrupted );
-		const waiting = 'staged' === row.state && 'stale' === row.lock;
+		const waiting = [ 'staged', 'awaiting_review' ].includes( row.state ) && 'stale' === row.lock;
 		return (
 			<span className="sgsp-pushcell">
 				<Badge tone={ info.tone }>{ info.label }</Badge>
@@ -196,10 +210,10 @@ export default function PushesScreen() {
 			render: ( row ) => fileCell( row.files ? row.files.committed + row.files.have : 0, row.files ? row.files.declared : 0, row.files ? row.files.renamed : 0 ),
 		},
 		{
-			key: 'staged',
-			label: __( 'Staged', 'keepmerge-push-staging-to-live' ),
+			key: 'applied',
+			label: __( 'Applied', 'keepmerge-push-staging-to-live' ),
 			className: 'sgsp-num',
-			render: ( row ) => number( row.received.staged + row.received.pending_media ),
+			render: ( row ) => number( row.received.applied ),
 		},
 		{
 			key: 'held',
@@ -208,15 +222,27 @@ export default function PushesScreen() {
 			render: ( row ) => number( row.received.held ),
 		},
 		{
-			key: 'refused',
-			label: __( 'Refused', 'keepmerge-push-staging-to-live' ),
+			key: 'skipped',
+			label: __( 'Skipped or refused', 'keepmerge-push-staging-to-live' ),
 			className: 'sgsp-num',
-			render: ( row ) => number( row.received.refused ),
+			render: ( row ) => number( row.received.skipped + row.received.refused + row.received.failed ),
 		},
 		{
-			key: 'expires',
-			label: __( 'Expires', 'keepmerge-push-staging-to-live' ),
-			render: ( row ) => ( [ 'open', 'receiving', 'staged' ].includes( row.state ) ? dateTime( row.expires_at ) : '–' ),
+			key: 'open',
+			label: __( 'Details', 'keepmerge-push-staging-to-live' ),
+			render: ( row ) => (
+				<button type="button" className="sgsp-button sgsp-button--secondary sgsp-button--small" onClick={ () => setSelected( row.id ) }>
+					{ 'awaiting_review' === row.state ? __( 'Review', 'keepmerge-push-staging-to-live' ) : __( 'Open', 'keepmerge-push-staging-to-live' ) }
+					<ChevronRight size={ 14 } aria-hidden="true" />
+					<span className="screen-reader-text">
+						{ sprintf(
+							/* translators: %s: short push ID. */
+							__( 'push %s', 'keepmerge-push-staging-to-live' ),
+							row.push.slice( 0, 8 )
+						) }
+					</span>
+				</button>
+			),
 		},
 	];
 
@@ -271,7 +297,7 @@ export default function PushesScreen() {
 		},
 	];
 
-	const heldTotal = data.received.filter( ( row ) => 'staged' === row.state ).reduce( ( sum, row ) => sum + row.received.held, 0 );
+	const heldTotal = data.received.filter( ( row ) => 'awaiting_review' === row.state || 'staged' === row.state ).reduce( ( sum, row ) => sum + row.received.held, 0 );
 
 	return (
 		<div>
@@ -280,15 +306,15 @@ export default function PushesScreen() {
 				<Card
 					icon={ Inbox }
 					title={ __( 'Received on this site', 'keepmerge-push-staging-to-live' ) }
-					description={ __( 'Items arrive staged: they wait in Keepmerge\'s own tables and nothing on this site changes until they are applied. A push that is not applied within 24 hours expires and its staged items are removed.', 'keepmerge-push-staging-to-live' ) }
+					description={ __( 'Items arrive staged and wait in Keepmerge\'s own tables. A push is applied after a snapshot of every item it changes; a push with held items waits until an administrator of this site reviews them. A push not applied within 24 hours expires and its staged items are removed.', 'keepmerge-push-staging-to-live' ) }
 				>
 					{ heldTotal > 0 && (
 						<p className="sgsp-field__hint sgsp-mt-0">
 							{ sprintf(
 								/* translators: %s: number of items. */
 								_n(
-									'%s staged item carries markup and will need review by an administrator of this site before it is applied.',
-									'%s staged items carry markup and will need review by an administrator of this site before they are applied.',
+									'%s item carries markup and waits for review by an administrator of this site: open the push to review it.',
+									'%s items carry markup and wait for review by an administrator of this site: open the push to review them.',
 									heldTotal,
 									'keepmerge-push-staging-to-live'
 								),

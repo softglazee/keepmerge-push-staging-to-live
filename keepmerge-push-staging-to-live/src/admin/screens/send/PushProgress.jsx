@@ -8,14 +8,16 @@ import { abortPush, errorMessage, stepPush } from '../../api';
 import { number } from './plan-labels';
 import { clock, logLine, pushStateInfo, reasonLabel, size } from './push-labels';
 
-const ACTIVE = [ 'sending_files', 'sending_items', 'paused' ];
-const SENDING = [ 'sending_files', 'sending_items' ];
+const ACTIVE = [ 'sending_files', 'sending_items', 'paused', 'staged', 'applying', 'awaiting_review' ];
+const SENDING = [ 'sending_files', 'sending_items', 'staged', 'applying' ];
 
 /**
- * A push on its way to live: progress, what live answered per batch, and the per-step log
- * (blueprint §16 Send tab). Each step is one request that sends one batch; the browser runs the
- * steps one after the other. When the page is closed the push simply stops: opening the Send tab
- * again shows it here with Resume, and batches live already has are never stored twice.
+ * A push on its way to live: progress, what live answered per batch, the apply on live and the
+ * per-step log (blueprint §16 Send tab). Each step is one request (one batch, or one time-boxed
+ * apply call); the browser runs the steps one after the other. When the page is closed the push
+ * simply stops: opening the Send tab again shows it here with Resume, and batches live already has
+ * are never stored twice. A push with items held for review stops calling apply: "Check status"
+ * asks live whether its administrator finished it.
  *
  * @param {Object}   props
  * @param {Object}   props.initial     The push.
@@ -72,15 +74,10 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 					if ( ! alive.current ) {
 						return;
 					}
-					if ( 'staged' === done.state ) {
-						notify(
-							'success',
-							sprintf(
-								/* translators: %s: number of items. */
-								__( 'Staged on live: %s items wait there to be applied.', 'keepmerge-push-staging-to-live' ),
-								number( done.total )
-							)
-						);
+					if ( 'done' === done.state ) {
+						notify( 'success', __( 'The push is applied on live.', 'keepmerge-push-staging-to-live' ) );
+					} else if ( 'awaiting_review' === done.state ) {
+						notify( 'info', __( 'Live holds items for review. A live administrator finishes the push there.', 'keepmerge-push-staging-to-live' ) );
 					} else if ( done.error ) {
 						notify( 'error', done.error.message );
 					}
@@ -116,6 +113,11 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 	const sending = SENDING.includes( push.state );
 	const stopped = active && ! running && ! push.busy;
 	const held = push.counts.held || 0;
+	const reviewing = 'awaiting_review' === push.state;
+	const applyInfo = push.apply || null;
+	const applied = push.applied || {};
+	const applyPercent = applyInfo && applyInfo.total ? Math.min( 100, Math.round( ( 100 * applyInfo.done ) / applyInfo.total ) ) : 0;
+	const heldNow = applyInfo ? applyInfo.held : held;
 	const files = push.files || { total: 0, bytes: 0, sent_bytes: 0 };
 	const settled = ( files.have || 0 ) + ( files.committed || 0 ) + ( files.refused || 0 );
 	const filePercent = files.bytes ? Math.min( 100, Math.round( ( 100 * files.sent_bytes ) / files.bytes ) ) : 0;
@@ -138,7 +140,7 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 			<div className="sgsp-push__head">
 				{ running && (
 					<Badge tone="info" icon={ LoaderCircle }>
-						{ __( 'Sending', 'keepmerge-push-staging-to-live' ) }
+						{ [ 'staged', 'applying' ].includes( push.state ) ? __( 'Applying on live', 'keepmerge-push-staging-to-live' ) : __( 'Sending', 'keepmerge-push-staging-to-live' ) }
 					</Badge>
 				) }
 				{ ! running && sending && stopped && <Badge tone="warning">{ __( 'Not running', 'keepmerge-push-staging-to-live' ) }</Badge> }
@@ -210,6 +212,22 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 				</div>
 			</div>
 
+			{ applyInfo && applyInfo.total > 0 && (
+				<div className="sgsp-progress" role="status" aria-live="polite">
+					<div className="sgsp-progress__label">
+						{ sprintf(
+							/* translators: 1: items done, 2: items of the push. */
+							__( 'Applied on live: %1$s of %2$s', 'keepmerge-push-staging-to-live' ),
+							number( 'done' === push.state ? applyInfo.total : applyInfo.done ),
+							number( applyInfo.total )
+						) }
+					</div>
+					<div className="sgsp-progress__track" aria-hidden="true">
+						<div className="sgsp-progress__bar sgsp-progress__bar--apply" style={ { width: `${ 'done' === push.state ? 100 : applyPercent }%` } } />
+					</div>
+				</div>
+			) }
+
 			<ul className="sgsp-stats" aria-label={ __( 'What live answered', 'keepmerge-push-staging-to-live' ) }>
 				{ stats.map( ( stat ) => (
 					<li key={ stat.key } className={ `sgsp-stat sgsp-stat--${ stat.tone }` }>
@@ -237,6 +255,57 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 						{ __( 'This push stopped when its page was closed. Resume sends the rest: a file continues at the next part live is missing, and a batch live already has is not stored twice.', 'keepmerge-push-staging-to-live' ) }
 					</p>
 				</Alert>
+			) }
+
+			{ reviewing && (
+				<Alert tone="warning" title={ __( 'Waiting for review on live', 'keepmerge-push-staging-to-live' ) }>
+					<p className="sgsp-m-0">
+						{ sprintf(
+							/* translators: %s: number of items. */
+							_n(
+								'%s item is waiting for review on live. Nothing of this push was written there yet: an administrator of the live site decides the held items on its Pushes tab and continues the apply there. This site stopped calling apply; Check status asks live where the push is.',
+								'%s items are waiting for review on live. Nothing of this push was written there yet: an administrator of the live site decides the held items on its Pushes tab and continues the apply there. This site stopped calling apply; Check status asks live where the push is.',
+								heldNow,
+								'keepmerge-push-staging-to-live'
+							),
+							number( heldNow )
+						) }
+					</p>
+				</Alert>
+			) }
+
+			{ 'done' === push.state && (
+				<Alert tone="success" title={ __( 'Applied on live', 'keepmerge-push-staging-to-live' ) }>
+					<p className="sgsp-m-0">
+						{ sprintf(
+							/* translators: 1: items written, 2: items skipped, 3: items refused. */
+							__( '%1$s items written on live, %2$s skipped, %3$s refused when staged. Live keeps a snapshot of everything it changed.', 'keepmerge-push-staging-to-live' ),
+							number( applied.applied || 0 ),
+							number( applied.skipped || 0 ),
+							number( push.counts.refused || 0 )
+						) }
+					</p>
+				</Alert>
+			) }
+
+			{ push.problems && push.problems.length > 0 && (
+				<details className="sgsp-push__list">
+					<summary>
+						{ sprintf(
+							/* translators: %s: number of items. */
+							_n( '%s item not applied on live', '%s items not applied on live', push.problems.length, 'keepmerge-push-staging-to-live' ),
+							number( push.problems.length )
+						) }
+					</summary>
+					<ul>
+						{ push.problems.map( ( item ) => (
+							<li key={ item.uuid }>
+								<strong>{ item.title || item.uuid }</strong>
+								<span>{ reasonLabel( item.reason ) }</span>
+							</li>
+						) ) }
+					</ul>
+				</details>
 			) }
 
 			{ 'staged' === push.state && (
@@ -304,10 +373,12 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 				{ active && (
 					<button type="button" className="sgsp-button sgsp-button--primary" disabled={ running || aborting || push.busy } onClick={ () => run( push ) }>
 						{ running ? <LoaderCircle size={ 15 } aria-hidden="true" /> : <Play size={ 15 } aria-hidden="true" /> }
-						{ running ? __( 'Sending…', 'keepmerge-push-staging-to-live' ) : __( 'Resume', 'keepmerge-push-staging-to-live' ) }
+						{ running && __( 'Working…', 'keepmerge-push-staging-to-live' ) }
+						{ ! running && reviewing && __( 'Check status', 'keepmerge-push-staging-to-live' ) }
+						{ ! running && ! reviewing && ( 'staged' === push.state ? __( 'Apply on live', 'keepmerge-push-staging-to-live' ) : __( 'Resume', 'keepmerge-push-staging-to-live' ) ) }
 					</button>
 				) }
-				{ ( active || 'staged' === push.state ) && (
+				{ active && 'applying' !== push.state && ! ( 'paused' === push.state && applyInfo ) && (
 					<button type="button" className="sgsp-button sgsp-button--secondary" disabled={ running || aborting } onClick={ () => setAbortOpen( true ) }>
 						<CircleStop size={ 15 } aria-hidden="true" />
 						{ __( 'Abort push', 'keepmerge-push-staging-to-live' ) }
@@ -321,7 +392,7 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 				) }
 				{ push.live_pushes && 'aborted' !== push.state && (
 					<a className="sgsp-button sgsp-button--link" href={ push.live_pushes } target="_blank" rel="noopener noreferrer">
-						{ __( 'Live\'s Pushes tab', 'keepmerge-push-staging-to-live' ) }
+						{ reviewing ? __( 'Review on live\'s Pushes tab', 'keepmerge-push-staging-to-live' ) : __( 'Live\'s Pushes tab', 'keepmerge-push-staging-to-live' ) }
 						<ExternalLink size={ 14 } aria-hidden="true" />
 						<span className="screen-reader-text">{ __( '(opens in a new tab)', 'keepmerge-push-staging-to-live' ) }</span>
 					</a>

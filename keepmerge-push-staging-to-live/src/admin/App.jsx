@@ -235,7 +235,7 @@ export default function App() {
 		send: <SendScreen notify={ notify } onChanged={ loadOverview } />,
 		receive: <ReceiveScreen notify={ notify } onChanged={ loadOverview } />,
 		pushes: (
-			<PushesScreen overview={ overview } error={ overviewError } onRetry={ loadOverview } />
+			<PushesScreen notify={ notify } />
 		),
 		audit: <AuditScreen notify={ notify } />,
 		settings: <SettingsScreen notify={ notify } />,

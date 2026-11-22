@@ -29,7 +29,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * pushes (side "source") moves through these states:
  *
  * - Planned, then sending_files (only when the push carries media; Media_Sender), then
- *   sending_items, then staged (applying and done in Phase 7).
+ *   sending_items, then applying (live applies it in time-boxed calls of POST /remote/push/{id}/apply
+ *   and returns live's IDs, which this site records as links), then done.
+ * - awaiting_review: live holds items for review; this site stops calling apply and only asks
+ *   live's state ("Check status") until a live administrator finished the push on live.
  * - Paused from sending_files or sending_items (network, 5xx after retries, window closed, rate,
  *   clock, live's storage); Resume goes back to the phase it paused in (cursor "phase").
  * - Failed: the session is gone or closed on live, or the pairing cannot be used.
@@ -47,19 +50,21 @@ final class Push_Runner {
 	/**
 	 * States of a push on the source (after planned).
 	 */
-	const STATES = array( 'sending_files', 'sending_items', 'paused', 'staged', 'failed', 'aborted' );
+	const STATES = array( 'sending_files', 'sending_items', 'paused', 'staged', 'applying', 'awaiting_review', 'done', 'failed', 'aborted' );
 
 	/**
 	 * States in which steps run.
 	 */
-	const ACTIVE = array( 'sending_files', 'sending_items', 'paused' );
+	const ACTIVE = array( 'sending_files', 'sending_items', 'paused', 'staged', 'applying', 'awaiting_review' );
 
 	/**
 	 * The state of each sending phase.
 	 */
 	const PHASE_STATES = array(
-		'files' => 'sending_files',
-		'items' => 'sending_items',
+		'files'  => 'sending_files',
+		'items'  => 'sending_items',
+		'apply'  => 'applying',
+		'review' => 'awaiting_review',
 	);
 
 	const ROUTE = '/keepmerge/v1/remote/push';
@@ -348,6 +353,10 @@ final class Push_Runner {
 			if ( 'sending_items' === $state ) {
 				$cursor['push']['phase'] = 'items';
 			}
+		} elseif ( 'apply' === $phase || 'review' === $phase ) {
+			$outcome = self::apply_step( $row, $cursor, $client, $deadline, 'review' === $phase );
+			$state   = $outcome['state'];
+			$error   = $outcome['error'];
 		} else {
 			$links = array(
 				'post' => Sync_State::linked_map( (int) $row['pairing_id'], 'post' ),
@@ -377,11 +386,20 @@ final class Push_Runner {
 		if ( $error instanceof WP_Error ) {
 			$fields['error_detail'] = $error->get_error_message();
 		}
-		if ( in_array( $state, array( 'staged', 'failed' ), true ) ) {
+		if ( 'staged' === $state ) {
+			// Every item is staged on live: the next step starts the apply.
+			self::audit_end( $row, $cursor, $state );
+			Media_Sender::forget( (int) $row['id'] );
+			$cursor['push']['phase'] = 'apply';
+			$fields['cursor_json']   = $cursor;
+		}
+		if ( in_array( $state, array( 'done', 'failed' ), true ) ) {
 			$cursor['push']['finished'] = time();
 			$fields['cursor_json']      = $cursor;
 			$fields['finished_gmt']     = gmdate( 'Y-m-d H:i:s' );
-			self::audit_end( $row, $cursor, $state );
+			if ( 'failed' === $state ) {
+				self::audit_end( $row, $cursor, $state );
+			}
 			Media_Sender::forget( (int) $row['id'] );
 		}
 		Plan_Store::update( (int) $row['id'], $fields );
@@ -401,7 +419,8 @@ final class Push_Runner {
 	public static function run( $push_id, $client = null, $max = 500 ) {
 		$push = self::present( self::find( $push_id ) );
 		for ( $i = 0; $i < $max; $i++ ) {
-			if ( ! isset( $push['state'] ) || ! in_array( $push['state'], self::PHASE_STATES, true ) ) {
+			if ( ! isset( $push['state'] ) || ( ! in_array( $push['state'], self::PHASE_STATES, true ) && 'staged' !== $push['state'] ) || 'awaiting_review' === $push['state'] ) {
+				// Stops at awaiting_review: a live administrator finishes the push on live.
 				break;
 			}
 			if ( $push['wait'] > 0 ) {
@@ -430,6 +449,10 @@ final class Push_Runner {
 		}
 		if ( 'aborted' === $row['state'] ) {
 			return self::present( $row );
+		}
+		if ( in_array( $row['state'], array( 'applying', 'done' ), true ) ) {
+			// Once live writes, only its administrator can undo it (Phase 8 roll back on live).
+			return new WP_Error( 'push_applying', __( 'Live is applying this push or has applied it. A live administrator can roll it back on the live site.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
 		}
 		$cursor = $row['cursor_json'];
 		if ( (int) $cursor['push']['busy_until'] > time() ) {
@@ -508,7 +531,7 @@ final class Push_Runner {
 		global $wpdb;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM %i WHERE pairing_id = %d AND side = %s AND state IN ('sending_files','sending_items','paused','staged','failed','aborted') ORDER BY id DESC LIMIT 1", Tables::table_name( 'pushes' ), absint( $pairing_id ), Plan_Store::SIDE ) );
+		$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM %i WHERE pairing_id = %d AND side = %s AND state IN ('sending_files','sending_items','paused','staged','applying','awaiting_review','done','failed','aborted') ORDER BY id DESC LIMIT 1", Tables::table_name( 'pushes' ), absint( $pairing_id ), Plan_Store::SIDE ) );
 		return $id > 0 ? self::find( $id ) : null;
 	}
 
@@ -522,7 +545,7 @@ final class Push_Runner {
 		global $wpdb;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM %i WHERE side = %s AND state IN ('sending_files','sending_items','paused','staged','failed','aborted') ORDER BY id DESC LIMIT %d", Tables::table_name( 'pushes' ), Plan_Store::SIDE, max( 1, min( 200, absint( $limit ) ) ) ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM %i WHERE side = %s AND state IN ('sending_files','sending_items','paused','staged','applying','awaiting_review','done','failed','aborted') ORDER BY id DESC LIMIT %d", Tables::table_name( 'pushes' ), Plan_Store::SIDE, max( 1, min( 200, absint( $limit ) ) ) ) );
 		$out = array();
 		foreach ( is_array( $ids ) ? $ids : array() as $id ) {
 			$push = self::find( (int) $id );
@@ -592,6 +615,9 @@ final class Push_Runner {
 			'started_at'  => (int) $p['started'],
 			'finished_at' => (int) $p['finished'],
 			'live_pushes' => '' === $admin ? '' : $admin . 'tools.php?page=keepmerge#pushes',
+			'apply'       => isset( $p['apply'] ) && is_array( $p['apply'] ) ? $p['apply'] : null,
+			'applied'     => isset( $p['applied'] ) && is_array( $p['applied'] ) ? $p['applied'] : array(),
+			'problems'    => isset( $p['problems'] ) && is_array( $p['problems'] ) ? array_values( $p['problems'] ) : array(),
 			'error'       => '' === (string) $row['error_code'] ? null : array(
 				'code'    => (string) $row['error_code'],
 				'message' => (string) $row['error_detail'],
@@ -705,6 +731,161 @@ final class Push_Runner {
 			array( 'code' => $code )
 		);
 		return self::next( 'stop', in_array( $code, self::PAUSE_CODES, true ) ? 'paused' : 'failed', $answer );
+	}
+
+	/**
+	 * One step of the apply phase (blueprint §10.3, §10.5): calls POST /remote/push/{id}/apply
+	 * (time-boxed on live), records the item results it returns (live's IDs become this site's
+	 * links, so later hashes name references as live does), and stops at awaiting_review. In the
+	 * review phase it only asks live's state; once live says the push is applied, it collects the
+	 * results.
+	 *
+	 * @param array $row      Push row.
+	 * @param array $cursor   Cursor (changed).
+	 * @param mixed $client   Client.
+	 * @param float $deadline Deadline.
+	 * @param bool  $review   Whether the push waits for review on live.
+	 * @return array{next:string,state:string,error:WP_Error|null}
+	 */
+	private static function apply_step( array $row, array &$cursor, $client, $deadline, $review ) {
+		$p = &$cursor['push'];
+
+		if ( $review ) {
+			$answer = $client->get( self::ROUTE . '/' . $row['push_uuid'], array(), array( 'retries' => 2 ) );
+			if ( is_wp_error( $answer ) ) {
+				$code = $answer->get_error_code();
+				return self::next( 'stop', in_array( $code, self::PAUSE_CODES, true ) ? 'awaiting_review' : 'failed', $answer );
+			}
+			$live            = isset( $answer['data']['state'] ) ? sanitize_key( (string) $answer['data']['state'] ) : '';
+			$p['live_state'] = $live;
+			if ( ! in_array( $live, array( 'applied', 'failed_partial' ), true ) ) {
+				// Still under review (or being applied by a live administrator).
+				return self::next( 'stop', 'awaiting_review' );
+			}
+			$p['phase'] = 'apply';
+			self::log( $cursor, 'reviewed', array( 'state' => $live ) );
+		}
+
+		for ( $round = 0; $round < 20; $round++ ) {
+			$answer = $client->post(
+				self::ROUTE . '/' . $row['push_uuid'] . '/apply',
+				array( 'after' => isset( $p['apply_after'] ) ? (int) $p['apply_after'] : 0 ),
+				array(
+					'retries' => 3,
+					'budget'  => (int) max( 1, floor( $deadline - microtime( true ) ) ),
+					'timeout' => 30,
+				)
+			);
+			if ( is_wp_error( $answer ) ) {
+				$code = $answer->get_error_code();
+				if ( 'push_busy' === $code ) {
+					// Another step of this push is running on live: the next step asks again.
+					return self::next( 'stop', 'applying' );
+				}
+				self::log( $cursor, in_array( $code, self::PAUSE_CODES, true ) ? 'paused' : 'failed', array( 'code' => $code ) );
+				return self::next( 'stop', in_array( $code, self::PAUSE_CODES, true ) ? 'paused' : 'failed', $answer );
+			}
+
+			$data = isset( $answer['data'] ) && is_array( $answer['data'] ) ? $answer['data'] : array();
+			foreach ( isset( $data['results'] ) && is_array( $data['results'] ) ? $data['results'] : array() as $result ) {
+				self::record_result( $row, $cursor, $result );
+			}
+			$live             = isset( $data['state'] ) ? sanitize_key( (string) $data['state'] ) : '';
+			$p['live_state']  = $live;
+			$p['apply_after'] = isset( $data['next'] ) ? (int) $data['next'] : ( isset( $p['apply_after'] ) ? (int) $p['apply_after'] : 0 );
+			$p['apply']       = array(
+				'state'     => $live,
+				'pass'      => isset( $data['apply']['pass'] ) ? sanitize_key( (string) $data['apply']['pass'] ) : '',
+				'done'      => isset( $data['apply']['done'] ) ? (int) $data['apply']['done'] : 0,
+				'total'     => isset( $data['apply']['total'] ) ? (int) $data['apply']['total'] : 0,
+				'held'      => isset( $data['held'] ) ? (int) $data['held'] : 0,
+				'undecided' => isset( $data['undecided'] ) ? (int) $data['undecided'] : 0,
+			);
+
+			if ( 'awaiting_review' === $live ) {
+				$p['phase'] = 'review';
+				self::log( $cursor, 'awaiting_review', array( 'held' => (int) $p['apply']['held'] ) );
+				return self::next( 'stop', 'awaiting_review' );
+			}
+			if ( 'failed_partial' === $live ) {
+				self::log( $cursor, 'failed', array( 'code' => 'failed_partial' ) );
+				return self::next( 'stop', 'failed', new WP_Error( 'failed_partial', __( 'An item could not be written on live, so live stopped the push. A live administrator decides on live\'s Pushes screen what happens next.', 'keepmerge-push-staging-to-live' ) ) );
+			}
+			if ( 'applied' === $live ) {
+				if ( ! empty( $data['more'] ) && microtime( true ) < $deadline - 1 ) {
+					continue;
+				}
+				if ( ! empty( $data['more'] ) ) {
+					return self::next( 'stop', 'applying' );
+				}
+				self::log( $cursor, 'done', isset( $p['applied'] ) && is_array( $p['applied'] ) ? $p['applied'] : array() );
+				Audit_Log::write(
+					'push_applied',
+					array(
+						'pairing_id'  => (int) $row['pairing_id'],
+						'object_type' => 'push',
+						'object_ref'  => (string) $row['push_uuid'],
+						'details'     => isset( $p['applied'] ) && is_array( $p['applied'] ) ? $p['applied'] : array(),
+					)
+				);
+				return self::next( 'stop', 'done' );
+			}
+			if ( microtime( true ) > $deadline - 2 ) {
+				break;
+			}
+		}
+		return self::next( 'stop', 'applying' );
+	}
+
+	/**
+	 * Records one item result of the apply: the plan row remembers it, and an applied item's live
+	 * ID becomes this site's link (sync state "pushed").
+	 *
+	 * @param array $row    Push row.
+	 * @param array $cursor Cursor (changed).
+	 * @param mixed $result Result as live sent it.
+	 * @return void
+	 */
+	private static function record_result( array $row, array &$cursor, $result ) {
+		if ( ! is_array( $result ) || ! isset( $result['uuid'], $result['status'] ) || ! is_string( $result['uuid'] ) || ! is_string( $result['status'] ) ) {
+			return;
+		}
+		$plan = Plan_Store::item( (int) $row['id'], $result['uuid'] );
+		if ( null === $plan || isset( $plan['payload']['applied'] ) ) {
+			return;
+		}
+		$status  = sanitize_key( $result['status'] );
+		$live_id = isset( $result['live_id'] ) && is_int( $result['live_id'] ) ? max( 0, $result['live_id'] ) : 0;
+		$reason  = isset( $result['reason'] ) && is_string( $result['reason'] ) ? sanitize_key( $result['reason'] ) : '';
+
+		$payload            = $plan['payload'];
+		$payload['applied'] = array(
+			'status'  => $status,
+			'live_id' => $live_id,
+			'reason'  => $reason,
+		);
+		Plan_Store::update_item( (int) $plan['id'], array( 'payload' => $payload ) );
+
+		$p = &$cursor['push'];
+		if ( ! isset( $p['applied'] ) || ! is_array( $p['applied'] ) ) {
+			$p['applied'] = array();
+		}
+		$p['applied'][ $status ] = ( isset( $p['applied'][ $status ] ) ? (int) $p['applied'][ $status ] : 0 ) + 1;
+		if ( 'applied' !== $status && ( ! isset( $p['problems'] ) || count( $p['problems'] ) < self::SAMPLES ) ) {
+			$p['problems'][ $result['uuid'] ] = array(
+				'uuid'   => (string) $result['uuid'],
+				'title'  => isset( $plan['payload']['title'] ) ? (string) $plan['payload']['title'] : '',
+				'kind'   => (string) $plan['object_type'],
+				'status' => $status,
+				'reason' => $reason,
+			);
+		}
+
+		$kind  = (string) $plan['object_type'];
+		$space = \SoftGlaze\SafePush\Sync\Scope::space( $kind );
+		if ( 'applied' === $status && '' !== $space && $live_id > 0 && (int) $plan['local_object_id'] > 0 ) {
+			Sync_State::upsert( (int) $row['pairing_id'], (string) $result['uuid'], $kind, (int) $plan['local_object_id'], $live_id, 'pushed' );
+		}
 	}
 
 	/**
@@ -894,6 +1075,10 @@ final class Push_Runner {
 		if ( isset( $stubs[ $uuid ] ) ) {
 			return self::stub( $envelope, (string) $stubs[ $uuid ] );
 		}
+		// Live's hash when the plan was made: live skips the item if it changed since.
+		if ( isset( $p['l'] ) && is_string( $p['l'] ) && 1 === preg_match( '/\A[0-9a-f]{64}\z/', $p['l'] ) && in_array( $action, array( 'push', 'use_staging', 'trash_on_live', 'record_base' ), true ) ) {
+			$envelope['live_hash'] = $p['l'];
+		}
 		if ( in_array( $action, array( 'trash_on_live', 'record_base' ), true ) ) {
 			return $envelope;
 		}
@@ -920,8 +1105,18 @@ final class Push_Runner {
 				'live_id' => isset( $links[ $space ][ (int) $one['id'] ] ) ? (int) $links[ $space ][ (int) $one['id'] ] : 0,
 			);
 		}
-		$envelope['data'] = $item['data'];
-		$envelope['refs'] = $refs;
+		$envelope['data']  = $item['data'];
+		$envelope['refs']  = $refs;
+		$envelope['scope'] = self::scope( $kind, $envelope['type'] );
+		if ( 'menu' === $kind ) {
+			// The source IDs of the menu's items in item order: live resolves parents inside the unit.
+			$envelope['item_ids'] = array_map(
+				static function ( $post ) {
+					return (int) $post->ID;
+				},
+				\SoftGlaze\SafePush\Sync\Exporters\Menus::item_posts( (int) $plan_row['local_object_id'] )
+			);
+		}
 
 		if ( 'attachment' === $kind ) {
 			// Which file rows of this push hold the attachment's files (sent before the items).
@@ -936,10 +1131,39 @@ final class Push_Runner {
 					$groups[ $name ] = ! empty( $group['decision'] ) ? (string) $group['decision'] : (string) $group['action'];
 				}
 			}
-			$envelope['groups'] = $groups;
+			$envelope['groups']       = $groups;
+			$envelope['group_hashes'] = $item['groups'];
 		}
 
 		return $envelope;
+	}
+
+	/**
+	 * What this site manages for an item, sent beside it so live never clears what this site does
+	 * not include: the taxonomies of the item's type that are included here, and this site's own
+	 * excluded meta entries (Settings).
+	 *
+	 * @param string $kind Kind.
+	 * @param string $type Post type.
+	 * @return array
+	 */
+	private static function scope( $kind, $type ) {
+		$settings = Settings::get();
+		$out      = array(
+			'meta_skip' => array_values( array_filter( is_array( $settings['excluded_meta'] ) ? $settings['excluded_meta'] : array(), 'is_string' ) ),
+		);
+		$taxes    = array();
+		if ( 'post' === $kind && '' !== $type ) {
+			$taxes = get_object_taxonomies( $type );
+		} elseif ( 'pattern' === $kind ) {
+			$taxes = array( 'wp_pattern_category' );
+		} elseif ( 'product' === $kind ) {
+			$taxes = array( 'product_cat', 'product_tag', 'product_brand' );
+		}
+		if ( ! empty( $taxes ) ) {
+			$out['taxonomies'] = array_values( array_intersect( $taxes, \SoftGlaze\SafePush\Sync\Scope::taxonomies() ) );
+		}
+		return $out;
 	}
 
 	/**
