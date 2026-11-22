@@ -75,6 +75,11 @@ final class Push_Runner {
 	const SAMPLES = 50;
 
 	/**
+	 * Seconds the source waits after live answers that another step of the push is running there.
+	 */
+	const BUSY_WAIT = 5;
+
+	/**
 	 * Codes after which the push pauses for Resume rather than failing (live's session is intact).
 	 */
 	const PAUSE_CODES = array( 'window_closed', 'network_error', 'server_error', 'tls_failed', 'rate_limited', 'ip_blocked', 'clock_skew', 'authorization_header_missing', 'https_required', 'transport_unpinned', 'response_invalid', 'response_unsigned', 'response_signature_invalid', 'address_refused', 'replay_blocked', 'redirect_refused', 'unexpected_status' );
@@ -780,7 +785,9 @@ final class Push_Runner {
 			if ( is_wp_error( $answer ) ) {
 				$code = $answer->get_error_code();
 				if ( 'push_busy' === $code ) {
-					// Another step of this push is running on live: the next step asks again.
+					// Another step of this push is running on live (or one that died there still marks
+					// it busy for a while): the next step asks again after a pause, not at once.
+					$p['wait_until'] = time() + self::BUSY_WAIT;
 					return self::next( 'stop', 'applying' );
 				}
 				self::log( $cursor, in_array( $code, self::PAUSE_CODES, true ) ? 'paused' : 'failed', array( 'code' => $code ) );
