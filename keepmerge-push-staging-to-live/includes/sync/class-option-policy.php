@@ -179,6 +179,39 @@ final class Option_Policy {
 	}
 
 	/**
+	 * Whether this site stores an option under a name that differs from $name but that the
+	 * database matches for it (MySQL's default collation ignores case and trailing spaces). Reading
+	 * or writing $name would then reach that row, which every check made in PHP on $name misses.
+	 *
+	 * @param string $name Option name.
+	 * @return bool
+	 */
+	public static function stored_name_differs( $name ) {
+		global $wpdb;
+
+		$name = (string) $name;
+		// "=" follows the column's collation; LIKE also ignores case where "=" does not (SQLite).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- One lookup of the stored option names that match a name; core has no API for that.
+		$stored = $wpdb->get_col( $wpdb->prepare( 'SELECT option_name FROM %i WHERE option_name = %s OR option_name LIKE %s LIMIT 5', $wpdb->options, $name, $wpdb->esc_like( $name ) ) );
+		foreach ( is_array( $stored ) ? $stored : array() as $other ) {
+			if ( (string) $other !== $name ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether an option name is a theme's theme mods (any case: the database does not tell them apart).
+	 *
+	 * @param string $name Option name.
+	 * @return bool
+	 */
+	public static function is_theme_mods( $name ) {
+		return 0 === stripos( (string) $name, 'theme_mods_' );
+	}
+
+	/**
 	 * Why a custom allowlist entry (a name or a "prefix*") is refused, or '' when it is accepted.
 	 * A prefix that is too short or reaches a denied name or pattern is refused at once, so the
 	 * admin does not find out at push time.

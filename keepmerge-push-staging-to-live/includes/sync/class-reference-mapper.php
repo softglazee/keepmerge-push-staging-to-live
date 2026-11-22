@@ -654,7 +654,7 @@ final class Reference_Mapper {
 			return $form;
 		}
 
-		if ( 0 === strpos( $name, 'theme_mods_' ) && is_array( $value ) ) {
+		if ( Option_Policy::is_theme_mods( $name ) && is_array( $value ) ) {
 			$out = $value;
 			if ( isset( $value['nav_menu_locations'] ) && is_array( $value['nav_menu_locations'] ) ) {
 				foreach ( $value['nav_menu_locations'] as $location => $menu ) {

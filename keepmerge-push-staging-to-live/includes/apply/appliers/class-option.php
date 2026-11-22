@@ -47,7 +47,7 @@ final class Option extends Base {
 		}
 
 		$name = $ctx->type;
-		if ( '' !== Option_Policy::option_denial_reason( $name ) || ! Scope::option_allowed( $name ) ) {
+		if ( '' !== Option_Policy::option_denial_reason( $name ) || ! Scope::option_allowed( $name ) || Option_Policy::stored_name_differs( $name ) ) {
 			return new WP_Error( 'option_not_allowed', 'option_not_allowed' );
 		}
 		if ( ! array_key_exists( 'value', $ctx->data ) || self::str( $ctx->data, 'name' ) !== $name ) {
@@ -55,7 +55,7 @@ final class Option extends Base {
 		}
 		$value = $ctx->data['value'];
 
-		if ( 0 === strpos( $name, 'theme_mods_' ) && is_array( $value ) ) {
+		if ( Option_Policy::is_theme_mods( $name ) && is_array( $value ) ) {
 			$current = get_option( $name, array() );
 			unset( $value['custom_css_post_id'] );
 			if ( is_array( $current ) && isset( $current['custom_css_post_id'] ) ) {

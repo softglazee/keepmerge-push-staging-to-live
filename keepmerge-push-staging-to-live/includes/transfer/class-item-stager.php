@@ -656,7 +656,8 @@ final class Item_Stager {
 
 		switch ( $kind ) {
 			case 'option':
-				if ( '' !== Option_Policy::option_denial_reason( $type ) ) {
+				// A name live stores in another case is refused: the database would write that row.
+				if ( '' !== Option_Policy::option_denial_reason( $type ) || Option_Policy::stored_name_differs( $type ) ) {
 					return 'option_denied';
 				}
 				return Scope::option_allowed( $type ) ? '' : 'option_not_allowed';

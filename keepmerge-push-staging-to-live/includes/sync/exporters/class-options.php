@@ -7,6 +7,7 @@
 
 namespace SoftGlaze\SafePush\Sync\Exporters;
 
+use SoftGlaze\SafePush\Sync\Option_Policy;
 use SoftGlaze\SafePush\Sync\Scope;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -39,7 +40,7 @@ final class Options extends Exporter {
 		if ( $value === $missing ) {
 			return null;
 		}
-		if ( 0 === strpos( $name, 'theme_mods_' ) && is_array( $value ) ) {
+		if ( Option_Policy::is_theme_mods( $name ) && is_array( $value ) ) {
 			unset( $value['custom_css_post_id'] );
 		}
 

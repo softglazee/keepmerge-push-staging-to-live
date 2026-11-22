@@ -375,7 +375,8 @@ final class Scope {
 		if ( '' === $name || 1 !== preg_match( '/\A[A-Za-z0-9_.:-]{1,191}\z/', $name ) ) {
 			return false;
 		}
-		if ( 'sidebars_widgets' === $name || 0 === strpos( $name, 'widget_' ) ) {
+		// Any case: the database reads widget_x for Widget_X.
+		if ( 'sidebars_widgets' === strtolower( $name ) || 0 === stripos( $name, 'widget_' ) ) {
 			return false;
 		}
 		if ( '' !== Option_Policy::option_denial_reason( $name ) ) {
