@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-22T10:49:10+00:00\n"
+"POT-Creation-Date: 2026-11-22T19:06:13+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: keepmerge-push-staging-to-live\n"
@@ -64,84 +64,89 @@ msgstr ""
 msgid "Keepmerge never reads or transfers user accounts, comments, orders or customer records."
 msgstr ""
 
-#: includes/apply/class-applier.php:162
+#: includes/apply/class-applier.php:168
 msgid "Decide every held item before you continue the apply."
 msgstr ""
 
-#: includes/apply/class-applier.php:172
+#: includes/apply/class-applier.php:178
 msgid "The source site is applying this push. Wait until it finishes."
 msgstr ""
 
-#: includes/apply/class-applier.php:179
+#: includes/apply/class-applier.php:185
 msgid "This push stopped without finishing. Resume it (or roll it back) first."
 msgstr ""
 
-#: includes/apply/class-applier.php:181
+#: includes/apply/class-applier.php:187
 msgid "This push stopped at an item. Retry the item, skip it, or roll the push back."
 msgstr ""
 
-#: includes/apply/class-applier.php:183
+#: includes/apply/class-applier.php:189
 msgid "This push is not waiting for review on this site."
 msgstr ""
 
-#: includes/apply/class-recovery.php:97
+#: includes/apply/class-recovery.php:98
 msgid "This push is not interrupted."
 msgstr ""
 
-#: includes/apply/class-recovery.php:187
+#: includes/apply/class-recovery.php:135
+#: includes/apply/class-rollback-runner.php:356
+msgid "This push changed meanwhile (it was resumed or rolled back). Reload the screen."
+msgstr ""
+
+#: includes/apply/class-recovery.php:212
 msgid "The item could not be put back to its snapshot before the retry. Roll back the push instead."
 msgstr ""
 
-#: includes/apply/class-recovery.php:236
+#: includes/apply/class-recovery.php:261
 msgid "The item could not be put back to its snapshot. Roll back the push instead."
 msgstr ""
 
-#: includes/apply/class-recovery.php:268
+#: includes/apply/class-recovery.php:293
 msgid "No push holds this site's push lock."
 msgstr ""
 
-#: includes/apply/class-recovery.php:276
+#: includes/apply/class-recovery.php:301
 msgid "A push is running on this site right now (its lock is fresh). Release the lock only when the push has stopped: a lock goes stale after 5 minutes without a heartbeat."
 msgstr ""
 
-#: includes/apply/class-recovery.php:373
+#: includes/apply/class-recovery.php:398
 msgid "This push did not stop at a failed item."
 msgstr ""
 
-#: includes/apply/class-recovery.php:384
+#: includes/apply/class-recovery.php:409
 msgid "The failed item of this push could not be found. Roll back the push instead."
 msgstr ""
 
-#: includes/apply/class-recovery.php:387
+#: includes/apply/class-recovery.php:412
 msgid "Only the item the push stopped at can be skipped. Reload the screen."
 msgstr ""
 
-#: includes/apply/class-recovery.php:423
-#: includes/apply/class-rollback-runner.php:1055
+#: includes/apply/class-recovery.php:448
+#: includes/apply/class-rollback-runner.php:1060
 msgid "Another push holds this site's push lock. Wait until it ends, or release its lock under Tools > Staging Push > Pushes if it has stopped."
 msgstr ""
 
-#: includes/apply/class-review.php:91
+#: includes/apply/class-review.php:97
 msgid "This push is not waiting for review."
 msgstr ""
 
-#: includes/apply/class-review.php:94
+#: includes/apply/class-review.php:100
 msgid "Choose a decision for at least one held item."
 msgstr ""
 
-#: includes/apply/class-review.php:108
+#: includes/apply/class-review.php:114
 msgid "One of the decisions names an item that is not held in this push."
 msgstr ""
 
-#: includes/apply/class-review.php:118
+#: includes/apply/class-review.php:124
 msgid "WordPress's HTML filter only covers titles, content, excerpts and descriptions. This item is held for markup elsewhere: approve it as is or skip it."
 msgstr ""
 
-#: includes/apply/class-review.php:182
+#: includes/apply/class-review.php:188
 msgid "Approving markup as is needs the \"unfiltered_html\" capability, which your account does not have on this site. Choose \"Apply with WordPress's HTML filter\" or \"Skip\"."
 msgstr ""
 
-#: includes/apply/class-review.php:185
+#: includes/apply/class-review.php:191
 msgid "These global styles carry custom CSS. Approving them as is needs the \"edit_css\" capability, which your account does not have on this site."
 msgstr ""
 
@@ -175,7 +180,7 @@ msgid "Receive window opened"
 msgstr ""
 
 #: includes/class-audit-log.php:102
-#: build/admin.js:149
+#: build/admin.js:150
 #: src/admin/App.jsx:180
 msgid "Receive window closed"
 msgstr ""
@@ -764,7 +769,7 @@ msgstr ""
 #: includes/rest/class-plan-controller.php:372
 #: includes/sync/class-baseline.php:223
 #: includes/sync/class-planner.php:82
-#: includes/transfer/class-push-runner.php:104
+#: includes/transfer/class-push-runner.php:109
 msgid "This pairing does not exist on this site."
 msgstr ""
 
@@ -806,7 +811,7 @@ msgid "Type this site's domain exactly as shown (%s) to continue the apply."
 msgstr ""
 
 #: includes/rest/class-push-controller.php:496
-#: includes/transfer/class-push-runner.php:1327
+#: includes/transfer/class-push-runner.php:1345
 msgid "This push does not exist on this site."
 msgstr ""
 
@@ -838,41 +843,41 @@ msgid "Menu item"
 msgstr ""
 
 #. translators: %d: minimum number of characters before the asterisk.
-#: includes/sync/class-option-policy.php:199
+#: includes/sync/class-option-policy.php:232
 #, php-format
 msgid "A prefix needs at least %d characters before the *."
 msgstr ""
 
 #. translators: %s: a protected option name or pattern, for example siteurl.
-#: includes/sync/class-option-policy.php:225
+#: includes/sync/class-option-policy.php:258
 #, php-format
 msgid "This prefix would also cover %s, which Keepmerge never pushes."
 msgstr ""
 
-#: includes/sync/class-option-policy.php:296
+#: includes/sync/class-option-policy.php:329
 msgid "Site identity and reading"
 msgstr ""
 
-#: includes/sync/class-option-policy.php:301
+#: includes/sync/class-option-policy.php:334
 msgid "Theme customizations"
 msgstr ""
 
-#: includes/sync/class-option-policy.php:306
+#: includes/sync/class-option-policy.php:339
 msgid "Widgets (as one unit)"
 msgstr ""
 
-#: includes/sync/class-option-policy.php:311
+#: includes/sync/class-option-policy.php:344
 msgid "WooCommerce pages and catalog display"
 msgstr ""
 
 #. translators: %s: a word such as "secret" or "api_key".
-#: includes/sync/class-option-policy.php:369
+#: includes/sync/class-option-policy.php:402
 #, php-format
 msgid "Names containing \"%s\" are never pushed, because they usually hold credentials."
 msgstr ""
 
 #. translators: %s: a protected option name or pattern, for example siteurl.
-#: includes/sync/class-option-policy.php:375
+#: includes/sync/class-option-policy.php:408
 #, php-format
 msgid "%s is a protected setting that Keepmerge never pushes."
 msgstr ""
@@ -968,7 +973,7 @@ msgid "Option"
 msgstr ""
 
 #: includes/sync/class-planner.php:1636
-#: includes/sync/exporters/class-options.php:86
+#: includes/sync/exporters/class-options.php:87
 #: build/admin.js:110
 #: src/admin/screens/pushes/labels.js:89
 msgid "Widgets"
@@ -1029,57 +1034,57 @@ msgstr ""
 msgid "This site sends its HTTP requests through a proxy (WP_PROXY_HOST), so Keepmerge cannot make sure the connection goes to the address it checked. Exclude the live site from the proxy (WP_PROXY_BYPASS_HOSTS) to connect."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:98
+#: includes/transfer/class-push-runner.php:103
 msgid "This plan is not ready to push: wait until it is finished, or create a new plan."
 msgstr ""
 
 #. translators: %s: live site host name.
-#: includes/transfer/class-push-runner.php:114
+#: includes/transfer/class-push-runner.php:119
 #, php-format
 msgid "Type the live site's domain exactly as shown (%s) to confirm the push."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:121
+#: includes/transfer/class-push-runner.php:126
 msgid "Decide every conflict and clear every blocked item before pushing."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:125
+#: includes/transfer/class-push-runner.php:130
 msgid "A push to this live site is still in progress. Resume or abort it first."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:145
+#: includes/transfer/class-push-runner.php:150
 msgid "Nothing to push: live already has every change you chose."
 msgstr ""
 
 #. translators: 1: items in the plan, 2: most items per push.
-#: includes/transfer/class-push-runner.php:151
+#: includes/transfer/class-push-runner.php:156
 #, php-format
 msgid "This plan would push %1$s items; a push carries at most %2$s. Plan again with \"Only some kinds\" and push in parts."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:157
+#: includes/transfer/class-push-runner.php:162
 msgid "The plan changed since its summary was made. Plan again."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:290
-#: includes/transfer/class-push-runner.php:311
+#: includes/transfer/class-push-runner.php:295
+#: includes/transfer/class-push-runner.php:316
 msgid "The push moved on in another window or tab. The screen now shows where it is."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:294
-#: includes/transfer/class-push-runner.php:439
+#: includes/transfer/class-push-runner.php:299
+#: includes/transfer/class-push-runner.php:450
 msgid "A step of this push is running in another window or tab. Wait a moment."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:435
+#: includes/transfer/class-push-runner.php:446
 msgid "Live is applying this push or has applied it. A live administrator can roll it back on the live site."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:987
+#: includes/transfer/class-push-runner.php:1005
 msgid "Live did not receive every item of this push. Abort it and push again."
 msgstr ""
 
-#: includes/transfer/class-push-runner.php:1243
+#: includes/transfer/class-push-runner.php:1261
 msgid "Live checked the items it received against the plan and they did not match, so it set the push aside. Plan again and push again."
 msgstr ""
 
@@ -1353,530 +1358,10 @@ msgid "Denied"
 msgstr ""
 
 #: build/admin.js:1
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/labels.js:37
 #: src/admin/screens/pushes/PushDetail.jsx:124
 msgid "Failed"
-msgstr ""
-
-#: build/admin.js:7
-#: build/admin.js:146
-#: src/admin/App.jsx:40
-#: src/admin/screens/OverviewScreen.jsx:111
-msgid "Overview"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:112
-msgid "Where this site stands: what it is connected to, whether the server is ready, and the latest push."
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:156
-msgid "Sends to"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:158
-msgid "Not connected to a live site."
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:159
-msgid "On a staging site, connect it to its live site from the Send tab."
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:163
-msgid "Open Send"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:168
-msgid "Receives from"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:170
-msgid "No staging site paired."
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:171
-msgid "On a live site, pair its staging site from the Receive tab."
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:175
-msgid "Open Receive"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:178
-msgid "Last push"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:181
-msgid "Started"
-msgstr ""
-
-#: build/admin.js:7
-#: build/admin.js:131
-#: build/admin.js:133
-#: src/admin/screens/OverviewScreen.jsx:183
-#: src/admin/screens/PushesScreen.jsx:194
-#: src/admin/screens/PushesScreen.jsx:262
-msgid "State"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:194
-msgid "No pushes yet."
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:195
-msgid "Once sites are paired, every push is listed with its result in the Pushes tab."
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:205
-msgid "Open Pushes"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:217
-msgid "Readiness"
-msgstr ""
-
-#: build/admin.js:7
-#: src/admin/screens/OverviewScreen.jsx:218
-msgid "What this server needs before it can pair and push. Keepmerge reads these settings; it never changes them."
-msgstr ""
-
-#. translators: 1: checks passed, 2: total checks.
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:226
-#, js-format
-msgid "%1$d of %2$d ready"
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:78
-#: src/admin/screens/OverviewScreen.jsx:37
-#: src/admin/screens/send/PlanCard.jsx:224
-msgid "Ready"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:40
-msgid "Check"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:42
-msgid "Needs action"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:258
-msgid "No checks to show."
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:17
-#: build/admin.js:21
-#: build/admin.js:27
-#: src/admin/screens/OverviewScreen.jsx:264
-#: src/admin/screens/send/CodeReport.jsx:235
-#: src/admin/screens/send/CodeReport.jsx:323
-#: src/admin/screens/send/DiffDrawer.jsx:142
-msgid "This site"
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:93
-#: build/admin.js:138
-#: src/admin/screens/AuditScreen.jsx:174
-#: src/admin/screens/OverviewScreen.jsx:266
-#: src/admin/screens/send/ConnectCard.jsx:149
-msgid "Address"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:268
-msgid "Site ID"
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:18
-#: src/admin/screens/OverviewScreen.jsx:272
-#: src/admin/screens/send/CodeReport.jsx:266
-msgid "WordPress"
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:19
-#: src/admin/screens/OverviewScreen.jsx:274
-#: src/admin/screens/send/CodeReport.jsx:275
-msgid "PHP"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:276
-msgid "Keepmerge"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:278
-#: src/admin/screens/send/plan-labels.js:452
-msgid "WooCommerce"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:282
-msgid "Not active"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/OverviewScreen.jsx:286
-msgid "The site ID identifies this install to a paired site. A copied database gets a new one automatically."
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:27
-#: src/admin/components/Modal.jsx:107
-#: src/admin/screens/send/DiffDrawer.jsx:121
-msgid "Close"
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:17
-#: build/admin.js:44
-#: build/admin.js:80
-#: build/admin.js:95
-#: src/admin/components/ConfirmDialog.jsx:40
-#: src/admin/screens/send/BaselineCard.jsx:463
-#: src/admin/screens/send/ConnectCard.jsx:231
-#: src/admin/screens/send/PlanCard.jsx:291
-#: src/admin/screens/send/PushDialog.jsx:81
-msgid "Cancel"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/api.js:24
-msgid "The request did not complete. Check your connection and try again."
-msgstr ""
-
-#: build/admin.js:8
-#: build/admin.js:98
-#: src/admin/screens/receive/time.js:67
-#: src/admin/screens/send/ConnectionCard.jsx:157
-msgid "Never"
-msgstr ""
-
-#: build/admin.js:8
-#: src/admin/screens/receive/time.js:71
-msgid "Just now"
-msgstr ""
-
-#. translators: %d: minutes.
-#: build/admin.js:9
-#: src/admin/screens/receive/time.js:76
-#, js-format
-msgid "%d min ago"
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:25
-msgid "Matched"
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:26
-msgid "Linked to the same item on live."
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:31
-msgid "Same slug and date"
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:32
-msgid "Not linked: the plan asks you to confirm each one."
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:37
-msgid "Possible duplicates"
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:38
-msgid "Live has another item with this slug: skipped unless you decide."
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:43
-msgid "Not compared"
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:44
-msgid "The live site does not include this type."
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:49
-msgid "Only on this site"
-msgstr ""
-
-#: build/admin.js:9
-#: src/admin/screens/send/BaselineCard.jsx:50
-msgid "A push would create it on live."
-msgstr ""
-
-#. translators: %s: "this site" or "live".
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:95
-#, js-format
-msgid "Open on %s (new tab)"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:194
-msgid "Not run yet"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:196
-msgid "Running"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:198
-msgid "Done"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:10
-#: build/admin.js:58
-#: src/admin/screens/send/BaselineCard.jsx:200
-#: src/admin/screens/send/push-labels.js:59
-#: src/admin/screens/send/PushProgress.jsx:338
-msgid "Stopped"
-msgstr ""
-
-#: build/admin.js:10
-#: build/admin.js:39
-#: src/admin/screens/send/BaselineCard.jsx:208
-#: src/admin/screens/send/PlanRows.jsx:269
-msgid "Item"
-msgstr ""
-
-#: build/admin.js:10
-#: build/admin.js:27
-#: build/admin.js:35
-#: build/admin.js:36
-#: build/admin.js:37
-#: build/admin.js:43
-#: src/admin/screens/send/BaselineCard.jsx:211
-#: src/admin/screens/send/DiffDrawer.jsx:111
-#: src/admin/screens/send/PlanRows.jsx:137
-#: src/admin/screens/send/PlanRows.jsx:162
-#: src/admin/screens/send/PlanRows.jsx:171
-#: src/admin/screens/send/PlanSummary.jsx:200
-msgid "(no title)"
-msgstr ""
-
-#: build/admin.js:10
-#: build/admin.js:26
-#: build/admin.js:32
-#: src/admin/screens/send/BaselineCard.jsx:218
-#: src/admin/screens/send/DiffDrawer.jsx:45
-#: src/admin/screens/send/DiffDrawer.jsx:220
-msgid "On this site"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:221
-msgid "this site"
-msgstr ""
-
-#: build/admin.js:10
-#: build/admin.js:26
-#: build/admin.js:32
-#: src/admin/screens/send/BaselineCard.jsx:226
-#: src/admin/screens/send/DiffDrawer.jsx:44
-#: src/admin/screens/send/DiffDrawer.jsx:219
-msgid "On live"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:230
-msgid "live"
-msgstr ""
-
-#: build/admin.js:10
-#: build/admin.js:29
-#: build/admin.js:39
-#: src/admin/screens/send/BaselineCard.jsx:232
-#: src/admin/screens/send/DiffDrawer.jsx:164
-#: src/admin/screens/send/PlanRows.jsx:206
-msgid "Not on live"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:240
-msgid "Baseline"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:241
-msgid "Matches the items of both sites once, before the first plan. It reads the live site and writes nothing there."
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:248
-msgid "The baseline could not finish"
-msgstr ""
-
-#: build/admin.js:10
-#: src/admin/screens/send/BaselineCard.jsx:254
-msgid "The last run stopped"
-msgstr ""
-
-#. translators: 1: items matched so far, 2: all items.
-#: build/admin.js:11
-#: src/admin/screens/send/BaselineCard.jsx:264
-#, js-format
-msgid "Matching items: %1$s of %2$s"
-msgstr ""
-
-#. translators: 1: matched items, 2: items compared.
-#: build/admin.js:12
-#: src/admin/screens/send/BaselineCard.jsx:281
-#, js-format
-msgid "%1$s of %2$s items matched"
-msgstr ""
-
-#: build/admin.js:12
-#: build/admin.js:85
-#: src/admin/screens/send/BaselineCard.jsx:289
-#: src/admin/screens/send/PlanCard.jsx:428
-msgid "Clone date: not known"
-msgstr ""
-
-#. translators: %s: date.
-#: build/admin.js:13
-#: build/admin.js:86
-#: src/admin/screens/send/BaselineCard.jsx:292
-#: src/admin/screens/send/PlanCard.jsx:431
-#, js-format
-msgid "Clone date: %s"
-msgstr ""
-
-#. translators: %s: date and time.
-#: build/admin.js:14
-#: src/admin/screens/send/BaselineCard.jsx:298
-#, js-format
-msgid "Run %s"
-msgstr ""
-
-#: build/admin.js:14
-#: src/admin/screens/send/BaselineCard.jsx:303
-msgid "Baseline results"
-msgstr ""
-
-#. translators: %s: number of items.
-#: build/admin.js:15
-#: src/admin/screens/send/BaselineCard.jsx:320
-#, js-format
-msgid "%s item was not compared: the live site does not include its type."
-msgid_plural "%s items were not compared: the live site does not include their types."
-msgstr[0] ""
-msgstr[1] ""
-
-#: build/admin.js:15
-#: src/admin/screens/send/BaselineCard.jsx:332
-msgid "Without a clone date, every matched item that differs between the sites becomes a conflict in the first plan."
-msgstr ""
-
-#: build/admin.js:15
-#: build/admin.js:39
-#: src/admin/screens/send/BaselineCard.jsx:340
-#: src/admin/screens/send/PlanRows.jsx:320
-msgid "Show"
-msgstr ""
-
-#: build/admin.js:15
-#: src/admin/screens/send/BaselineCard.jsx:363
-msgid "No items in this group."
-msgstr ""
-
-#. translators: 1: first row, 2: last row, 3: all rows.
-#: build/admin.js:16
-#: build/admin.js:40
-#: src/admin/screens/send/BaselineCard.jsx:379
-#: src/admin/screens/send/PlanRows.jsx:382
-#, js-format
-msgid "%1$s–%2$s of %3$s"
-msgstr ""
-
-#: build/admin.js:16
-#: build/admin.js:40
-#: src/admin/screens/send/BaselineCard.jsx:392
-#: src/admin/screens/send/PlanRows.jsx:395
-msgid "Previous"
-msgstr ""
-
-#: build/admin.js:16
-#: build/admin.js:40
-#: src/admin/screens/send/BaselineCard.jsx:400
-#: src/admin/screens/send/PlanRows.jsx:403
-msgid "Next"
-msgstr ""
-
-#: build/admin.js:16
-#: build/admin.js:17
-#: src/admin/screens/send/BaselineCard.jsx:411
-#: src/admin/screens/send/BaselineCard.jsx:458
-msgid "Run the baseline again"
-msgstr ""
-
-#. translators: 1: matched items, 2: items compared.
-#: build/admin.js:17
-#: src/admin/screens/send/BaselineCard.jsx:179
-#, js-format
-msgid "Baseline done: %1$s of %2$s items matched."
-msgstr ""
-
-#: build/admin.js:17
-#: src/admin/screens/send/BaselineCard.jsx:425
-msgid "When was this site copied from live?"
-msgstr ""
-
-#: build/admin.js:17
-#: src/admin/screens/send/BaselineCard.jsx:439
-msgid "The first plan uses it: an item changed after this date on only one site is pushed or kept by date, and the plan marks those decisions."
-msgstr ""
-
-#: build/admin.js:17
-#: src/admin/screens/send/BaselineCard.jsx:448
-msgid "I don't know the date"
-msgstr ""
-
-#: build/admin.js:17
-#: src/admin/screens/send/BaselineCard.jsx:450
-msgid "Then every matched item that differs becomes a conflict for you to decide."
-msgstr ""
-
-#: build/admin.js:17
-#: src/admin/screens/send/BaselineCard.jsx:459
-msgid "Run the baseline"
 msgstr ""
 
 #: build/admin.js:1
@@ -2008,8 +1493,8 @@ msgstr ""
 
 #: build/admin.js:1
 #: build/admin.js:44
-#: build/admin.js:131
-#: build/admin.js:133
+#: build/admin.js:132
+#: build/admin.js:134
 #: src/admin/screens/PushesScreen.jsx:181
 #: src/admin/screens/PushesScreen.jsx:253
 #: src/admin/screens/send/plan-labels.js:146
@@ -2229,7 +1714,7 @@ msgstr ""
 #: build/admin.js:1
 #: build/admin.js:31
 #: build/admin.js:110
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/pushes/labels.js:78
 #: src/admin/screens/send/plan-labels.js:448
 #: src/admin/screens/send/plan-labels.js:590
@@ -2239,21 +1724,28 @@ msgid "Content"
 msgstr ""
 
 #: build/admin.js:1
-#: build/admin.js:143
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:278
+#: src/admin/screens/send/plan-labels.js:452
+msgid "WooCommerce"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:144
 #: src/admin/screens/send/plan-labels.js:455
 #: src/admin/screens/SettingsScreen.jsx:32
 msgid "Menus"
 msgstr ""
 
 #: build/admin.js:1
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/send/plan-labels.js:458
 #: src/admin/screens/SettingsScreen.jsx:31
 msgid "Site editor"
 msgstr ""
 
 #: build/admin.js:1
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/send/plan-labels.js:462
 #: src/admin/screens/SettingsScreen.jsx:311
 msgid "Options"
@@ -2284,6 +1776,902 @@ msgstr ""
 msgid "Stock and sales"
 msgstr ""
 
+#: build/admin.js:1
+#: build/admin.js:121
+#: src/admin/screens/pushes/RecoveryCard.jsx:272
+#: src/admin/screens/send/push-labels.js:14
+#: src/admin/screens/send/push-labels.js:74
+msgid "Interrupted"
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:20
+msgid "Sending files"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:48
+#: src/admin/screens/send/push-labels.js:24
+#: src/admin/screens/send/PushProgress.jsx:140
+msgid "Sending"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:53
+#: src/admin/screens/send/push-labels.js:27
+#: src/admin/screens/send/PushProgress.jsx:244
+msgid "Paused"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:48
+#: build/admin.js:56
+#: src/admin/screens/send/push-labels.js:29
+#: src/admin/screens/send/PushProgress.jsx:128
+#: src/admin/screens/send/PushProgress.jsx:309
+msgid "Staged on live"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:53
+#: src/admin/screens/send/push-labels.js:33
+#: src/admin/screens/send/PushProgress.jsx:258
+msgid "Waiting for review on live"
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:40
+msgid "Taking snapshots"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:48
+#: src/admin/screens/send/push-labels.js:44
+#: src/admin/screens/send/PushProgress.jsx:140
+msgid "Applying on live"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:123
+#: build/admin.js:133
+#: src/admin/screens/pushes/PushDetail.jsx:120
+#: src/admin/screens/PushesScreen.jsx:215
+#: src/admin/screens/send/push-labels.js:48
+msgid "Applied"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:54
+#: src/admin/screens/send/push-labels.js:52
+#: src/admin/screens/send/PushProgress.jsx:275
+msgid "Applied on live"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:121
+#: src/admin/screens/pushes/RecoveryCard.jsx:280
+#: src/admin/screens/send/push-labels.js:56
+msgid "Stopped at an item"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:10
+#: build/admin.js:58
+#: src/admin/screens/send/BaselineCard.jsx:200
+#: src/admin/screens/send/push-labels.js:59
+#: src/admin/screens/send/PushProgress.jsx:338
+msgid "Stopped"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:58
+#: src/admin/screens/send/push-labels.js:61
+#: src/admin/screens/send/PushProgress.jsx:344
+msgid "Aborted"
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:64
+msgid "Opened"
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:66
+msgid "Receiving"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:77
+#: build/admin.js:102
+#: src/admin/screens/receive/KeyCard.jsx:77
+#: src/admin/screens/send/PlanCard.jsx:212
+#: src/admin/screens/send/push-labels.js:70
+msgid "Expired"
+msgstr ""
+
+#: build/admin.js:1
+#: build/admin.js:121
+#: src/admin/screens/pushes/RecoveryCard.jsx:292
+#: src/admin/screens/send/push-labels.js:78
+msgid "Rolling back"
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:82
+msgid "Rolled back"
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:99
+msgid "Changed on this site after the plan, so it was not sent. Plan again to push it."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:103
+msgid "Larger than the live site accepts in one request."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:107
+msgid "Could no longer be read on this site."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:111
+msgid "This type is never pushed."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:115
+msgid "The live site does not include this type (its own Settings)."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:119
+msgid "The live site does not include this taxonomy."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:123
+msgid "The live site never accepts this option."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:127
+msgid "Not on the live site's own option allowlist. Add it in live's Settings to push it."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:131
+msgid "The live site does not include widgets."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:135
+msgid "The live site already has this item."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:139
+msgid "The live site no longer has this item."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:143
+msgid "Products are never moved to the Trash by a push."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:147
+msgid "This action is not available for this kind of item."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:151
+msgid "Carries a value the live site does not take as data."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:155
+msgid "Its references to other items could not be read."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:159
+msgid "Points to an item the live site does not have and this push does not bring."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:163
+msgid "A file path was refused by the live site."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:167
+msgid "The file type is not allowed on the live site."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:171
+msgid "Carries file paths as custom fields, which the live site refuses."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:175
+msgid "Its theme is not installed on the live site."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:179
+msgid "Its file is missing on this site, so it was not sent."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:183
+msgid "The live site did not receive all of its files."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:187
+msgid "The live site refused one of its files (its content does not match its type)."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:191
+msgid "One of its files already belongs to another item on the live site, which a push never shares."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:195
+msgid "Changed on the live site after the plan was made, so live kept its own version."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:199
+msgid "Skipped by a live administrator in the review."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:203
+msgid "Still held after WordPress's HTML filter, so live did not write it."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:207
+msgid "Uses an item that was not created on live, so it was not written."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:211
+msgid "Uses an item the live site no longer has."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:215
+msgid "Its references did not match its data, so live did not write it."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:219
+msgid "Another file took its file name on live in the meantime."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:223
+msgid "WooCommerce is not active on the live site."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:227
+msgid "Uses a product attribute the live site does not have."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:231
+msgid "WordPress could not save it on live."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:235
+msgid "Writing it stopped with an error on live."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:239
+msgid "The apply stopped while this item was being written; live holds neither its old nor its new version."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:243
+msgid "Skipped by a live administrator after it failed; it was put back as it was."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:247
+msgid "Edited on this site after the push."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:251
+msgid "A product the push created that was ordered since."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:255
+msgid "The file was replaced on this site after the push."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:259
+msgid "Its snapshots were removed by the retention setting, so it can no longer be rolled back."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:263
+msgid "It was rolled back already."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:267
+msgid "Nothing of it was written on this site."
+msgstr ""
+
+#: build/admin.js:1
+#: src/admin/screens/send/push-labels.js:271
+msgid "Your own HTML filter would change it when it is put back."
+msgstr ""
+
+#. translators: %s: field name.
+#: build/admin.js:2
+#: src/admin/screens/send/push-labels.js:287
+#, js-format
+msgid "The live site refused the field \"%s\"."
+msgstr ""
+
+#: build/admin.js:2
+#: src/admin/screens/send/push-labels.js:293
+msgid "The live site refused this item's data."
+msgstr ""
+
+#. translators: %s: reason code.
+#: build/admin.js:3
+#: src/admin/screens/send/push-labels.js:300
+#, js-format
+msgid "Refused by the live site (%s)."
+msgstr ""
+
+#. translators: %s: a size in bytes.
+#: build/admin.js:4
+#: src/admin/screens/send/push-labels.js:533
+#, js-format
+msgid "%s bytes"
+msgstr ""
+
+#. translators: %s: a size in kilobytes.
+#: build/admin.js:5
+#: src/admin/screens/send/push-labels.js:539
+#, js-format
+msgid "%s KB"
+msgstr ""
+
+#. translators: %s: a size in megabytes.
+#: build/admin.js:6
+#: src/admin/screens/send/push-labels.js:545
+#, js-format
+msgid "%s MB"
+msgstr ""
+
+#. translators: %s: a size in gigabytes.
+#: build/admin.js:7
+#: src/admin/screens/send/push-labels.js:551
+#, js-format
+msgid "%s GB"
+msgstr ""
+
+#: build/admin.js:7
+#: build/admin.js:147
+#: src/admin/App.jsx:40
+#: src/admin/screens/OverviewScreen.jsx:111
+msgid "Overview"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:112
+msgid "Where this site stands: what it is connected to, whether the server is ready, and the latest push."
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:156
+msgid "Sends to"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:158
+msgid "Not connected to a live site."
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:159
+msgid "On a staging site, connect it to its live site from the Send tab."
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:163
+msgid "Open Send"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:168
+msgid "Receives from"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:170
+msgid "No staging site paired."
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:171
+msgid "On a live site, pair its staging site from the Receive tab."
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:175
+msgid "Open Receive"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:178
+msgid "Last push"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:181
+msgid "Started"
+msgstr ""
+
+#: build/admin.js:7
+#: build/admin.js:132
+#: build/admin.js:134
+#: src/admin/screens/OverviewScreen.jsx:183
+#: src/admin/screens/PushesScreen.jsx:194
+#: src/admin/screens/PushesScreen.jsx:262
+msgid "State"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:194
+msgid "No pushes yet."
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:195
+msgid "Once sites are paired, every push is listed with its result in the Pushes tab."
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:205
+msgid "Open Pushes"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:217
+msgid "Readiness"
+msgstr ""
+
+#: build/admin.js:7
+#: src/admin/screens/OverviewScreen.jsx:218
+msgid "What this server needs before it can pair and push. Keepmerge reads these settings; it never changes them."
+msgstr ""
+
+#. translators: 1: checks passed, 2: total checks.
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:226
+#, js-format
+msgid "%1$d of %2$d ready"
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:78
+#: src/admin/screens/OverviewScreen.jsx:37
+#: src/admin/screens/send/PlanCard.jsx:224
+msgid "Ready"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:40
+msgid "Check"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:42
+msgid "Needs action"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:258
+msgid "No checks to show."
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:17
+#: build/admin.js:21
+#: build/admin.js:27
+#: src/admin/screens/OverviewScreen.jsx:264
+#: src/admin/screens/send/CodeReport.jsx:235
+#: src/admin/screens/send/CodeReport.jsx:323
+#: src/admin/screens/send/DiffDrawer.jsx:142
+msgid "This site"
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:93
+#: build/admin.js:139
+#: src/admin/screens/AuditScreen.jsx:174
+#: src/admin/screens/OverviewScreen.jsx:266
+#: src/admin/screens/send/ConnectCard.jsx:149
+msgid "Address"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:268
+msgid "Site ID"
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:18
+#: src/admin/screens/OverviewScreen.jsx:272
+#: src/admin/screens/send/CodeReport.jsx:266
+msgid "WordPress"
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:19
+#: src/admin/screens/OverviewScreen.jsx:274
+#: src/admin/screens/send/CodeReport.jsx:275
+msgid "PHP"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:276
+msgid "Keepmerge"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:282
+msgid "Not active"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/OverviewScreen.jsx:286
+msgid "The site ID identifies this install to a paired site. A copied database gets a new one automatically."
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:27
+#: src/admin/components/Modal.jsx:107
+#: src/admin/screens/send/DiffDrawer.jsx:121
+msgid "Close"
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:17
+#: build/admin.js:44
+#: build/admin.js:80
+#: build/admin.js:95
+#: src/admin/components/ConfirmDialog.jsx:40
+#: src/admin/screens/send/BaselineCard.jsx:463
+#: src/admin/screens/send/ConnectCard.jsx:231
+#: src/admin/screens/send/PlanCard.jsx:291
+#: src/admin/screens/send/PushDialog.jsx:81
+msgid "Cancel"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/api.js:24
+msgid "The request did not complete. Check your connection and try again."
+msgstr ""
+
+#: build/admin.js:8
+#: build/admin.js:98
+#: src/admin/screens/receive/time.js:67
+#: src/admin/screens/send/ConnectionCard.jsx:157
+msgid "Never"
+msgstr ""
+
+#: build/admin.js:8
+#: src/admin/screens/receive/time.js:71
+msgid "Just now"
+msgstr ""
+
+#. translators: %d: minutes.
+#: build/admin.js:9
+#: src/admin/screens/receive/time.js:76
+#, js-format
+msgid "%d min ago"
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:25
+msgid "Matched"
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:26
+msgid "Linked to the same item on live."
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:31
+msgid "Same slug and date"
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:32
+msgid "Not linked: the plan asks you to confirm each one."
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:37
+msgid "Possible duplicates"
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:38
+msgid "Live has another item with this slug: skipped unless you decide."
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:43
+msgid "Not compared"
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:44
+msgid "The live site does not include this type."
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:49
+msgid "Only on this site"
+msgstr ""
+
+#: build/admin.js:9
+#: src/admin/screens/send/BaselineCard.jsx:50
+msgid "A push would create it on live."
+msgstr ""
+
+#. translators: %s: "this site" or "live".
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:95
+#, js-format
+msgid "Open on %s (new tab)"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:194
+msgid "Not run yet"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:196
+msgid "Running"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:198
+msgid "Done"
+msgstr ""
+
+#: build/admin.js:10
+#: build/admin.js:39
+#: src/admin/screens/send/BaselineCard.jsx:208
+#: src/admin/screens/send/PlanRows.jsx:269
+msgid "Item"
+msgstr ""
+
+#: build/admin.js:10
+#: build/admin.js:27
+#: build/admin.js:35
+#: build/admin.js:36
+#: build/admin.js:37
+#: build/admin.js:43
+#: src/admin/screens/send/BaselineCard.jsx:211
+#: src/admin/screens/send/DiffDrawer.jsx:111
+#: src/admin/screens/send/PlanRows.jsx:137
+#: src/admin/screens/send/PlanRows.jsx:162
+#: src/admin/screens/send/PlanRows.jsx:171
+#: src/admin/screens/send/PlanSummary.jsx:200
+msgid "(no title)"
+msgstr ""
+
+#: build/admin.js:10
+#: build/admin.js:26
+#: build/admin.js:32
+#: src/admin/screens/send/BaselineCard.jsx:218
+#: src/admin/screens/send/DiffDrawer.jsx:45
+#: src/admin/screens/send/DiffDrawer.jsx:220
+msgid "On this site"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:221
+msgid "this site"
+msgstr ""
+
+#: build/admin.js:10
+#: build/admin.js:26
+#: build/admin.js:32
+#: src/admin/screens/send/BaselineCard.jsx:226
+#: src/admin/screens/send/DiffDrawer.jsx:44
+#: src/admin/screens/send/DiffDrawer.jsx:219
+msgid "On live"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:230
+msgid "live"
+msgstr ""
+
+#: build/admin.js:10
+#: build/admin.js:29
+#: build/admin.js:39
+#: src/admin/screens/send/BaselineCard.jsx:232
+#: src/admin/screens/send/DiffDrawer.jsx:164
+#: src/admin/screens/send/PlanRows.jsx:206
+msgid "Not on live"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:240
+msgid "Baseline"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:241
+msgid "Matches the items of both sites once, before the first plan. It reads the live site and writes nothing there."
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:248
+msgid "The baseline could not finish"
+msgstr ""
+
+#: build/admin.js:10
+#: src/admin/screens/send/BaselineCard.jsx:254
+msgid "The last run stopped"
+msgstr ""
+
+#. translators: 1: items matched so far, 2: all items.
+#: build/admin.js:11
+#: src/admin/screens/send/BaselineCard.jsx:264
+#, js-format
+msgid "Matching items: %1$s of %2$s"
+msgstr ""
+
+#. translators: 1: matched items, 2: items compared.
+#: build/admin.js:12
+#: src/admin/screens/send/BaselineCard.jsx:281
+#, js-format
+msgid "%1$s of %2$s items matched"
+msgstr ""
+
+#: build/admin.js:12
+#: build/admin.js:85
+#: src/admin/screens/send/BaselineCard.jsx:289
+#: src/admin/screens/send/PlanCard.jsx:428
+msgid "Clone date: not known"
+msgstr ""
+
+#. translators: %s: date.
+#: build/admin.js:13
+#: build/admin.js:86
+#: src/admin/screens/send/BaselineCard.jsx:292
+#: src/admin/screens/send/PlanCard.jsx:431
+#, js-format
+msgid "Clone date: %s"
+msgstr ""
+
+#. translators: %s: date and time.
+#: build/admin.js:14
+#: src/admin/screens/send/BaselineCard.jsx:298
+#, js-format
+msgid "Run %s"
+msgstr ""
+
+#: build/admin.js:14
+#: src/admin/screens/send/BaselineCard.jsx:303
+msgid "Baseline results"
+msgstr ""
+
+#. translators: %s: number of items.
+#: build/admin.js:15
+#: src/admin/screens/send/BaselineCard.jsx:320
+#, js-format
+msgid "%s item was not compared: the live site does not include its type."
+msgid_plural "%s items were not compared: the live site does not include their types."
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/admin.js:15
+#: src/admin/screens/send/BaselineCard.jsx:332
+msgid "Without a clone date, every matched item that differs between the sites becomes a conflict in the first plan."
+msgstr ""
+
+#: build/admin.js:15
+#: build/admin.js:39
+#: src/admin/screens/send/BaselineCard.jsx:340
+#: src/admin/screens/send/PlanRows.jsx:320
+msgid "Show"
+msgstr ""
+
+#: build/admin.js:15
+#: src/admin/screens/send/BaselineCard.jsx:363
+msgid "No items in this group."
+msgstr ""
+
+#. translators: 1: first row, 2: last row, 3: all rows.
+#: build/admin.js:16
+#: build/admin.js:40
+#: src/admin/screens/send/BaselineCard.jsx:379
+#: src/admin/screens/send/PlanRows.jsx:382
+#, js-format
+msgid "%1$s–%2$s of %3$s"
+msgstr ""
+
+#: build/admin.js:16
+#: build/admin.js:40
+#: src/admin/screens/send/BaselineCard.jsx:392
+#: src/admin/screens/send/PlanRows.jsx:395
+msgid "Previous"
+msgstr ""
+
+#: build/admin.js:16
+#: build/admin.js:40
+#: src/admin/screens/send/BaselineCard.jsx:400
+#: src/admin/screens/send/PlanRows.jsx:403
+msgid "Next"
+msgstr ""
+
+#: build/admin.js:16
+#: build/admin.js:17
+#: src/admin/screens/send/BaselineCard.jsx:411
+#: src/admin/screens/send/BaselineCard.jsx:458
+msgid "Run the baseline again"
+msgstr ""
+
+#. translators: 1: matched items, 2: items compared.
+#: build/admin.js:17
+#: src/admin/screens/send/BaselineCard.jsx:179
+#, js-format
+msgid "Baseline done: %1$s of %2$s items matched."
+msgstr ""
+
+#: build/admin.js:17
+#: src/admin/screens/send/BaselineCard.jsx:425
+msgid "When was this site copied from live?"
+msgstr ""
+
+#: build/admin.js:17
+#: src/admin/screens/send/BaselineCard.jsx:439
+msgid "The first plan uses it: an item changed after this date on only one site is pushed or kept by date, and the plan marks those decisions."
+msgstr ""
+
+#: build/admin.js:17
+#: src/admin/screens/send/BaselineCard.jsx:448
+msgid "I don't know the date"
+msgstr ""
+
+#: build/admin.js:17
+#: src/admin/screens/send/BaselineCard.jsx:450
+msgid "Then every matched item that differs becomes a conflict for you to decide."
+msgstr ""
+
+#: build/admin.js:17
+#: src/admin/screens/send/BaselineCard.jsx:459
+msgid "Run the baseline"
+msgstr ""
+
 #: build/admin.js:17
 #: build/admin.js:31
 #: src/admin/screens/send/CodeReport.jsx:58
@@ -2302,7 +2690,7 @@ msgid "Code is reported, not pushed"
 msgstr ""
 
 #: build/admin.js:17
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/send/CodeReport.jsx:152
 #: src/admin/screens/SettingsScreen.jsx:438
 msgid "Keepmerge reports code differences. It does not copy, install, update or activate plugins or themes."
@@ -2751,8 +3139,8 @@ msgid "Image metadata"
 msgstr ""
 
 #: build/admin.js:31
-#: build/admin.js:132
-#: build/admin.js:134
+#: build/admin.js:133
+#: build/admin.js:135
 #: src/admin/screens/PushesScreen.jsx:209
 #: src/admin/screens/PushesScreen.jsx:277
 #: src/admin/screens/send/plan-labels.js:621
@@ -2976,7 +3364,7 @@ msgstr ""
 #: build/admin.js:39
 #: build/admin.js:94
 #: build/admin.js:106
-#: build/admin.js:132
+#: build/admin.js:133
 #: src/admin/screens/PushesScreen.jsx:236
 #: src/admin/screens/receive/WindowCard.jsx:31
 #: src/admin/screens/send/ConnectCard.jsx:175
@@ -3015,7 +3403,7 @@ msgid "Changed or deleted on live"
 msgstr ""
 
 #: build/admin.js:39
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/PushDetail.jsx:123
 #: src/admin/screens/send/PlanRows.jsx:22
 msgid "Skipped"
@@ -3303,9 +3691,9 @@ msgstr ""
 
 #. translators: %s: domain of the live site.
 #: build/admin.js:48
-#: build/admin.js:118
-#: build/admin.js:129
-#: build/admin.js:137
+#: build/admin.js:119
+#: build/admin.js:130
+#: build/admin.js:138
 #: src/admin/screens/pushes/PushDetail.jsx:259
 #: src/admin/screens/pushes/RecoveryCard.jsx:47
 #: src/admin/screens/PushesScreen.jsx:370
@@ -3322,384 +3710,6 @@ msgstr ""
 #: build/admin.js:48
 #: src/admin/screens/send/PushDialog.jsx:211
 msgid "The push did not start"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:120
-#: src/admin/screens/pushes/RecoveryCard.jsx:272
-#: src/admin/screens/send/push-labels.js:14
-#: src/admin/screens/send/push-labels.js:74
-msgid "Interrupted"
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:20
-msgid "Sending files"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:48
-#: src/admin/screens/send/push-labels.js:24
-#: src/admin/screens/send/PushProgress.jsx:140
-msgid "Sending"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:53
-#: src/admin/screens/send/push-labels.js:27
-#: src/admin/screens/send/PushProgress.jsx:244
-msgid "Paused"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:48
-#: build/admin.js:56
-#: src/admin/screens/send/push-labels.js:29
-#: src/admin/screens/send/PushProgress.jsx:128
-#: src/admin/screens/send/PushProgress.jsx:309
-msgid "Staged on live"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:53
-#: src/admin/screens/send/push-labels.js:33
-#: src/admin/screens/send/PushProgress.jsx:258
-msgid "Waiting for review on live"
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:40
-msgid "Taking snapshots"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:48
-#: src/admin/screens/send/push-labels.js:44
-#: src/admin/screens/send/PushProgress.jsx:140
-msgid "Applying on live"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:122
-#: build/admin.js:132
-#: src/admin/screens/pushes/PushDetail.jsx:120
-#: src/admin/screens/PushesScreen.jsx:215
-#: src/admin/screens/send/push-labels.js:48
-msgid "Applied"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:54
-#: src/admin/screens/send/push-labels.js:52
-#: src/admin/screens/send/PushProgress.jsx:275
-msgid "Applied on live"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:120
-#: src/admin/screens/pushes/RecoveryCard.jsx:280
-#: src/admin/screens/send/push-labels.js:56
-msgid "Stopped at an item"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:58
-#: src/admin/screens/send/push-labels.js:61
-#: src/admin/screens/send/PushProgress.jsx:344
-msgid "Aborted"
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:64
-msgid "Opened"
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:66
-msgid "Receiving"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:77
-#: build/admin.js:102
-#: src/admin/screens/receive/KeyCard.jsx:77
-#: src/admin/screens/send/PlanCard.jsx:212
-#: src/admin/screens/send/push-labels.js:70
-msgid "Expired"
-msgstr ""
-
-#: build/admin.js:1
-#: build/admin.js:120
-#: src/admin/screens/pushes/RecoveryCard.jsx:292
-#: src/admin/screens/send/push-labels.js:78
-msgid "Rolling back"
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:82
-msgid "Rolled back"
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:99
-msgid "Changed on this site after the plan, so it was not sent. Plan again to push it."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:103
-msgid "Larger than the live site accepts in one request."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:107
-msgid "Could no longer be read on this site."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:111
-msgid "This type is never pushed."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:115
-msgid "The live site does not include this type (its own Settings)."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:119
-msgid "The live site does not include this taxonomy."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:123
-msgid "The live site never accepts this option."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:127
-msgid "Not on the live site's own option allowlist. Add it in live's Settings to push it."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:131
-msgid "The live site does not include widgets."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:135
-msgid "The live site already has this item."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:139
-msgid "The live site no longer has this item."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:143
-msgid "Products are never moved to the Trash by a push."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:147
-msgid "This action is not available for this kind of item."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:151
-msgid "Carries a value the live site does not take as data."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:155
-msgid "Its references to other items could not be read."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:159
-msgid "Points to an item the live site does not have and this push does not bring."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:163
-msgid "A file path was refused by the live site."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:167
-msgid "The file type is not allowed on the live site."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:171
-msgid "Carries file paths as custom fields, which the live site refuses."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:175
-msgid "Its theme is not installed on the live site."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:179
-msgid "Its file is missing on this site, so it was not sent."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:183
-msgid "The live site did not receive all of its files."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:187
-msgid "The live site refused one of its files (its content does not match its type)."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:191
-msgid "One of its files already belongs to another item on the live site, which a push never shares."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:195
-msgid "Changed on the live site after the plan was made, so live kept its own version."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:199
-msgid "Skipped by a live administrator in the review."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:203
-msgid "Uses an item that was not created on live, so it was not written."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:207
-msgid "Uses an item the live site no longer has."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:211
-msgid "Its references did not match its data, so live did not write it."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:215
-msgid "Another file took its file name on live in the meantime."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:219
-msgid "WooCommerce is not active on the live site."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:223
-msgid "Uses a product attribute the live site does not have."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:227
-msgid "WordPress could not save it on live."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:231
-msgid "Writing it stopped with an error on live."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:235
-msgid "The apply stopped while this item was being written; live holds neither its old nor its new version."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:239
-msgid "Skipped by a live administrator after it failed; it was put back as it was."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:243
-msgid "Edited on this site after the push."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:247
-msgid "A product the push created that was ordered since."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:251
-msgid "The file was replaced on this site after the push."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:255
-msgid "Its snapshots were removed by the retention setting, so it can no longer be rolled back."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:259
-msgid "It was rolled back already."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:263
-msgid "Nothing of it was written on this site."
-msgstr ""
-
-#: build/admin.js:1
-#: src/admin/screens/send/push-labels.js:267
-msgid "Your own HTML filter would change it when it is put back."
-msgstr ""
-
-#. translators: %s: field name.
-#: build/admin.js:2
-#: src/admin/screens/send/push-labels.js:283
-#, js-format
-msgid "The live site refused the field \"%s\"."
-msgstr ""
-
-#: build/admin.js:2
-#: src/admin/screens/send/push-labels.js:289
-msgid "The live site refused this item's data."
-msgstr ""
-
-#. translators: %s: reason code.
-#: build/admin.js:3
-#: src/admin/screens/send/push-labels.js:296
-#, js-format
-msgid "Refused by the live site (%s)."
-msgstr ""
-
-#. translators: %s: a size in bytes.
-#: build/admin.js:4
-#: src/admin/screens/send/push-labels.js:529
-#, js-format
-msgid "%s bytes"
-msgstr ""
-
-#. translators: %s: a size in kilobytes.
-#: build/admin.js:5
-#: src/admin/screens/send/push-labels.js:535
-#, js-format
-msgid "%s KB"
-msgstr ""
-
-#. translators: %s: a size in megabytes.
-#: build/admin.js:6
-#: src/admin/screens/send/push-labels.js:541
-#, js-format
-msgid "%s MB"
-msgstr ""
-
-#. translators: %s: a size in gigabytes.
-#: build/admin.js:7
-#: src/admin/screens/send/push-labels.js:547
-#, js-format
-msgid "%s GB"
 msgstr ""
 
 #: build/admin.js:48
@@ -3878,7 +3888,7 @@ msgid "Apply on live"
 msgstr ""
 
 #: build/admin.js:59
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:332
 #: src/admin/screens/pushes/RecoveryCard.jsx:367
 #: src/admin/screens/send/PushProgress.jsx:375
@@ -3918,149 +3928,149 @@ msgstr ""
 
 #. translators: 1: number of items, 2: number of files, 3: their size.
 #: build/admin.js:60
-#: src/admin/screens/send/push-labels.js:316
+#: src/admin/screens/send/push-labels.js:320
 #, js-format
 msgid "Push opened on live for %1$s items and %2$s files (%3$s)."
 msgstr ""
 
 #. translators: %s: number of items.
 #: build/admin.js:61
-#: src/admin/screens/send/push-labels.js:327
+#: src/admin/screens/send/push-labels.js:331
 #, js-format
 msgid "Push opened on live for %s items."
 msgstr ""
 
 #. translators: 1: files live already has, 2: files to send, 3: files to send under a new name.
 #: build/admin.js:62
-#: src/admin/screens/send/push-labels.js:336
+#: src/admin/screens/send/push-labels.js:340
 #, js-format
 msgid "Live answered for its files: %1$s already there, %2$s to send, %3$s to send under a new name."
 msgstr ""
 
 #. translators: %s: file name.
 #: build/admin.js:63
-#: src/admin/screens/send/push-labels.js:348
+#: src/admin/screens/send/push-labels.js:352
 #, js-format
 msgid "%s sent and checked by live (it gets a new name there)."
 msgstr ""
 
 #. translators: %s: file name.
 #: build/admin.js:64
-#: src/admin/screens/send/push-labels.js:356
+#: src/admin/screens/send/push-labels.js:360
 #, js-format
 msgid "%s sent and checked by live."
 msgstr ""
 
 #. translators: 1: file name, 2: reason code.
 #: build/admin.js:65
-#: src/admin/screens/send/push-labels.js:365
+#: src/admin/screens/send/push-labels.js:369
 #, js-format
 msgid "%1$s was refused (%2$s); the item that uses it will be refused on live."
 msgstr ""
 
 #. translators: %s: size of a file part.
 #: build/admin.js:66
-#: src/admin/screens/send/push-labels.js:375
+#: src/admin/screens/send/push-labels.js:379
 #, js-format
 msgid "The live server refused the request size; files now go in parts of %s."
 msgstr ""
 
 #: build/admin.js:66
-#: src/admin/screens/send/push-labels.js:382
+#: src/admin/screens/send/push-labels.js:386
 msgid "A part of a file arrived damaged on live; it was sent again."
 msgstr ""
 
 #. translators: 1: files sent, 2: files live already had, 3: files refused.
 #: build/admin.js:67
-#: src/admin/screens/send/push-labels.js:389
+#: src/admin/screens/send/push-labels.js:393
 #, js-format
 msgid "Files done: %1$s sent, %2$s already on live, %3$s refused. Sending items."
 msgstr ""
 
 #. translators: 1: batch number, 2: items, 3: staged, 4: held, 5: refused.
 #: build/admin.js:68
-#: src/admin/screens/send/push-labels.js:408
+#: src/admin/screens/send/push-labels.js:412
 #, js-format
 msgid "Batch %1$s sent again (live already had it): %2$s items, %3$s staged, %4$s held for review, %5$s refused."
 msgstr ""
 
 #. translators: 1: batch number, 2: items, 3: staged, 4: held, 5: refused.
 #: build/admin.js:69
-#: src/admin/screens/send/push-labels.js:417
+#: src/admin/screens/send/push-labels.js:421
 #, js-format
 msgid "Batch %1$s: %2$s items, %3$s staged, %4$s held for review, %5$s refused."
 msgstr ""
 
 #. translators: %s: items per batch.
 #: build/admin.js:70
-#: src/admin/screens/send/push-labels.js:427
+#: src/admin/screens/send/push-labels.js:431
 #, js-format
 msgid "The live server refused the request size; batches now carry %s items."
 msgstr ""
 
 #: build/admin.js:70
-#: src/admin/screens/send/push-labels.js:434
+#: src/admin/screens/send/push-labels.js:438
 msgid "One item is larger than the live server accepts; it is skipped."
 msgstr ""
 
 #. translators: %s: seconds.
 #: build/admin.js:71
-#: src/admin/screens/send/push-labels.js:441
+#: src/admin/screens/send/push-labels.js:445
 #, js-format
 msgid "The live site asked to wait %s seconds before the next batch."
 msgstr ""
 
 #. translators: %s: batch number.
 #: build/admin.js:72
-#: src/admin/screens/send/push-labels.js:450
+#: src/admin/screens/send/push-labels.js:454
 #, js-format
 msgid "Batch %s was already on live."
 msgstr ""
 
 #. translators: %s: error code.
 #: build/admin.js:73
-#: src/admin/screens/send/push-labels.js:459
+#: src/admin/screens/send/push-labels.js:463
 #, js-format
 msgid "Paused (%s)."
 msgstr ""
 
 #. translators: %s: error code.
 #: build/admin.js:74
-#: src/admin/screens/send/push-labels.js:465
+#: src/admin/screens/send/push-labels.js:469
 #, js-format
 msgid "Stopped (%s)."
 msgstr ""
 
 #: build/admin.js:74
-#: src/admin/screens/send/push-labels.js:469
+#: src/admin/screens/send/push-labels.js:473
 msgid "Resumed."
 msgstr ""
 
 #: build/admin.js:74
-#: src/admin/screens/send/push-labels.js:471
+#: src/admin/screens/send/push-labels.js:475
 msgid "Every item is staged on live."
 msgstr ""
 
 #: build/admin.js:74
-#: src/admin/screens/send/push-labels.js:476
+#: src/admin/screens/send/push-labels.js:480
 msgid "Aborted: live removed what it had staged for this push."
 msgstr ""
 
 #. translators: %s: number of items.
 #: build/admin.js:75
-#: src/admin/screens/send/push-labels.js:483
+#: src/admin/screens/send/push-labels.js:487
 #, js-format
 msgid "%s items are waiting for review on live. Nothing was written there; a live administrator finishes the push."
 msgstr ""
 
 #: build/admin.js:75
-#: src/admin/screens/send/push-labels.js:490
+#: src/admin/screens/send/push-labels.js:494
 msgid "A live administrator finished the push on live."
 msgstr ""
 
 #. translators: 1: items applied, 2: items skipped.
 #: build/admin.js:76
-#: src/admin/screens/send/push-labels.js:497
+#: src/admin/screens/send/push-labels.js:501
 #, js-format
 msgid "Applied on live: %1$s items written, %2$s skipped."
 msgstr ""
@@ -4180,7 +4190,7 @@ msgid "WooCommerce products"
 msgstr ""
 
 #: build/admin.js:80
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/send/plan-labels.js:496
 #: src/admin/screens/SettingsScreen.jsx:33
 msgid "Categories, tags and other terms"
@@ -4676,7 +4686,7 @@ msgid "%s approved this site. It is connected."
 msgstr ""
 
 #: build/admin.js:99
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/App.jsx:43
 #: src/admin/screens/SendScreen.jsx:207
 msgid "Send"
@@ -5008,7 +5018,7 @@ msgid "Open receive window"
 msgstr ""
 
 #: build/admin.js:108
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/App.jsx:46
 #: src/admin/screens/ReceiveScreen.jsx:204
 msgid "Receive"
@@ -5223,35 +5233,44 @@ msgstr ""
 msgid "text this site's settings look for"
 msgstr ""
 
-#. translators: %s: item title.
+#. translators: %s: number of further reasons not listed.
 #: build/admin.js:115
 #: src/admin/screens/pushes/HeldReview.jsx:175
+#, js-format
+msgid "and %s more reason"
+msgid_plural "and %s more reasons"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: item title.
+#: build/admin.js:116
+#: src/admin/screens/pushes/HeldReview.jsx:186
 #, js-format
 msgid "Decision for %s"
 msgstr ""
 
-#: build/admin.js:115
-#: src/admin/screens/pushes/HeldReview.jsx:196
+#: build/admin.js:116
+#: src/admin/screens/pushes/HeldReview.jsx:207
 msgid "Held for markup in custom fields, options or widgets, which WordPress's HTML filter does not cover: approve it as is or skip it."
 msgstr ""
 
-#: build/admin.js:115
-#: src/admin/screens/pushes/HeldReview.jsx:201
+#: build/admin.js:116
+#: src/admin/screens/pushes/HeldReview.jsx:212
 msgid "Category and tag descriptions go through WordPress's description filter, which allows less markup than posts do (on WordPress 6.5 it also removes rel and target from links)."
 msgstr ""
 
-#: build/admin.js:115
-#: src/admin/screens/pushes/HeldReview.jsx:206
+#: build/admin.js:116
+#: src/admin/screens/pushes/HeldReview.jsx:217
 msgid "These global styles carry custom CSS: approving them needs the \"edit_css\" capability."
 msgstr ""
 
-#: build/admin.js:115
-#: src/admin/screens/pushes/HeldReview.jsx:215
+#: build/admin.js:116
+#: src/admin/screens/pushes/HeldReview.jsx:226
 msgid "The decisions were not saved"
 msgstr ""
 
 #. translators: %s: number of items.
-#: build/admin.js:116
+#: build/admin.js:117
 #: src/admin/screens/pushes/HeldReview.jsx:87
 #, js-format
 msgid "Decision saved for %s item."
@@ -5260,103 +5279,103 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of decisions.
-#: build/admin.js:117
-#: src/admin/screens/pushes/HeldReview.jsx:226
+#: build/admin.js:118
+#: src/admin/screens/pushes/HeldReview.jsx:237
 #, js-format
 msgid "Save %s decision"
 msgid_plural "Save %s decisions"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:117
-#: src/admin/screens/pushes/HeldReview.jsx:229
+#: build/admin.js:118
+#: src/admin/screens/pushes/HeldReview.jsx:240
 msgid "Save decisions"
 msgstr ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:95
 msgid "Roll back this push?"
 msgstr ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:96
 msgid "Roll back"
 msgstr ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:103
 msgid "The preview did not load"
 msgstr ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:109
 msgid "This push cannot be rolled back"
 msgstr ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:118
 msgid "item goes back to its snapshot"
 msgid_plural "items go back to their snapshot"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:122
 msgid "item the push created is removed (posts and products to the Trash)"
 msgid_plural "items the push created are removed (posts and products to the Trash)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:126
 msgid "replaced media file is put back"
 msgid_plural "replaced media files are put back"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:129
 msgid "added file is deleted if nothing uses it"
 msgid_plural "added files are deleted if nothing uses them"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:133
 msgid "conflict: changed on this site after the push, skipped unless you tick it"
 msgid_plural "conflicts: changed on this site after the push, skipped unless you tick them"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:118
+#: build/admin.js:119
 #: src/admin/screens/pushes/RecoveryCard.jsx:137
 msgid "Orders, customers and stock are never touched: orders placed since the push stay, and stock keeps their effect."
 msgstr ""
 
 #. translators: %s: number of items.
-#: build/admin.js:119
+#: build/admin.js:120
 #: src/admin/screens/pushes/RecoveryCard.jsx:142
 #, js-format
 msgid "%s items were handled already by the rollback that stopped; they are not done again."
 msgstr ""
 
-#: build/admin.js:119
+#: build/admin.js:120
 #: src/admin/screens/pushes/RecoveryCard.jsx:147
 msgid "This push is large: not every item could be checked for conflicts in time. Each item is checked again when the rollback reaches it."
 msgstr ""
 
-#: build/admin.js:119
+#: build/admin.js:120
 #: src/admin/screens/pushes/RecoveryCard.jsx:151
 msgid "Conflicts (tick to roll back anyway; the later change on this site is lost)"
 msgstr ""
 
-#: build/admin.js:119
+#: build/admin.js:120
 #: src/admin/screens/pushes/RecoveryCard.jsx:164
 msgid "Restored through your own HTML filter"
 msgstr ""
 
 #. translators: %s: number of items.
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:168
 #, js-format
 msgid "%s item had markup before the push that your account may not save unfiltered, so it comes back filtered:"
@@ -5364,230 +5383,230 @@ msgid_plural "%s items had markup before the push that your account may not save
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:268
 msgid "Recovery and rollback"
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:269
 msgid "Everything here runs from your own account on this site; the staging site is not needed. Each item's snapshot was taken before it was written."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:22
 msgid "No step of the apply has run for more than 5 minutes (the request that ran it stopped, for example when PHP restarted)."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:23
 msgid "Its push lock was gone (for example after Keepmerge was deactivated and activated again)."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:24
 msgid "An administrator released its push lock."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:25
 msgid "The receive window was closed while the staging site was applying it."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:26
 msgid "The pairing was revoked while the staging site was applying it."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:28
 msgid "The apply stopped without finishing."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:275
 msgid "Resume finishes it from where it stopped: an item that was fully written is not written again, one that was not started is written, and one left half-written stops for your decision. Or roll back what was applied."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:287
 msgid "Retry puts the item back to its snapshot and writes it again. Skip puts it back as it was and goes on with the rest. Roll back undoes the whole push."
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:292
 msgid "Rollback interrupted"
 msgstr ""
 
-#: build/admin.js:120
+#: build/admin.js:121
 #: src/admin/screens/pushes/RecoveryCard.jsx:293
 msgid "Continue the rollback: items it already handled are not handled again."
 msgstr ""
 
 #. translators: %s: date and time.
-#: build/admin.js:121
+#: build/admin.js:122
 #: src/admin/screens/pushes/RecoveryCard.jsx:300
 #, js-format
 msgid "Rolled back on %s. A rolled-back push cannot be rolled back again; push again from the staging site instead."
 msgstr ""
 
 #. translators: 1: items handled, 2: items of the rollback.
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:313
 #, js-format
 msgid "Rolling back: %1$s of %2$s"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:324
 msgid "That did not complete"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:338
 #: src/admin/screens/pushes/RecoveryCard.jsx:368
 msgid "Retry"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:344
 msgid "Skip this item and continue"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:350
 msgid "Continue rollback"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:350
 msgid "Roll back…"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:247
 msgid "The push is rolled back on this site."
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:360
 msgid "Resume this push on this site?"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:361
 msgid "Retry the failed item?"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:362
 msgid "Skip the failed item?"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:369
 msgid "Skip and continue"
 msgstr ""
 
-#: build/admin.js:122
-#: build/admin.js:127
+#: build/admin.js:123
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:74
 #: src/admin/screens/pushes/RecoveryCard.jsx:259
 msgid "The push is applied on this site."
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:379
 msgid "The apply goes on from where it stopped, written from your account. Items already written are not written again."
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:380
 msgid "The item goes back to its snapshot, then it is written again from your account; the rest of the push follows."
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/RecoveryCard.jsx:381
 msgid "The item goes back to how it was before the push and stays so; the rest of the push is applied."
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/PushDetail.jsx:89
 msgid "All pushes"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/PushDetail.jsx:121
 msgid "Waiting to be applied"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/PushDetail.jsx:122
 msgid "Held for review"
 msgstr ""
 
-#: build/admin.js:122
+#: build/admin.js:123
 #: src/admin/screens/pushes/PushDetail.jsx:125
 msgid "Refused when staged"
 msgstr ""
 
 #. translators: %s: short push ID.
-#: build/admin.js:123
+#: build/admin.js:124
 #: src/admin/screens/pushes/PushDetail.jsx:135
 #, js-format
 msgid "Push %s"
 msgstr ""
 
 #. translators: 1: source site address, 2: date and time.
-#: build/admin.js:124
+#: build/admin.js:125
 #: src/admin/screens/pushes/PushDetail.jsx:140
 #, js-format
 msgid "From %1$s, started %2$s"
 msgstr ""
 
-#: build/admin.js:124
+#: build/admin.js:125
 #: src/admin/screens/pushes/PushDetail.jsx:146
 msgid "Items of this push"
 msgstr ""
 
 #. translators: %s: size.
-#: build/admin.js:125
+#: build/admin.js:126
 #: src/admin/screens/pushes/PushDetail.jsx:158
 #, js-format
 msgid "Snapshots of this push: %s (kept for rollback; content stays in the database, replaced media files in a protected folder)."
 msgstr ""
 
 #. translators: 1: items done, 2: items of the push.
-#: build/admin.js:126
+#: build/admin.js:127
 #: src/admin/screens/pushes/PushDetail.jsx:167
 #, js-format
 msgid "Applying: %1$s of %2$s items"
 msgstr ""
 
-#: build/admin.js:126
+#: build/admin.js:127
 #: src/admin/screens/pushes/PushDetail.jsx:185
 msgid "Review held items"
 msgstr ""
 
-#: build/admin.js:126
+#: build/admin.js:127
 #: src/admin/screens/pushes/PushDetail.jsx:186
 msgid "These items carry markup that WordPress would filter, or script-like markup in custom fields, options or widgets. Nothing of this push is written until each one is decided; then you finish the push here, from your own account."
 msgstr ""
 
-#: build/admin.js:126
 #: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:195
 #: src/admin/screens/pushes/PushDetail.jsx:215
 msgid "Continue apply on this site"
 msgstr ""
 
-#: build/admin.js:126
+#: build/admin.js:127
 #: src/admin/screens/pushes/PushDetail.jsx:196
 msgid "Takes a snapshot of every item, then writes the push from your account: approved items unchanged, filtered items through WordPress's HTML filter, skipped items not at all."
 msgstr ""
 
 #. translators: %s: number of items.
-#: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:202
 #, js-format
 msgid "%s held item still needs a decision."
@@ -5595,47 +5614,47 @@ msgid_plural "%s held items still need a decision."
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:208
 msgid "The apply did not continue"
 msgstr ""
 
-#: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:215
 msgid "Applying…"
 msgstr ""
 
-#: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:222
 msgid "Items not applied"
 msgstr ""
 
-#: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:222
 msgid "Skipped, failed or refused items and the reason for each. Live kept its own version of these."
 msgstr ""
 
-#: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:239
 msgid "Continue the apply on this site?"
 msgstr ""
 
-#: build/admin.js:127
+#: build/admin.js:128
 #: src/admin/screens/pushes/PushDetail.jsx:240
 msgid "Continue apply"
 msgstr ""
 
 #. translators: 1: items waiting, 2: approved, 3: filtered, 4: skipped.
-#: build/admin.js:128
+#: build/admin.js:129
 #: src/admin/screens/pushes/PushDetail.jsx:248
 #, js-format
 msgid "Writes %1$s waiting items and the decided held items (%2$s approved as is, %3$s with WordPress's HTML filter); %4$s skipped items stay as they are. Every item gets its snapshot first."
 msgstr ""
 
 #. translators: 1: number done, 2: total number.
-#: build/admin.js:130
-#: build/admin.js:132
-#: build/admin.js:134
+#: build/admin.js:131
+#: build/admin.js:133
+#: build/admin.js:135
 #: src/admin/screens/PushesScreen.jsx:50
 #: src/admin/screens/PushesScreen.jsx:202
 #: src/admin/screens/PushesScreen.jsx:270
@@ -5644,7 +5663,7 @@ msgid "%1$s of %2$s"
 msgstr ""
 
 #. translators: %s: number of files.
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:59
 #, js-format
 msgid "%s with a new name"
@@ -5652,106 +5671,106 @@ msgid_plural "%s with new names"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:131
-#: build/admin.js:146
+#: build/admin.js:132
+#: build/admin.js:147
 #: src/admin/App.jsx:51
 #: src/admin/screens/PushesScreen.jsx:113
 msgid "Pushes"
 msgstr ""
 
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:114
 msgid "Every push sent from or received on this site, with its result. On the live site, this is also where a push is reviewed and rolled back."
 msgstr ""
 
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:121
 msgid "Refresh"
 msgstr ""
 
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:152
 msgid "No pushes yet"
 msgstr ""
 
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:153
 msgid "Pair this site first: connect a staging site to its live site from the Send and Receive tabs. Each push then appears here with the items it staged, held for review or refused."
 msgstr ""
 
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:171
 msgid "Holds the lock: other pushes wait until it is applied, aborted from staging, or expires."
 msgstr ""
 
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:191
 msgid "From"
 msgstr ""
 
-#: build/admin.js:131
+#: build/admin.js:132
 #: src/admin/screens/PushesScreen.jsx:197
 msgid "Items received"
 msgstr ""
 
-#: build/admin.js:132
-#: build/admin.js:134
+#: build/admin.js:133
+#: build/admin.js:135
 #: src/admin/screens/PushesScreen.jsx:221
 #: src/admin/screens/PushesScreen.jsx:289
 msgid "Need review"
 msgstr ""
 
-#: build/admin.js:132
+#: build/admin.js:133
 #: src/admin/screens/PushesScreen.jsx:227
 msgid "Skipped or refused"
 msgstr ""
 
-#: build/admin.js:132
-#: build/admin.js:138
+#: build/admin.js:133
+#: build/admin.js:139
 #: src/admin/screens/AuditScreen.jsx:179
 #: src/admin/screens/PushesScreen.jsx:233
 msgid "Details"
 msgstr ""
 
-#: build/admin.js:132
+#: build/admin.js:133
 #: src/admin/screens/PushesScreen.jsx:236
 msgid "Review"
 msgstr ""
 
 #. translators: %s: short push ID.
-#: build/admin.js:133
+#: build/admin.js:134
 #: src/admin/screens/PushesScreen.jsx:241
 #, js-format
 msgid "push %s"
 msgstr ""
 
-#: build/admin.js:133
+#: build/admin.js:134
 #: src/admin/screens/PushesScreen.jsx:261
 msgid "To"
 msgstr ""
 
-#: build/admin.js:133
+#: build/admin.js:134
 #: src/admin/screens/PushesScreen.jsx:265
 msgid "Items sent"
 msgstr ""
 
-#: build/admin.js:134
+#: build/admin.js:135
 #: src/admin/screens/PushesScreen.jsx:283
 msgid "Staged"
 msgstr ""
 
-#: build/admin.js:134
+#: build/admin.js:135
 #: src/admin/screens/PushesScreen.jsx:295
 msgid "Refused"
 msgstr ""
 
-#: build/admin.js:134
+#: build/admin.js:135
 #: src/admin/screens/PushesScreen.jsx:320
 msgid "Pushes waiting for your decision"
 msgstr ""
 
 #. translators: %s: number of pushes.
-#: build/admin.js:135
+#: build/admin.js:136
 #: src/admin/screens/PushesScreen.jsx:324
 #, js-format
 msgid "%s push stopped before it finished. Open it to resume it, retry or skip the failed item, or roll it back. The staging site is not needed for any of these."
@@ -5759,60 +5778,60 @@ msgid_plural "%s pushes stopped before they finished. Open each to resume it, re
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:135
+#: build/admin.js:136
 #: src/admin/screens/PushesScreen.jsx:336
 msgid "A push holds this site's push lock"
 msgstr ""
 
-#: build/admin.js:135
+#: build/admin.js:136
 #: src/admin/screens/PushesScreen.jsx:339
 msgid "The push that holds it is not running any more. No other push can open until the lock is released."
 msgstr ""
 
 #. translators: %s: date and time.
-#: build/admin.js:136
+#: build/admin.js:137
 #: src/admin/screens/PushesScreen.jsx:342
 #, js-format
 msgid "Its last heartbeat was %s, more than 5 minutes ago. No other push can open until the lock is released. Release it only if that push has stopped; a push waiting for review or for a decision can still be continued later."
 msgstr ""
 
-#: build/admin.js:136
+#: build/admin.js:137
 #: src/admin/screens/PushesScreen.jsx:349
 msgid "Release lock…"
 msgstr ""
 
-#: build/admin.js:136
+#: build/admin.js:137
 #: src/admin/screens/PushesScreen.jsx:356
 msgid "Release the push lock?"
 msgstr ""
 
-#: build/admin.js:136
+#: build/admin.js:137
 #: src/admin/screens/PushesScreen.jsx:357
 msgid "Release lock"
 msgstr ""
 
-#: build/admin.js:136
+#: build/admin.js:137
 #: src/admin/screens/PushesScreen.jsx:311
 msgid "The push lock is released."
 msgstr ""
 
-#: build/admin.js:136
+#: build/admin.js:137
 #: src/admin/screens/PushesScreen.jsx:364
 msgid "A push that was still receiving items ends (nothing of it was written). A push that was being applied is marked interrupted, so you can resume or roll it back later."
 msgstr ""
 
-#: build/admin.js:137
+#: build/admin.js:138
 #: src/admin/screens/PushesScreen.jsx:381
 msgid "Received on this site"
 msgstr ""
 
-#: build/admin.js:137
+#: build/admin.js:138
 #: src/admin/screens/PushesScreen.jsx:382
 msgid "Items arrive staged and wait in Keepmerge's own tables. A push is applied after a snapshot of every item it changes; a push with held items waits until an administrator of this site reviews them. A push not applied within 24 hours expires and its staged items are removed."
 msgstr ""
 
 #. translators: %s: number of items.
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/PushesScreen.jsx:388
 #, js-format
 msgid "%s item carries markup and waits for review by an administrator of this site: open the push to review it."
@@ -5820,94 +5839,94 @@ msgid_plural "%s items carry markup and wait for review by an administrator of t
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/PushesScreen.jsx:399
 msgid "Pushes received on this site"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/PushesScreen.jsx:410
 msgid "Sent from this site"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/PushesScreen.jsx:411
 msgid "Pushes of this site's plans to its live site. Follow a running push on the Send tab."
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/PushesScreen.jsx:414
 msgid "Pushes sent from this site"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/PushesScreen.jsx:423
 msgid "This site has not received a push."
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/PushesScreen.jsx:426
 msgid "This site has not sent a push."
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/AuditScreen.jsx:143
 msgid "When"
 msgstr ""
 
-#: build/admin.js:138
 #: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:151
 #: src/admin/screens/AuditScreen.jsx:218
 msgid "Event"
 msgstr ""
 
-#: build/admin.js:138
 #: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:162
 #: src/admin/screens/AuditScreen.jsx:236
 msgid "Result"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/AuditScreen.jsx:169
 msgid "By"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/labels.js:54
 msgid "Deleted user"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/labels.js:59
 msgid "WP-CLI"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/labels.js:61
 msgid "Paired site"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/labels.js:63
 msgid "System"
 msgstr ""
 
-#: build/admin.js:138
-#: build/admin.js:146
+#: build/admin.js:139
+#: build/admin.js:147
 #: src/admin/App.jsx:56
 #: src/admin/screens/AuditScreen.jsx:190
 msgid "Audit log"
 msgstr ""
 
-#: build/admin.js:138
+#: build/admin.js:139
 #: src/admin/screens/AuditScreen.jsx:191
 msgid "What happened on this site: settings changes, pairing, failed sign-ins and pushes. Secrets, credentials and content are never recorded."
 msgstr ""
 
 #. translators: %d: number of exported events.
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:129
 #, js-format
 msgid "Exported %d event."
@@ -5915,68 +5934,68 @@ msgid_plural "Exported %d events."
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:208
 msgid "Exporting…"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:209
 msgid "Export CSV"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:226
 msgid "All events"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:244
 msgid "All results"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:252
 msgid "From (UTC)"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:265
 msgid "To (UTC)"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:288
 msgid "Clear filters"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:300
 msgid "No events match these filters"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:301
 msgid "No events recorded yet"
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:305
 msgid "Widen the date range or choose another event or result."
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:306
 msgid "Settings changes, pairing, failed sign-ins and pushes are recorded here as they happen. Change a setting to see the first entry."
 msgstr ""
 
-#: build/admin.js:139
+#: build/admin.js:140
 #: src/admin/screens/AuditScreen.jsx:316
 msgid "Audit log events, newest first"
 msgstr ""
 
 #. translators: 1: page number, 2: number of pages, 3: number of events.
-#: build/admin.js:140
+#: build/admin.js:141
 #: src/admin/screens/AuditScreen.jsx:329
 #, js-format
 msgid "Page %1$d of %2$d · %3$d event"
@@ -5984,310 +6003,310 @@ msgid_plural "Page %1$d of %2$d · %3$d events"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:140
+#: build/admin.js:141
 #: src/admin/screens/AuditScreen.jsx:348
 msgid "Newer"
 msgstr ""
 
-#: build/admin.js:140
+#: build/admin.js:141
 #: src/admin/screens/AuditScreen.jsx:356
 msgid "Older"
 msgstr ""
 
 #. translators: %s: the text that was refused.
-#: build/admin.js:141
+#: build/admin.js:142
 #: src/admin/components/NamesField.jsx:54
 #, js-format
 msgid "\"%s\" is not a name. Use lowercase letters, digits, _ and -, with an optional * at the end for a prefix."
 msgstr ""
 
-#: build/admin.js:141
+#: build/admin.js:142
 #: src/admin/components/NamesField.jsx:111
 msgid "Add"
 msgstr ""
 
 #. translators: %s: field label.
-#: build/admin.js:142
+#: build/admin.js:143
 #: src/admin/components/NamesField.jsx:147
 #, js-format
 msgid "%s: current entries"
 msgstr ""
 
 #. translators: %s: a name in the list.
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/NamesField.jsx:159
 #, js-format
 msgid "Remove %s"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/NamesField.jsx:171
 msgid "No entries yet."
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/SaveBar.jsx:24
 msgid "Unsaved changes"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/SaveBar.jsx:25
 msgid "All changes saved"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/SaveBar.jsx:34
 msgid "Discard changes"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/SaveBar.jsx:48
 msgid "Saving…"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/SaveBar.jsx:49
 msgid "Save settings"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/ToggleRow.jsx:38
 msgid "On"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/components/ToggleRow.jsx:39
 msgid "Off"
 msgstr ""
 
-#: build/admin.js:143
 #: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:37
 #: src/admin/screens/SettingsScreen.jsx:269
 msgid "Content types"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:38
 msgid "Terms"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:39
 msgid "Option groups"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:40
 msgid "Additional options"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:41
 msgid "Additional meta keys to leave out"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:42
 msgid "Items per batch"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:43
 msgid "Media chunk size"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:44
 msgid "Keep rollback snapshots for"
 msgstr ""
 
-#: build/admin.js:143
+#: build/admin.js:144
 #: src/admin/screens/SettingsScreen.jsx:45
 msgid "Keep the audit log for"
 msgstr ""
 
 #. translators: 1: lowest value, 2: highest value.
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:112
 #, js-format
 msgid "From %1$d to %2$d."
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:194
 msgid "Settings saved."
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:195
 msgid "Nothing changed."
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:203
 msgid "Settings were not saved."
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:210
 msgid "Keepmerge Settings"
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:211
 msgid "What this site sends, and what it accepts when it receives. Every field takes names, numbers or on/off choices; no field accepts code or markup."
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:270
 msgid "Ticked types are compared and can be pushed. Orders, refunds, coupons, customers, users and comments are never included, whatever is ticked here."
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:312
 msgid "Site settings pushed along with the content. When this site receives, its own list here decides what it accepts, whatever the sending site offers."
 msgstr ""
 
-#: build/admin.js:144
+#: build/admin.js:145
 #: src/admin/screens/SettingsScreen.jsx:341
 msgid "Exact option names, or a prefix ending in * such as elementor_*. Protected settings are refused with the reason."
 msgstr ""
 
 #. translators: %d: number of protected names and patterns.
-#: build/admin.js:145
+#: build/admin.js:146
 #: src/admin/screens/SettingsScreen.jsx:353
 #, js-format
 msgid "Never pushed: %d protected names and patterns"
 msgstr ""
 
-#: build/admin.js:145
+#: build/admin.js:146
 #: src/admin/screens/SettingsScreen.jsx:363
 msgid "Excluded meta keys"
 msgstr ""
 
-#: build/admin.js:145
+#: build/admin.js:146
 #: src/admin/screens/SettingsScreen.jsx:364
 msgid "Post and term meta that is never compared or pushed. Add keys that hold data specific to one site."
 msgstr ""
 
-#: build/admin.js:145
+#: build/admin.js:146
 #: src/admin/screens/SettingsScreen.jsx:372
 msgid "Exact meta keys, or a prefix ending in * such as _my_cache_*."
 msgstr ""
 
 #. translators: %d: number of always-excluded keys and patterns.
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:384
 #, js-format
 msgid "Always excluded: %d keys and patterns"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:393
 msgid "Limits and retention"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:394
 msgid "Smaller batches suit slower hosts. Keepmerge works in short steps instead of raising PHP limits."
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:402
 msgid "items"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:410
 msgid "KB"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:418
 #: src/admin/screens/SettingsScreen.jsx:426
 msgid "days"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:437
 msgid "Code report"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:445
 msgid "Allow code report requests"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:446
 msgid "Lets a paired staging site ask this site for its plugin and theme names, versions and file checksums, to show what differs. File contents are never sent. Turning this on or off is recorded in the audit log."
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:457
 msgid "Uninstall"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:458
 msgid "Uninstalling always removes the receiver users and every credential."
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:465
 msgid "Remove all Keepmerge data on uninstall"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:466
 msgid "Off: history, snapshots, identities and settings are kept, so a reinstall continues where you left off. On: uninstalling also deletes Keepmerge's tables, snapshots and settings."
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:494
 msgid "Remove all data on uninstall?"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:495
 msgid "Turn on"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:504
 msgid "When Keepmerge is uninstalled, its push history, rollback snapshots, item identities, audit log and settings will be deleted from this site. Pushes made before cannot be rolled back afterwards."
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/screens/SettingsScreen.jsx:510
 msgid "Nothing is deleted now. The change takes effect when you save settings."
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/App.jsx:61
 msgid "Settings"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/App.jsx:105
 msgid "Status unavailable"
 msgstr ""
 
-#: build/admin.js:146
+#: build/admin.js:147
 #: src/admin/App.jsx:115
 msgid "Checking…"
 msgstr ""
 
 #. translators: %s: this site's host name.
-#: build/admin.js:147
+#: build/admin.js:148
 #: src/admin/App.jsx:132
 #, js-format
 msgid "This site: %s"
 msgstr ""
 
 #. translators: %d: number of live sites this site sends to.
-#: build/admin.js:148
+#: build/admin.js:149
 #: src/admin/App.jsx:143
 #, js-format
 msgid "Sends to %d site"
@@ -6295,13 +6314,13 @@ msgid_plural "Sends to %d sites"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:148
+#: build/admin.js:149
 #: src/admin/App.jsx:151
 msgid "Not sending"
 msgstr ""
 
 #. translators: %d: number of staging sites this site receives from.
-#: build/admin.js:149
+#: build/admin.js:150
 #: src/admin/App.jsx:160
 #, js-format
 msgid "Receives from %d site"
@@ -6309,12 +6328,12 @@ msgid_plural "Receives from %d sites"
 msgstr[0] ""
 msgstr[1] ""
 
-#: build/admin.js:149
+#: build/admin.js:150
 #: src/admin/App.jsx:168
 msgid "Not receiving"
 msgstr ""
 
-#: build/admin.js:149
+#: build/admin.js:150
 #: src/admin/App.jsx:179
 msgid "Receive window open"
 msgstr ""
