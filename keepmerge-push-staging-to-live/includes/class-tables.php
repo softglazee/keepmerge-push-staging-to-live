@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Builds table names from a fixed allowlist and holds the dbDelta schema (blueprint §14.1).
+ * Builds table names from a fixed allowlist and holds the dbDelta schema.
  *
  * Every query in the plugin gets its table name from table_name(), so no table name is ever
  * assembled from input, and Plugin Check's DirectDB sniff can see where names come from.
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Tables {
 
 	/**
-	 * Short names of the seven tables. Snapshots and file transfers live in push_items (D14).
+	 * Short names of the seven tables. Snapshots and file transfers live in push_items.
 	 *
 	 * @var string[]
 	 */
@@ -57,25 +57,12 @@ final class Tables {
 	}
 
 	/**
-	 * CREATE TABLE statements in the format dbDelta() parses (two spaces after PRIMARY KEY,
-	 * one column per line).
+	 * CREATE TABLE statements in the format dbDelta() parses (two spaces after PRIMARY KEY, one
+	 * column per line). Column names avoid MySQL reserved words, which dbDelta does not quote.
 	 *
-	 * Column names avoid MySQL reserved words, which dbDelta does not quote: the push cursor
-	 * is stored as cursor_json because CURSOR is reserved.
-	 *
-	 * pairings keeps the key's bootstrap credentials apart from the long-term ones because both
-	 * exist between confirm and finalize (blueprint §5.3). local_home_hash binds a row to this
-	 * site: a hash, because host clone tools search-replace URLs in every table and would
-	 * rewrite a stored URL to match the copy (threat model T21).
-	 *
-	 * sync_state.base_groups (destination) holds the base hash of each product field group as JSON
-	 * (group => hash), so the planner can run the three-way comparison per group (blueprint §6.6)
-	 * and "Push stock" can be refused when live's stock changed since the base (§7 rule 4).
-	 *
-	 * Source rows (role "source") also keep the receiver login on live (remote_login), what live
-	 * last reported about itself and the last check (remote_info, JSON without credentials) and
-	 * the address the outbound guard checked with its time (resolved_ip, resolved_gmt), which
-	 * every request of a run connects to for at most 10 minutes (blueprint §5.10).
+	 * The pairings table keeps bootstrap and long-term credentials apart because both exist
+	 * between confirm and finalize; local_home_hash binds a row to this site as a hash, which
+	 * clone tools do not search-replace. sync_state.base_groups holds per-group product hashes.
 	 *
 	 * @return string[]
 	 */

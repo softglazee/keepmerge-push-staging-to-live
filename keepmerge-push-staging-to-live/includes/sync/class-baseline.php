@@ -17,16 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The first sync of a pairing (blueprint §6.4; F5), run from the Send tab in time-boxed steps.
- *
- * 1. This site's fingerprints go to live in batches of at most 500 (POST /remote/baseline).
- * 2. Live answers strong, medium, none or excluded per fingerprint, read-only.
- * 3. This site records the map in its own sync_state and gives its objects UUIDs, adopting the
- *    UUID live already uses for a strong match. Nothing is written on live.
- * 4. The admin's clone date (or "I don't know") is kept for the first plan (Phase 4).
- *
- * Only strong matches link objects. Medium matches are recorded as candidates that the plan
- * shows as conflicts; possible duplicates (the slug is taken on live) default to Skip there.
+ * The first sync of a pairing, run from the Send tab in time-boxed steps: this site's
+ * fingerprints go to live in batches of at most 500, live answers read-only, and this site
+ * records the matches in its own sync_state and gives its objects UUIDs. Only strong matches
+ * link objects; medium matches become conflicts in the plan. Nothing is written on live.
  */
 final class Baseline {
 
@@ -265,8 +259,8 @@ final class Baseline {
 	}
 
 	/**
-	 * Applies live's answers for one batch: UUIDs (adopted from live for strong matches when
-	 * that is safe) and sync_state rows.
+	 * Applies live's answers for one batch: UUIDs (adopted from live for strong matches when no
+	 * other object uses them) and sync_state rows.
 	 *
 	 * @param int   $pairing_id Pairing row ID.
 	 * @param array $batch      Fingerprints sent.

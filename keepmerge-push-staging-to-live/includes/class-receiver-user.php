@@ -18,20 +18,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The only user the plugin creates (blueprint §5.8, threat model §7.4).
+ * The only user the plugin creates. Application Passwords belong to a user, so each pairing gets
+ * its own receiver: role softglaze_sp_receiver with the single capability
+ * softglaze_sp_receive_push (no read), a random password never shown, no email. Created only by
+ * a live administrator's action; deleted on revoke, reject, expiry and uninstall.
  *
- * Core Application Passwords belong to a user, so each pairing gets its own receiver: role
- * softglaze_sp_receiver with the single capability softglaze_sp_receive_push (no read), a random
- * 64-character password that is never shown, no email address. It is created only by a live
- * administrator's own action and deleted on revoke, reject, expiry and uninstall.
- *
- * Lock-down, all limited to receivers and without effect on any other user:
- * - interactive login refused (wp_authenticate_user, which core runs before the password check);
- * - XML-RPC refused (authenticate at priority 30, after core's Application Password check at 20,
- *   because core does not apply wp_authenticate_user to Application Password logins);
- * - REST limited to /keepmerge/v1/remote/ by an allowlist in rest_pre_dispatch that fails closed
- *   (core applies the filter to /batch/v1 and to each request inside a batch);
- * - the role is hidden from role dropdowns (editable_roles).
+ * Lock-down, for receivers only:
+ * - interactive login refused (wp_authenticate_user, before the password check);
+ * - XML-RPC refused (authenticate at priority 30, after core's Application Password check);
+ * - REST limited to /keepmerge/v1/remote/ by a fail-closed allowlist in rest_pre_dispatch,
+ *   which core also applies inside /batch/v1;
+ * - the role is hidden from role dropdowns.
  */
 final class Receiver_User {
 
@@ -40,9 +37,8 @@ final class Receiver_User {
 	const LOGIN_PATTERN = '/\Asoftglaze-sp-[0-9a-f]{8}\z/';
 
 	/**
-	 * Routes a receiver may call: our remote namespace, lowercase, no dots, no empty segments,
-	 * no trailing slash. Core matches routes case-insensitively, so any other spelling of our own
-	 * route is refused here rather than let through.
+	 * Routes a receiver may call: our remote namespace, lowercase, no dots, no empty segments, no
+	 * trailing slash. Core matches routes case-insensitively, so other spellings are refused.
 	 */
 	const ROUTE_ALLOWLIST = '#\A/keepmerge/v1/remote/[a-z0-9_-]+(?:/[a-z0-9_-]+)*\z#';
 
@@ -70,7 +66,8 @@ final class Receiver_User {
 	}
 
 	/**
-	 * Creates a receiver.
+	 * Creates a receiver, only from a live administrator's pairing-key action: the pairing's
+	 * Application Password needs an owner that has one capability and cannot log in.
 	 *
 	 * @return WP_User|WP_Error
 	 */
@@ -113,10 +110,8 @@ final class Receiver_User {
 	}
 
 	/**
-	 * Deletes a receiver, its Application Passwords first.
-	 *
-	 * Refuses any user that is not a receiver. A receiver owns nothing, but the deletion still
-	 * names a user to reassign to, so content can never be deleted along with it.
+	 * Deletes a receiver, its Application Passwords first. Refuses any other user, and names a
+	 * user to reassign to so no content is ever deleted with it.
 	 *
 	 * @param int $user_id   Receiver user ID.
 	 * @param int $reassign  Preferred user to reassign to (the pairing's default author).
@@ -252,9 +247,8 @@ final class Receiver_User {
 	}
 
 	/**
-	 * Hook: rest_pre_dispatch at PHP_INT_MAX. A receiver may reach our remote routes only;
-	 * everything else, including /batch/v1 and any odd spelling of our own routes, gets 403,
-	 * whatever an earlier filter returned for it.
+	 * Hook: rest_pre_dispatch at PHP_INT_MAX. A receiver reaches our remote routes only; anything
+	 * else gets 403, whatever an earlier filter returned.
 	 *
 	 * @param mixed           $result  Result so far.
 	 * @param mixed           $server  Server.

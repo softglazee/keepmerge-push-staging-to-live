@@ -34,23 +34,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Routes under keepmerge/v1/remote/ that the paired source calls (threat model §5.1). This
- * version has status, pair/confirm and pair/finalize; the four read-only routes of an active
- * pairing: baseline, manifest, items/fetch and code-manifest (the last only while live's
- * "Allow code report requests" is on); the push session routes push, push/{id},
- * push/{id}/items and push/{id}/abort, which stage items in Keepmerge's own tables (Phase 5);
- * push/{id}/apply, the only remote route that writes live's content, after the snapshot and as
- * the receiver user so core's filters apply, and never for a push with held items (Phase 7);
- * and the media routes push/{id}/files,
- * push/{id}/files/{ref}/chunks/{n} and push/{id}/files/{ref}/commit, which write only into the
- * push's own temporary folder under uploads/keepmerge-push-staging-to-live/tmp/ (Phase 6). The
- * read-only routes write only what the chain writes for every request (the nonce, the last-used
- * time) and one audit row with counts.
+ * Routes under keepmerge/v1/remote/ that the paired source calls: pairing, read-only routes,
+ * push session routes that stage items in Keepmerge's tables, media routes that write only into
+ * the push's temporary folder, and push/{id}/apply, the only route that writes live's content
+ * (after the snapshot, as the receiver user so core's filters apply, never with held items).
  *
- * The routes are registered only while the receive window is open, so a site with the window
- * closed has no remote route at all. Every route's permission_callback is the full chain in
- * Remote_Permission. Route args are left empty: core validates args before the permission
- * callback, so the body is read and validated inside each handler, after the chain.
+ * Registered only while the receive window is open; every permission_callback is the full chain
+ * in Remote_Permission. Route args stay empty because core validates args before the permission
+ * callback, so each handler validates its body after the chain.
  */
 final class Remote_Controller {
 
@@ -77,16 +68,14 @@ final class Remote_Controller {
 	const ITEMS_DEPTH = 96;
 
 	/**
-	 * An Application Password failure seen during this request (core runs that check before any
-	 * route is known; the route is checked in count_app_password_failure()).
+	 * An Application Password failure seen during this request, before the route is known.
 	 *
 	 * @var string
 	 */
 	private static $app_password_failure = '';
 
 	/**
-	 * Hooks that shape and sign remote responses. They run on every REST request and act only
-	 * on routes under /keepmerge/v1/remote/.
+	 * Hooks that shape and sign responses of routes under /keepmerge/v1/remote/.
 	 *
 	 * @return void
 	 */
@@ -194,7 +183,7 @@ final class Remote_Controller {
 		);
 
 		// The session ID is the only URL parameter: core checks its pattern before the chain runs,
-		// with no side effect (threat model §6).
+		// with no side effect.
 		$id   = '(?P<id>' . Remote_Permission::UUID_PATTERN . ')';
 		$args = array(
 			'id' => array(
@@ -258,9 +247,8 @@ final class Remote_Controller {
 			)
 		);
 
-		// A file is named by an integer ref and a chunk by an integer n, never by a path. The route
-		// takes a sign so that a negative number reaches the handler and is refused there with 400
-		// after the chain (threat model R11).
+		// Files and chunks are named by integers, never by a path. A sign is accepted so a negative
+		// number is refused by the handler with 400, after the chain.
 		$int       = '-?[0-9]{1,9}';
 		$file_args = array_merge(
 			$args,
@@ -372,10 +360,8 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/pair/confirm: issues the long-term credentials.
-	 *
-	 * Body (JSON, at most 4 KB): site_id, home_url, wp_version, plugin_version, php_version.
-	 * Each field is read by name and validated; anything else is dropped.
+	 * POST /remote/pair/confirm: issues the long-term credentials. Body fields are read by name;
+	 * anything else is dropped.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -430,7 +416,7 @@ final class Remote_Controller {
 
 	/**
 	 * POST /remote/pair/finalize: deletes the bootstrap credentials; the pairing then waits for
-	 * a live administrator. The body (at most 1 KB) carries nothing this version reads.
+	 * a live administrator.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -450,7 +436,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/baseline (R4, read-only): match results for at most 500 fingerprints.
+	 * POST /remote/baseline (read-only): match results for at most 500 fingerprints.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -486,8 +472,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/manifest (R5, read-only): live and base hashes for at most 500 items, live-only
-	 * changes since the base, and the block types and themes live lacks for the listed items.
+	 * POST /remote/manifest (read-only): live and base hashes for at most 500 items.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -529,8 +514,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/items/fetch (R6, read-only): live's normal forms of at most 50 items of
-	 * included types, for diffs.
+	 * POST /remote/items/fetch (read-only): live's form of at most 50 items, for diffs.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -562,9 +546,8 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/code-manifest (R7, read-only): live's inventory, or one page of file hashes of
-	 * a component in live's own list. Names, versions, paths, sizes and SHA-1 values only; never
-	 * file content (blueprint §6.11). The chain has already checked "Allow code report requests".
+	 * POST /remote/code-manifest (read-only): live's plugin and theme inventory or one page of
+	 * file hashes; never file content.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -609,8 +592,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/push (R8): opens a push session and takes the destination lock (blueprint
-	 * §10.1). Body (at most 64 KB): push, plan_hash, counts, items, files, file_bytes.
+	 * POST /remote/push: opens a push session and takes the destination lock.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -635,7 +617,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * GET /remote/push/{id} (R9): state and progress of this pairing's session.
+	 * GET /remote/push/{id}: state and progress of this pairing's session.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -655,8 +637,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/push/{id}/items (R13): one batch of at most 50 items and 2 MB, validated and
-	 * staged (blueprint §10.2); nothing is applied.
+	 * POST /remote/push/{id}/items: validates and stages one batch of items; nothing is applied.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -686,10 +667,8 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/push/{id}/apply (R14): one time-boxed step of the apply as the receiver user
-	 * (blueprint §10.3). A push with held items answers awaiting_review and writes nothing; a live
-	 * administrator finishes it from live (§10.5). Body (at most 1 KB): after, the row cursor of
-	 * the item results the source has already recorded.
+	 * POST /remote/push/{id}/apply: one time-boxed apply step as the receiver user. A push with
+	 * held items answers awaiting_review and writes nothing.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -719,7 +698,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/push/{id}/abort (R15): purges the staged rows and releases the lock, only
+	 * POST /remote/push/{id}/abort: purges the staged rows and releases the lock, only
 	 * before apply starts.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
@@ -746,8 +725,8 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/push/{id}/files (R10): the need list (have, need, renamed) for at most 2,000
-	 * files; every path passes Path_Guard (blueprint §9 steps 2 and 3).
+	 * POST /remote/push/{id}/files: the need list (have, need, renamed); every path passes
+	 * Path_Guard.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
 	 * @return WP_REST_Response|WP_Error
@@ -777,7 +756,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * PUT /remote/push/{id}/files/{ref}/chunks/{n} (R11): one chunk as a raw octet-stream body,
+	 * PUT /remote/push/{id}/files/{ref}/chunks/{n}: one chunk as a raw octet-stream body,
 	 * checked against X-SGSP-Chunk-SHA256 and written into the push's temporary folder.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
@@ -810,7 +789,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * POST /remote/push/{id}/files/{ref}/commit (R12): the parts become one file, checked by
+	 * POST /remote/push/{id}/files/{ref}/commit: the parts become one file, checked by
 	 * size, SHA-256, its real type and (for images) a readable image.
 	 *
 	 * @param WP_REST_Request $request Request (passed the chain).
@@ -841,10 +820,8 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * The memory guard every working remote handler checks before it starts (blueprint §13): above
-	 * 70 % of memory_limit the request does nothing and answers 503 server_busy with Retry-After, so
-	 * the source tries again (its client retries 5xx with backoff, then pauses with Resume). The
-	 * time budget is checked inside each handler's own loop.
+	 * Memory guard checked before a working handler starts: above 70 % of memory_limit it answers
+	 * 503 server_busy with Retry-After, and the source retries.
 	 *
 	 * @return WP_Error|null
 	 */
@@ -863,7 +840,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * Audit row of a read route: counts only, never content (blueprint §17).
+	 * Audit row of a read route: counts only, never content.
 	 *
 	 * @param string $event   Event.
 	 * @param array  $pairing Pairing row.
@@ -914,10 +891,8 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * Hook: rest_pre_serve_request. Serves the response of an authenticated remote request
-	 * itself, so the bytes covered by X-SGSP-Response-Signature are exactly the bytes sent
-	 * (blueprint §5.4). Requests that failed before the signature check are left to core and
-	 * stay unsigned.
+	 * Hook: rest_pre_serve_request. Serves an authenticated remote response itself, so
+	 * X-SGSP-Response-Signature covers exactly the bytes sent; earlier failures stay unsigned.
 	 *
 	 * @param bool             $served  Whether the request has been served.
 	 * @param WP_HTTP_Response $result  Result.
@@ -942,16 +917,15 @@ final class Remote_Controller {
 
 		$server->send_header( Signer::RESPONSE_HEADER, Signer::sign_response( $context['nonce'], (int) $result->get_status(), $body, $context['secret'] ) );
 
-		// The JSON body of a REST response, encoded once above so it matches its signature;
-		// served as application/json exactly as WP_REST_Server::serve_request() serves its own.
+		// Encoded once above so the body matches its signature.
 		echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON from wp_json_encode() in a REST response (application/json), not HTML.
 
 		return true;
 	}
 
 	/**
-	 * Hook: application_password_failed_authentication. Core passes only the error; the request
-	 * route is not known yet, so the failure is remembered for count_app_password_failure().
+	 * Hook: application_password_failed_authentication. Remembers the failure until the route
+	 * is known.
 	 *
 	 * @param mixed $error Core's error.
 	 * @return void
@@ -961,9 +935,8 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * Hook: rest_post_dispatch. A failed Application Password on one of our remote routes while
-	 * the window is open counts as a failed authentication for the address (blueprint §5.8).
-	 * The login is never read: that would need the Authorization header decoded.
+	 * Hook: rest_post_dispatch. A failed Application Password on a remote route counts as a
+	 * failed authentication for the address; the login is never decoded.
 	 *
 	 * @param mixed           $result  Response.
 	 * @param mixed           $server  Server.
@@ -1059,7 +1032,7 @@ final class Remote_Controller {
 	}
 
 	/**
-	 * The step-12 refusal.
+	 * The refusal of a body that fails validation.
 	 *
 	 * @return WP_Error
 	 */

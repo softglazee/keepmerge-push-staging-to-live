@@ -24,22 +24,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §11: rolls a push back from a live administrator's session (there is no remote
- * rollback route). The order and the reasons for it are in dev/phase-plans/phase-8.md §2:
- *
- * 1. items pass: the push's items in reverse apply order (adopted rows first, then options, widgets,
- *    site editor items, menus, patterns and navigation, variations, products and posts,
- *    attachments, terms with children before parents); each item put back to its snapshot through
- *    Raw_Restore, or removed when the push created it, and its sync_state row restored with it;
- * 2. files pass: replaced media files copied back from the snapshot folder (SHA-256 checked); files
- *    the push added deleted when no attachment references them any more;
- * 3. finish: payloads reduced, temporary folder removed, lock released, state rolled_back.
- *
- * An item live changed after the push (its hash is no longer the push's post_hash) is a conflict
- * and is skipped unless the administrator ticked it in the preview. Steps are time-boxed and
- * claimed by compare-and-swap on the session's cursor; each row is marked "restoring" before live
- * is touched and "restored" / "removed" (with restored_gmt) after, so a rollback that stops is
- * resumed without restoring anything twice. A rolled-back push cannot be rolled back again.
+ * Rolls a push back from a live administrator's session; there is no remote rollback route.
+ * Items go back in reverse apply order (to their snapshot, or removed when the push created them),
+ * then replaced files are restored and added files deleted when unused. An item live changed after
+ * the push is a conflict and is skipped unless the administrator ticked it. Steps are time-boxed
+ * and every row is marked before and after it is touched, so a stopped rollback resumes without
+ * restoring anything twice.
  */
 final class Rollback_Runner {
 
@@ -68,9 +58,8 @@ final class Rollback_Runner {
 	// --- preview ----------------------------------------------------------------------------------
 
 	/**
-	 * What a rollback would do (blueprint §11.3): restore N, remove M created items, K conflicts
-	 * (edited on live after the push), and the items whose pre-image the current administrator's
-	 * own filters would change.
+	 * What a rollback would do: counts of restores, removals and conflicts, and the items the
+	 * current administrator's own filters would change.
 	 *
 	 * @param array $session Session.
 	 * @return array
@@ -208,8 +197,7 @@ final class Rollback_Runner {
 	// --- run --------------------------------------------------------------------------------------
 
 	/**
-	 * One time-boxed step of a rollback; the first call starts it (blueprint §11.3). The typed
-	 * domain was checked by the caller.
+	 * One time-boxed step of a rollback; the first call starts it. The caller checked the typed domain.
 	 *
 	 * @param array    $session Session.
 	 * @param string[] $ticked_uuids UUIDs of conflicts the administrator ticked (first call only).
@@ -293,8 +281,7 @@ final class Rollback_Runner {
 	}
 
 	/**
-	 * Starts a rollback: conflicts checked against the ticked UUIDs, the order of the rows fixed,
-	 * state rolling_back, audit rollback_started.
+	 * Starts a rollback: checks the ticked UUIDs, fixes the row order and audits the start.
 	 *
 	 * @param array    $session Session.
 	 * @param string[] $ticked_uuids Ticked conflict UUIDs.
@@ -319,8 +306,7 @@ final class Rollback_Runner {
 		foreach ( $file_rows as $file ) {
 			$known[ (string) $file['uuid'] ] = true;
 		}
-		// A ticked UUID must name an item of this push; whether it is a conflict is checked again
-		// for each item when the rollback reaches it.
+		// A ticked UUID must name an item of this push; conflicts are checked again per item.
 		$ticked = array();
 		foreach ( $ticked_uuids as $uuid ) {
 			$uuid = (string) $uuid;
@@ -430,10 +416,8 @@ final class Rollback_Runner {
 	}
 
 	/**
-	 * Rolls back one item row.
-	 *
-	 * A row is restored only when live still holds what the push wrote (hash_equals()), so a later
-	 * edit on live is never rolled over unless the administrator ticked it.
+	 * Rolls back one item row, only while live still holds what the push wrote, so a later edit on
+	 * live is never rolled over unless the administrator ticked it.
 	 *
 	 * @param array    $session Session.
 	 * @param array    $row     Row (decoded).
@@ -482,8 +466,7 @@ final class Rollback_Runner {
 		if ( 'restore' === $op && '' !== (string) $row['pre_hash'] ) {
 			$now = self::current_hash( $row );
 			if ( ! hash_equals( (string) $row['pre_hash'], $now ) ) {
-				// Restored, but not to the exact snapshot (for example the admin's own HTML filter
-				// changed it): reported, never hidden.
+				// Restored, but not exactly (for example the admin's own HTML filter changed it).
 				$note = current_user_can( 'unfiltered_html' ) ? 'restore_inexact' : 'restore_filtered';
 			}
 		}
@@ -493,10 +476,8 @@ final class Rollback_Runner {
 	}
 
 	/**
-	 * Rolls back one file row (blueprint §11.3 file_replaced; files the push added).
-	 *
-	 * Restores or deletes only files the push itself replaced or added, inside the uploads base,
-	 * through WP_Filesystem; hashes compared with hash_equals().
+	 * Rolls back one file row: restores or deletes, through WP_Filesystem, only a file the push
+	 * itself replaced or added inside the uploads base.
 	 *
 	 * @param array    $session Session.
 	 * @param array    $file    File row (decoded).
@@ -559,10 +540,7 @@ final class Rollback_Runner {
 	}
 
 	/**
-	 * Finish (blueprint §11.3): payloads reduced in batches, then temporary folder, lock, audit.
-	 *
-	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
-	 * from Tables::table_name(): core has no API for plugin tables.
+	 * Finish: payloads reduced in batches, then temporary folder, lock, audit.
 	 *
 	 * @param array $session Session.
 	 * @param array $rb      Cursor (changed).
@@ -617,9 +595,8 @@ final class Rollback_Runner {
 	// --- shared with Retry and Skip ---------------------------------------------------------------
 
 	/**
-	 * Puts one item of a push back as it was before the push (Skip this item; Retry of an item
-	 * that may be half-written): a placeholder the push created is removed, an item that differs
-	 * from its snapshot is restored. The row's own status is the caller's business.
+	 * Puts one item back as it was before the push, for Skip and Retry: a placeholder is removed, an
+	 * item that differs from its snapshot is restored. The row's status is left to the caller.
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row (decoded, with pre_image).
@@ -652,9 +629,7 @@ final class Rollback_Runner {
 	/**
 	 * A row by ID with its JSON columns decoded (for Recovery).
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param int $id Row ID.
 	 * @return array|null
@@ -692,9 +667,7 @@ final class Rollback_Runner {
 	 * Item rows a rollback handles: rows the apply wrote or started to write (they have a
 	 * snapshot), and every placeholder the push created.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param array $session Session.
 	 * @return array[] Light rows (no pre-image).
@@ -719,9 +692,7 @@ final class Rollback_Runner {
 	/**
 	 * File rows a rollback handles: files the push replaced or added.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param array $session Session.
 	 * @return array[]
@@ -741,9 +712,8 @@ final class Rollback_Runner {
 	}
 
 	/**
-	 * Row IDs in rollback order: the apply's write order reversed (kind rank, parent depth, row),
-	 * adopted rows first, and inside one rank and depth removals before restores (a created page
-	 * that took a slug goes before the page that had it is restored).
+	 * Row IDs in rollback order: the apply's write order reversed, adopted rows first, and removals
+	 * before restores within a rank, so a created page frees its slug before the old page gets it back.
 	 *
 	 * @param array $session Session.
 	 * @return int[]
@@ -815,8 +785,7 @@ final class Rollback_Runner {
 	/**
 	 * Why a row is a conflict ('' when it is not): an applied item live changed after the push.
 	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Hashes are compared in constant time with hash_equals().
 	 *
 	 * @param array $row Row.
 	 * @return string
@@ -841,10 +810,7 @@ final class Rollback_Runner {
 	}
 
 	/**
-	 * Why a file row is a conflict: the file on live is no longer the one the push wrote.
-	 *
-	 * The hash_file() call reads only a file inside the uploads base that the push wrote; compared with
-	 * hash_equals().
+	 * Why a file row is a conflict: the file the push wrote inside the uploads base has changed.
 	 *
 	 * @param array $file File row.
 	 * @return string
@@ -868,8 +834,7 @@ final class Rollback_Runner {
 	/**
 	 * Whether live still holds an item exactly as its snapshot recorded it.
 	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Hashes are compared in constant time with hash_equals().
 	 *
 	 * @param array $row Row.
 	 * @return bool
@@ -944,10 +909,8 @@ final class Rollback_Runner {
 	}
 
 	/**
-	 * Whether a file (relative to the uploads base) is still used by an attachment on live.
-	 *
-	 * Prepared queries on core's postmeta decide whether a file is still used before a rollback
-	 * deletes it; a file another attachment uses is kept.
+	 * Whether a file (relative to the uploads base) is still used by an attachment on live, checked
+	 * before a rollback deletes it.
 	 *
 	 * @param string $rel Relative path.
 	 * @return bool
@@ -998,8 +961,7 @@ final class Rollback_Runner {
 	/**
 	 * Records a row's rollback state (and restored_gmt once something was put back).
 	 *
-	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
-	 * from Tables::table_name(): core has no API for plugin tables.
+	 * Direct write: core has no API for plugin tables.
 	 *
 	 * @param array  $row      Row.
 	 * @param string $state    State.
@@ -1076,8 +1038,7 @@ final class Rollback_Runner {
 	 * The destination lock for the rollback: taken when nobody holds it; another push's lock stops
 	 * the rollback (release it first if it is stale).
 	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Hashes are compared in constant time with hash_equals().
 	 *
 	 * @param array $session Session.
 	 * @return true|WP_Error
@@ -1097,9 +1058,7 @@ final class Rollback_Runner {
 	/**
 	 * Whether the pairing still exists and is not revoked (its sync_state rows are restored).
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param int $pairing_id Pairing row ID.
 	 * @return bool

@@ -18,21 +18,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The destination half of blueprint §10.1–§10.2 and §12: a session per push (pushes row, side
- * "destination"), its lock, its staged items (push_items rows, side "destination") and the end
- * of its life (abort, expiry). Nothing here touches live's content: the rows are staged and
- * wait for the apply of Phase 7.
+ * The destination side of a push session: its lock, its staged items and the end of its life
+ * (abort, expiry, retention). Nothing here touches live's content; Apply\Applier writes later.
  *
- * States: open → receiving → staged → [awaiting_review] → snapshotting → applying → applied
- * (Apply\Applier); aborted (by its source, before apply), expired (24 hours without apply: rows
- * purged), failed (the final pass found the items not matching the plan), failed_partial (an item
- * failed during the apply: retry, skip or roll back), interrupted (the apply stopped without a
- * heartbeat, or its window closed or pairing was revoked: resume or roll back; Apply\Recovery),
- * rolling_back → rolled_back (Apply\Rollback_Runner).
- *
- * Idempotency (blueprint §12.2): a batch is identified by (push, seq) and must name the same
- * UUIDs when sent again; an item by (push, uuid), the table's unique key. A batch sent again
- * returns the stored results and writes nothing.
+ * States: open → receiving → staged → [awaiting_review] → snapshotting → applying → applied, or
+ * aborted, expired, failed, failed_partial, interrupted, rolling_back → rolled_back. Batches are
+ * idempotent by (push, seq) and items by (push, uuid): a batch sent again writes nothing.
  */
 final class Push_Session {
 
@@ -44,8 +35,7 @@ final class Push_Session {
 	const LIVE_STATES = array( 'open', 'receiving', 'staged' );
 
 	/**
-	 * States in which a session holds the destination lock (blueprint §10.1): receiving, waiting
-	 * for review or apply, or being applied.
+	 * States in which a session holds the destination lock.
 	 */
 	const LOCK_STATES = array( 'open', 'receiving', 'staged', 'awaiting_review', 'snapshotting', 'applying', 'failed_partial', 'interrupted', 'rolling_back' );
 
@@ -65,27 +55,27 @@ final class Push_Session {
 	const ACTIONS = array( 'create', 'update', 'recreate', 'trash', 'adopt' );
 
 	/**
-	 * Most items a push carries (blueprint §13).
+	 * Most items a push carries.
 	 */
 	const MAX_ITEMS = 5000;
 
 	/**
-	 * Most items per batch (threat model R13).
+	 * Most items per batch.
 	 */
 	const MAX_BATCH = 50;
 
 	/**
-	 * Largest item batch body, bytes (threat model R13).
+	 * Largest item batch body, bytes.
 	 */
 	const MAX_BATCH_BYTES = 2097152;
 
 	/**
-	 * Largest session-open body, bytes (threat model R8).
+	 * Largest session-open body, bytes.
 	 */
 	const MAX_OPEN_BYTES = 65536;
 
 	/**
-	 * Seconds a session may wait for its apply (blueprint §10.1).
+	 * Seconds a session may wait for its apply.
 	 */
 	const TTL = DAY_IN_SECONDS;
 
@@ -130,8 +120,7 @@ final class Push_Session {
 			return self::error( 'push_exists', 409 );
 		}
 
-		// The media must fit before anything is taken (S-64): the per-push cap and 80% of the free
-		// disk space when the host reports it.
+		// The media must fit (per-push cap and free disk space) before the lock is taken.
 		$storage = Media_Receiver::storage_reason( $fields['file_bytes'] );
 		if ( '' !== $storage ) {
 			self::audit(
@@ -232,8 +221,7 @@ final class Push_Session {
 	}
 
 	/**
-	 * GET /remote/push/{id}: the session's state and progress. Read-only: a status call is not
-	 * progress, so it does not renew the lock's heartbeat (only open and item batches do).
+	 * GET /remote/push/{id}: the session's state and progress (does not renew the lock heartbeat).
 	 *
 	 * @param array $session Session.
 	 * @return array
@@ -312,7 +300,7 @@ final class Push_Session {
 			return self::error( 'item_count_exceeded', 409 );
 		}
 
-		// Files come before items (blueprint §12.1): the first batch ends the files phase.
+		// Files come before items: the first batch ends the files phase.
 		Media_Receiver::close_files( $session );
 
 		$push_id  = (int) $session['id'];
@@ -329,9 +317,7 @@ final class Push_Session {
 		$position = 0;
 		foreach ( array_values( $body['items'] ) as $raw ) {
 			if ( $position++ > 0 && Limits::over( $deadline ) ) {
-				// Out of time or memory (blueprint §13): the items staged so far stay, the batch keeps
-				// its number, and the source sends the same batch again; items already stored are
-				// answered from their rows (idempotent by push and UUID).
+				// Out of time or memory: staged items stay and the source resends the same batch.
 				Push_Lock::heartbeat( $session['push_uuid'] );
 				return new WP_Error(
 					'server_busy',
@@ -429,7 +415,7 @@ final class Push_Session {
 			return self::error( 'push_expired', 410 );
 		}
 		if ( ! in_array( $session['state'], self::UNAPPLIED_STATES, true ) ) {
-			// Once the apply started, only a live administrator can end it (Phase 8 roll back).
+			// Once the apply started, only a live administrator can end it (roll back).
 			return self::error( 'push_applying', 409 );
 		}
 
@@ -458,8 +444,7 @@ final class Push_Session {
 	}
 
 	/**
-	 * Ends a session that never wrote anything on live, from live itself (a live administrator
-	 * released its stale lock): staged rows purged, temporary folder deleted, lock released.
+	 * Ends a session that never wrote anything, after a live administrator released its stale lock.
 	 *
 	 * @param array  $session Session (open, receiving, staged or awaiting_review).
 	 * @param string $reason  Reason for the audit.
@@ -494,9 +479,7 @@ final class Push_Session {
 	}
 
 	/**
-	 * Expires sessions older than 24 hours that were not applied: staged rows purged, temporary
-	 * folder deleted, lock released (daily prune; blueprint §14.5). Retention of applied pushes is
-	 * prune_retention().
+	 * Expires sessions older than 24 hours that were not applied (daily prune).
 	 *
 	 * @param int $limit Most sessions per call.
 	 * @return int Sessions expired.
@@ -539,8 +522,7 @@ final class Push_Session {
 			'state'         => (string) $session['state'],
 			'apply'         => \SoftGlaze\SafePush\Apply\Applier::progress( $session ),
 			'rollback'      => \SoftGlaze\SafePush\Apply\Rollback_Runner::progress( $session ),
-			// Interrupted: the apply stopped (stored state), or the source stopped in the middle of
-			// sending, or a rollback stopped (no heartbeat for 5 minutes).
+			// The apply, the sending or a rollback stopped (no heartbeat for 5 minutes).
 			'interrupted'   => 'interrupted' === $session['state'] || ( in_array( $session['state'], array( 'open', 'receiving', 'rolling_back' ), true ) && 'none' !== $lock && 'fresh' !== $lock ) || ( 'rolling_back' === $session['state'] && 'none' === $lock ),
 			'pruned'        => ! empty( $cursor['pruned'] ),
 			'lock'          => $lock,
@@ -567,7 +549,7 @@ final class Push_Session {
 	}
 
 	/**
-	 * Limits the source must keep to: item batches and media (blueprint §13).
+	 * Limits the source must keep to: item batches and media.
 	 *
 	 * @return array
 	 */
@@ -614,8 +596,7 @@ final class Push_Session {
 	}
 
 	/**
-	 * Claims a step of a session: writes the cursor only if nobody changed it since it was read,
-	 * so two requests never run the same session's step at once.
+	 * Claims a step with a compare-and-swap on the cursor, so a step never runs twice at once.
 	 *
 	 * @param int    $id     Session row ID.
 	 * @param string $raw    Cursor as read with raw_cursor().
@@ -631,11 +612,9 @@ final class Push_Session {
 	}
 
 	/**
-	 * Retention of applied pushes (blueprint §11.4, §14.5): pushes in a final state whose snapshots
-	 * are older than the retention lose their item rows (snapshots included) and their snapshot
-	 * folder, in bounded batches. The newest pushes with snapshots are kept whatever their age (at
-	 * least 3, never the newest one); sessions waiting for a decision (failed_partial, interrupted,
-	 * rolling_back) are never pruned. The pushes row stays as history, marked pruned.
+	 * Retention: final pushes past the retention lose their item rows and snapshot folder in
+	 * bounded batches; the newest ones and sessions awaiting a decision are kept, and the pushes
+	 * row stays as history.
 	 *
 	 * @param int $days   Retention in days (7–180).
 	 * @param int $keep   Newest pushes kept whatever their age (at least 3).
@@ -746,9 +725,7 @@ final class Push_Session {
 	}
 
 	/**
-	 * A received session as the live Pushes tab shows it in detail (blueprint §16): counts, the
-	 * held items with their reasons (plain text), the items skipped, failed or refused, and the
-	 * snapshot size.
+	 * A received session as the live Pushes tab shows it in detail.
 	 *
 	 * @param array $session Session.
 	 * @return array
@@ -789,7 +766,7 @@ final class Push_Session {
 			'edit_css'        => current_user_can( 'edit_css' ),
 		);
 
-		// Recovery (blueprint §10.4, §12): what the live administrator can do with this push.
+		// Recovery: what the live administrator can do with this push.
 		$failed = null;
 		$apply  = isset( $session['cursor_json']['apply'] ) && is_array( $session['cursor_json']['apply'] ) ? $session['cursor_json']['apply'] : array();
 		if ( 'failed_partial' === $session['state'] && isset( $apply['failed']['row'] ) ) {
@@ -1256,7 +1233,7 @@ final class Push_Session {
 	}
 
 	/**
-	 * The body of R8, each field read by name.
+	 * The body of POST /remote/push, each field read by name.
 	 *
 	 * @param array $body Body.
 	 * @return array|WP_Error

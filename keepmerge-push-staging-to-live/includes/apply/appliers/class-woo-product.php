@@ -17,17 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §7 rules 3–9: products and variations are written only through the WooCommerce CRUD:
- * wc_get_product() (or the class of the staged type), setters for the props of the field groups
- * the admin decided to push, then save(). The data store writes the changed props only, so stock
- * that a checkout wrote between load and save is not overwritten, and WooCommerce keeps its own
- * lookup tables and caches.
- *
- * - The live-owned group (stock quantity and status) is written only for a new product (the
- *   staging stock, live has none) or when the admin chose "Push stock" and live's live-owned
- *   group still equals its base; otherwise it is left and the result says so.
- * - Products are never trashed or deleted here; product IDs never change.
- * - The author of a new product is the mapped author (WooCommerce would use the current user).
+ * Writes products and variations only through the WooCommerce CRUD (getters, setters, save()), so
+ * the data store writes changed props only and keeps its lookup tables and caches. Stock is written
+ * only for a new product, or with "Push stock" while live's stock still equals its base. Products
+ * are never trashed or deleted here.
  */
 final class Woo_Product extends Base {
 
@@ -107,8 +100,7 @@ final class Woo_Product extends Base {
 			return new WP_Error( 'write_failed', 'write_failed' );
 		}
 		if ( self::writes( $ctx, 'content' ) && '' !== $type && $product->get_type() !== $type ) {
-			// A changed product type needs the class of the new type (core of WooCommerce's own
-			// product type switch); the ID stays.
+			// A changed product type needs the class of the new type, as WooCommerce's own switch does.
 			$class = self::class_for( $type );
 			if ( '' === $class ) {
 				return new WP_Error( 'type_not_included', 'type_not_included' );
@@ -156,9 +148,8 @@ final class Woo_Product extends Base {
 	}
 
 	/**
-	 * Base group hashes after the push (blueprint §6.6): a group written here gets live's new hash;
-	 * a group live kept gets the staging hash of that group, so the next plan sees "changed on live"
-	 * (keep) rather than "changed on staging" (push) for it.
+	 * Base group hashes after the push: written groups get live's new hash, kept groups the staging
+	 * hash, so the next plan sees a kept group as changed on live rather than on staging.
 	 *
 	 * @param Item_Context $ctx         Context.
 	 * @param array        $live_groups Live's group hashes after the write.
@@ -201,7 +192,7 @@ final class Woo_Product extends Base {
 
 	/**
 	 * The live-owned group: the staging stock for a new product; for an existing one only with
-	 * "Push stock" and only while live's stock group equals its base (blueprint §7 rule 4).
+	 * "Push stock" and only while live's stock group equals its base.
 	 *
 	 * @param Item_Context $ctx     Context.
 	 * @param \WC_Product  $product Product.
@@ -402,8 +393,8 @@ final class Woo_Product extends Base {
 	}
 
 	/**
-	 * Other product meta through the CRUD: each key the item carries gets its values; a key live
-	 * has that the item lacks is removed only when Item_Context allows it.
+	 * Other product meta through the CRUD; a key the item lacks is removed only when Item_Context
+	 * allows it.
 	 *
 	 * @param \WC_Product  $product Product.
 	 * @param array        $meta    Key => list of values.

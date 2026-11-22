@@ -14,20 +14,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Every query on sync_state (blueprint §6.1, §14.1): per pairing, a UUID's local object, the
- * remote object it is linked to, how it was matched, and (on live, from Phase 7) the base hash.
- *
- * On the source the baseline writes rows here (and an applied push links the source's objects to
- * live's IDs as "pushed"); it is the only table it writes besides the UUID meta of its own
- * objects. Live writes a row only inside an apply (Apply\Applier): the base hash both sites agree
- * on after the push and, for products, base_groups (JSON group => hash), which the manifest
- * returns to the planner's per-group three-way (blueprint §6.4 step 3, §10.3).
+ * Every query on sync_state: per pairing, a UUID's local object, the remote object it is linked
+ * to, how it was matched and, on live, the base hash. The source writes rows at the baseline and
+ * after an applied push; live writes them only inside an apply (the agreed base hash, per group
+ * for products), and its manifest returns them to the planner's three-way comparison.
  */
 final class Sync_State {
 
 	/**
-	 * Match confidences a row can carry. strong rows (and, from Phase 7, pushed rows) link a
-	 * local object to a remote one; the others are recorded for the plan, never followed.
+	 * Match confidences a row can carry. Strong and pushed rows link a local object to a remote
+	 * one; the others are recorded for the plan, never followed.
 	 */
 	const CONFIDENCES = array( 'strong', 'medium', 'none', 'duplicate', 'excluded', 'pushed' );
 
@@ -73,7 +69,7 @@ final class Sync_State {
 	}
 
 	/**
-	 * Live, inside an apply: the base of a UUID after the push (blueprint §10.3 step 3). The row
+	 * Live, inside an apply: the base of a UUID after the push. The row
 	 * links the UUID to live's object as "pushed".
 	 *
 	 * @param int    $pairing_id  Pairing row ID.
@@ -121,7 +117,7 @@ final class Sync_State {
 	}
 
 	/**
-	 * Live, inside a rollback (blueprint §11.3): puts a UUID's row back to what it was before the
+	 * Live, inside a rollback: puts a UUID's row back to what it was before the
 	 * push, as the snapshot recorded it, or removes it when there was none.
 	 *
 	 * @param int        $pairing_id Pairing row ID.

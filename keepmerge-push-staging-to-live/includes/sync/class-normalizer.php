@@ -14,22 +14,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Turns stored values into the typed JSON of blueprint §8.1 and back, and replaces this site's
- * own address with tokens (§8.2).
- *
- * Typed JSON: arrays and scalars map directly; a float is {"__sgsp":"float","v":"1.5"}; a
- * string that is not UTF-8 is {"__sgsp":"bin","hex":"…"}; a stdClass is
- * {"__sgsp":"object","props":{…}}. Any other object makes the item unsupported: it is reported,
- * never guessed. An array that already uses the key "__sgsp", and a string that already holds
- * "{{sgsp:", make the item unsupported too, so a value is never silently altered.
- *
- * Serialized strings inside a value (double serialization) are decoded on the source only
- * (encode() in source mode) with allowed_classes false, into {"__sgsp":"ser","v":…}; live
- * rebuilds such a value with serialize(). Live never unserializes anything it receives, and its
- * own exports (destination mode) leave such strings undecoded: they become
- * {"__sgsp":"ser_raw","s":…}, the stored text with its URLs tokenized and its string lengths
- * recomputed by a small reader that never creates a PHP value. The Hasher brings the source's
- * "ser" values into the same text form, so both sites hash the same content to the same value.
+ * Turns stored values into typed JSON and back, and replaces this site's own address with tokens.
+ * Floats, non-UTF-8 strings and stdClass objects get "__sgsp" markers; any other object makes the
+ * item unsupported. Serialized strings nested in a value are decoded only on the source, from its
+ * own stored data, with allowed_classes false; live never unserializes what it receives and
+ * exports such strings as text with tokenized URLs and recomputed lengths.
  */
 final class Normalizer {
 
@@ -97,7 +86,7 @@ final class Normalizer {
 	}
 
 	/**
-	 * This site's origins: home_url(), and site_url() when it differs (blueprint §8.2).
+	 * This site's origins: home_url(), and site_url() when it differs.
 	 *
 	 * @return array<int,array{name:string,url:string}>
 	 */
@@ -352,7 +341,7 @@ final class Normalizer {
 					return $inner;
 				}
 				// Rebuilds a double-serialized value from plain data; serialize() computes the
-				// string lengths, so no string surgery is needed (blueprint §8.1).
+				// string lengths, so no string surgery is needed.
 				return serialize( $inner ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- Rebuilds a value that was stored serialized inside another value; input is plain data (arrays, scalars, stdClass).
 
 			default:
@@ -361,12 +350,9 @@ final class Normalizer {
 	}
 
 	/**
-	 * Whether received typed JSON carries serialized PHP text anywhere a plain string can be: a
-	 * string, a "bin" string, inside an object marker or inside a "ser" node. A source's encoder
-	 * turns every serialized value it can read into a "ser" node of plain data and refuses objects,
-	 * so such a string only arrives from a source that skipped the encoder; it is refused because
-	 * code on live that unserializes its own stored strings would read it (security review
-	 * 2026-11-22, KM-02). Core's own is_serialized() decides, the same test WordPress uses before it unserializes.
+	 * Whether received typed JSON carries serialized PHP text in any string, "bin" string, object
+	 * marker or "ser" node. The source's encoder never sends such text, so it is refused: code on
+	 * live that unserializes its own stored strings would read it. Uses core's is_serialized().
 	 *
 	 * @param mixed $typed Typed value as received.
 	 * @param int   $depth Nesting depth.
@@ -406,9 +392,9 @@ final class Normalizer {
 
 	/**
 	 * The text of a serialized value with every string run through $leaf and its length
-	 * recomputed. A small reader of PHP's serialize format: it copies class names and custom
-	 * payloads verbatim and never creates a PHP value, so it is safe on any input. Returns null
-	 * when the text is not one complete serialized value.
+	 * recomputed. A small reader of the serialize format that copies class names and custom
+	 * payloads verbatim and never creates a PHP value. Returns null when the text is not one
+	 * complete serialized value.
 	 *
 	 * @param string   $raw  Serialized text.
 	 * @param callable $leaf Receives each string value, returns its replacement.
@@ -508,9 +494,8 @@ final class Normalizer {
 			);
 		}
 
-		// Source side only, on this site's own stored data (blueprint §8.1): allowed_classes false
-		// means no object is ever created; an object comes back as __PHP_Incomplete_Class and
-		// makes the item unsupported in encode().
+		// Source side only, on this site's own stored data: with allowed_classes false no object is
+		// created, and an incomplete class makes the item unsupported in encode().
 		$decoded = unserialize( $value, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize -- Source-side decoding of this site's own double-serialized data with allowed_classes false; never applied to received data.
 
 		return array(

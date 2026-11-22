@@ -14,21 +14,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Decides whether the source may connect to a URL and makes the connection go to the address it
- * checked (blueprint §5.10, threat model §7.3).
- *
- * The REST root comes from a pasted pairing key, so it is untrusted input. Before every request:
- * https on port 443 only, no user-info, no fragment, never this site's own host; the host is
- * resolved once with gethostbynamel() and every IPv4 address must be public. The only exception
- * is core's http_request_host_is_external filter, called with the arguments core uses; the plugin
- * adds nothing to it. The checked address is kept for at most PIN_TTL seconds and then resolved
- * and checked again.
- *
- * The connection itself is pinned to the checked address on core's own cURL handle in the
- * http_api_curl hook, so a second, different DNS answer (DNS rebinding) is never used; TLS still
- * verifies the certificate for the host name. A request that did not pass the pin is discarded
- * by Remote_Client as transport_unpinned. Without the cURL extension the source refuses to
- * connect: there is no unpinned mode (threat model RR4).
+ * Decides whether the source may connect to a URL from a pasted (untrusted) pairing key: HTTPS on
+ * port 443 only, no user-info or fragment, never this site's own host, and every resolved IPv4
+ * address public unless core's http_request_host_is_external filter allows it. The connection is
+ * then pinned to the checked address so a second DNS answer (DNS rebinding) is never used; without
+ * cURL the source does not connect at all.
  */
 final class Outbound_Guard {
 
@@ -43,9 +33,8 @@ final class Outbound_Guard {
 	const PORT = 443;
 
 	/**
-	 * IPv4 ranges never connected to: this network, private, CGNAT, loopback, link-local and
-	 * cloud metadata, IETF protocol assignments, documentation, 6to4 relay, benchmarking,
-	 * multicast and reserved (blueprint §5.10). Network address => prefix length.
+	 * IPv4 ranges never connected to (private, loopback, link-local, metadata, reserved and
+	 * similar): network address => prefix length.
 	 */
 	const REFUSED_RANGES = array(
 		'0.0.0.0'      => 8,
@@ -232,8 +221,7 @@ final class Outbound_Guard {
 	}
 
 	/**
-	 * Registers the address one request must connect to. Remote_Client calls this right before
-	 * the request and take() right after it.
+	 * Registers the address one request must connect to (take() is called right after it).
 	 *
 	 * @param string $nonce Request nonce (X-SGSP-Nonce), unique per request.
 	 * @param string $host  Lowercase host of the request URL.
@@ -261,14 +249,10 @@ final class Outbound_Guard {
 	}
 
 	/**
-	 * Hook: http_api_curl. Pins one of the plugin's own requests to the address the guard checked.
+	 * Hook: http_api_curl. Pins one of the plugin's own armed requests to the checked address.
 	 *
-	 * CURLOPT_RESOLVE on core's own cURL handle, inside core's http_api_curl hook, is the only way to
-	 * connect to the address the guard checked while the certificate is still verified for the host
-	 * name (DNS rebinding, threat model §7.3); requests the plugin did not arm are untouched.
-	 *
-	 * Acts only when the request carries X-SGSP-Version and the nonce Remote_Client armed for it,
-	 * and only for the armed host on port 443; every other request is left exactly as it is.
+	 * CURLOPT_RESOLVE on core's own handle is the only way to connect to the checked address while
+	 * TLS still verifies the host name; requests the plugin did not arm are left untouched.
 	 *
 	 * @param mixed  $handle Core's cURL handle (passed by reference by core).
 	 * @param mixed  $args   Request arguments as WP_Http parsed them.
@@ -318,8 +302,7 @@ final class Outbound_Guard {
 		if ( $age < 0 || $age >= self::PIN_TTL ) {
 			return false;
 		}
-		// The address passed resolve() when it was cached (public, or allowed by core's filter
-		// at that time); within the run it is used as checked, without asking DNS again.
+		// The address passed resolve() when it was cached; within the run DNS is not asked again.
 		return is_string( $pin['ip'] ) && false !== filter_var( $pin['ip'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
 	}
 
@@ -334,8 +317,7 @@ final class Outbound_Guard {
 	}
 
 	/**
-	 * A host name: labels of 1–63 letters, digits and inner hyphens, at most 253 characters,
-	 * and a last label that is not all digits (so no spelling of an address passes as a name).
+	 * A valid host name whose last label is not all digits (no address passes as a name).
 	 *
 	 * @param string $host Host.
 	 * @return bool

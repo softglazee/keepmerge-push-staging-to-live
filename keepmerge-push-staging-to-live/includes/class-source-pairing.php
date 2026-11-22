@@ -16,15 +16,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The source side of pairing (blueprint §5.3 steps 2–4, §5.9; F3, F4). The destination side is
- * Pairing_Service.
- *
- * 1. Preview: the pasted key is parsed, its REST root passes the outbound guard, and live's
- *    status is read with the key's bootstrap credentials (signed answer required).
- * 2. Connect: status again, confirm (live issues the long-term credentials in a signed answer),
- *    the row is stored with them encrypted, then finalize is signed with them. The key's
- *    bootstrap values exist only in memory during the call; they are never stored here.
- * 3. The pairing waits for a live administrator; status checks show when live approved it.
+ * The source side of pairing (the destination side is Pairing_Service): preview the pasted key,
+ * then confirm, store the long-term credentials encrypted and finalize with them; a live
+ * administrator approves afterwards. The key's bootstrap values are never stored.
  *
  * Long-term credentials are decrypted only to build a Remote_Client; they never appear in a
  * return value, screen, CLI output, audit detail or error.
@@ -343,8 +337,8 @@ final class Source_Pairing {
 	}
 
 	/**
-	 * Revoke on the source: the stored credentials are deleted. There is no remote revoke route
-	 * (blueprint §5.9): the live administrator revokes the pairing there.
+	 * Revoke on the source: deletes the stored credentials. There is no remote revoke route; the
+	 * live administrator revokes the pairing on live.
 	 *
 	 * @param string $uuid Pairing UUID.
 	 * @return array|WP_Error
@@ -381,10 +375,8 @@ final class Source_Pairing {
 	}
 
 	/**
-	 * Deactivation of the plugin on this site: every source pairing that could still be used
-	 * becomes repair_needed, so nothing runs on reactivation without a fresh key. Its stored
-	 * credentials are deleted as well (stricter than blueprint §5.9, which keeps them): they are
-	 * never used again, while a copy of this database would still hold credentials live accepts.
+	 * Deactivation: every usable source pairing becomes repair_needed and its stored credentials
+	 * are deleted, so a copy of this database holds nothing live still accepts.
 	 *
 	 * @return int Pairings changed.
 	 */
@@ -575,7 +567,7 @@ final class Source_Pairing {
 	}
 
 	/**
-	 * Finalize with the long-term credentials (blueprint §5.3 step 4).
+	 * Finalize with the long-term credentials.
 	 *
 	 * @param array         $row    Pending source row.
 	 * @param Remote_Client $client Client holding the long-term credentials.
@@ -946,7 +938,7 @@ final class Source_Pairing {
 	}
 
 	/**
-	 * Parses a pasted key (the Phase 2A parser: explode with limit 7, one pattern per part).
+	 * Parses a pasted key with Pairing_Key's parser (one pattern per part).
 	 *
 	 * @param mixed $key Key.
 	 * @return array|WP_Error

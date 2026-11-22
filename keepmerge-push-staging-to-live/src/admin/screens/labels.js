@@ -1,7 +1,7 @@
 import { __ } from '@wordpress/i18n';
 
 /**
- * Words for a pairing status (blueprint §14.1 pairings.status).
+ * Words for a pairing status.
  *
  * @param {string} status Status.
  * @return {string} Label.

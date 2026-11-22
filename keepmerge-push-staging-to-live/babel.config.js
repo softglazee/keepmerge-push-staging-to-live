@@ -1,15 +1,10 @@
 /**
  * Babel configuration for the admin build.
  *
- * The default preset compiles JSX with the automatic runtime, which imports
- * react/jsx-runtime. WordPress only registers the matching script handle
- * (react-jsx-runtime) from 6.6, and this plugin supports 6.5, where the admin
- * script would then never load. The classic runtime compiles JSX to
- * createElement() calls instead, so every JSX file imports createElement and
- * Fragment from @wordpress/element, which core has shipped since 5.0.
- *
- * This plugin is listed before the preset's own JSX plugin, so it transforms
- * the JSX first and the automatic transform finds nothing left to do.
+ * WordPress registers react-jsx-runtime only from 6.6 and this plugin supports
+ * 6.5, so JSX is compiled with the classic runtime to createElement() and
+ * Fragment from @wordpress/element. Listed before the preset's own JSX plugin,
+ * this transform runs first and leaves the automatic one nothing to do.
  *
  * @param {Object} api Babel config API.
  * @return {Object} Babel config.

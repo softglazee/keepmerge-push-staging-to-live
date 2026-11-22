@@ -14,23 +14,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The softglaze_sp_settings option (blueprint §16 Settings, F15).
+ * The softglaze_sp_settings option.
  *
- * Every field is validated on its own. Name fields accept names only, so no setting can hold
- * CSS, JavaScript, PHP or HTML: an entry is trimmed and lowercased, then it must match
- * NAME_PATTERN as it is. Nothing is stripped to make it fit, because stripping the brackets
- * from a script tag would leave "script" and quietly accept it.
+ * Name fields accept names only, so no setting can hold CSS, JavaScript, PHP or HTML: an entry
+ * is trimmed and lowercased and must then match NAME_PATTERN as it is. Nothing is stripped to make
+ * it fit, because stripping a script tag's brackets would quietly accept "script".
  *
- * Content types are stored as the types to skip. Blueprint §2 includes every public type with
- * a UI, so a type registered later is included until the admin turns it off, and a skip list
- * can only narrow what is pushed.
+ * Content types are stored as the types to skip, so a type registered later is included until
+ * the admin turns it off, and the list can only narrow what is pushed.
  */
 final class Settings {
 
 	const OPTION = 'softglaze_sp_settings';
 
 	/**
-	 * A name, or a prefix ending in "*" (F15).
+	 * A name, or a prefix ending in "*".
 	 */
 	const NAME_PATTERN = '/^[a-z0-9_\-]{1,191}\*?$/';
 
@@ -42,7 +40,7 @@ final class Settings {
 	const MAX_ENTRIES = 200;
 
 	/**
-	 * Integer fields and their allowed ranges (blueprint §11.4, §13).
+	 * Integer fields and their allowed ranges.
 	 *
 	 * @var array<string,array{0:int,1:int}>
 	 */
@@ -120,8 +118,7 @@ final class Settings {
 
 	/**
 	 * The register_setting() sanitize callback: keeps every valid field and entry and drops the
-	 * rest. Messages are not shown from here; the admin route validates first and refuses the
-	 * whole save with reasons (validate()).
+	 * rest. The admin route calls validate() first and refuses a bad save with reasons.
 	 *
 	 * @param mixed $value Proposed option value.
 	 * @return array
@@ -235,7 +232,7 @@ final class Settings {
 	/**
 	 * Saves validated settings and audits the change: settings_changed with the changed keys
 	 * only (never values), plus code_report_enabled or code_report_disabled when that switch
-	 * flipped (blueprint §6.11).
+	 * flipped.
 	 *
 	 * @param array $input Proposed values, read by name by the caller.
 	 * @return array{saved:bool,settings:array,changed:string[],errors:array}
@@ -280,9 +277,8 @@ final class Settings {
 	public static function content_type_choices() {
 		$choices = array();
 
-		// Public types with a UI (blueprint §2). Internal types, including every order, refund,
-		// coupon and subscription type, are not public. Attachments travel with the items that use
-		// them, so they are not a choice of their own.
+		// Public types with a UI; order, refund, coupon and subscription types are not public.
+		// Attachments travel with the items that use them, so they are not a choice of their own.
 		foreach ( get_post_types( array( 'show_ui' => true ), 'objects' ) as $type ) {
 			if ( 'attachment' === $type->name || ! $type->public ) {
 				continue;
@@ -369,8 +365,8 @@ final class Settings {
 				continue;
 			}
 
-			// The refused text goes back to the admin as JSON data so they can see which entry was
-			// meant; the screen renders it as text. Control characters and broken UTF-8 are removed.
+			// The refused entry goes back as JSON data, rendered as text, without control
+			// characters or broken UTF-8.
 			$shown = wp_check_invalid_utf8( (string) preg_replace( '/[\x00-\x1F\x7F]/', '', substr( $entry, 0, 80 ) ), true );
 
 			if ( 1 !== preg_match( $pattern, $name ) ) {

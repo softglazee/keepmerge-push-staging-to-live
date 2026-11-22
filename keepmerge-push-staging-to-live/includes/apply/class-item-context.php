@@ -23,17 +23,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Builds what an applier writes for one item (blueprint §8.2, §8.3): every reference of the
- * sidecar resolved to live's own ID (the item itself, another item of this push after the allocate
- * pass, or live's existing object, which must still be there and inside live's scope), the IDs
- * written at their paths by Reference_Mapper's rewrite mode, URLs of files live renamed rewritten,
- * then the typed values decoded with live's own address in place of the URL tokens. Nothing is
- * ever unserialized: Normalizer::decode() builds arrays, scalars and stdClass only.
- *
- * A reference that cannot be resolved makes the item skipped with its reason: the target was not
- * created on live (dependency_skipped), live's object is gone or out of scope
- * (reference_missing), or the sidecar names another ID than the value at its path
- * (reference_mismatch).
+ * Builds what an applier writes for one item: every reference resolved to live's own ID, renamed
+ * file URLs rewritten, and the typed values decoded with live's address. Nothing is unserialized:
+ * Normalizer::decode() builds arrays, scalars and stdClass only. An unresolvable reference skips
+ * the item with its reason.
  */
 final class Item_Context {
 
@@ -121,9 +114,7 @@ final class Item_Context {
 	 * @param array $row     Row (decoded).
 	 * @param array $index   uuid => array( id, kind, action, status, local_object_id ) of the push.
 	 * @param array $renames    Source path => final path of files live renamed.
-	 * @param bool  $allocating The allocate pass: references to items not created yet are left
-	 *                          out (a placeholder needs only its name and, for a term or a
-	 *                          variation, its parent, which is created first).
+	 * @param bool  $allocating The allocate pass: references to items not created yet are left out.
 	 * @return Item_Context|WP_Error A WP_Error carries the skip reason.
 	 */
 	public static function build( array $session, array $row, array $index, array $renames, $allocating = false ) {
@@ -194,8 +185,7 @@ final class Item_Context {
 						return new WP_Error( 'dependency_skipped', 'dependency_skipped' );
 					}
 					if ( 'skipped' === $target['status'] && in_array( $target['action'], array( 'create', 'recreate', 'created' ), true ) ) {
-						// Created and then skipped never happens (skips come before allocation), but a
-						// placeholder that was not written is not a real object either.
+						// A placeholder that was never written is not a real object.
 						return new WP_Error( 'dependency_skipped', 'dependency_skipped' );
 					}
 					$live = (int) $target['local_object_id'];
@@ -226,9 +216,8 @@ final class Item_Context {
 	}
 
 	/**
-	 * Rewrites the URLs of files that live stored under a new name (blueprint §9 step 3) in every
-	 * string of the typed data, where URLs are still tokens: plain, JSON-escaped, URL-encoded and
-	 * protocol-relative forms of this site's uploads URL, followed by the old path.
+	 * Rewrites the URLs of files live stored under a new name in every string of the typed data, in
+	 * their plain, JSON-escaped, URL-encoded and protocol-relative forms.
 	 *
 	 * @param mixed $value   Typed value.
 	 * @param array $renames Source path => final path.
@@ -285,7 +274,7 @@ final class Item_Context {
 		}
 		$pairs = array();
 		if ( '' === $rel ) {
-			// Uploads on another host (a CDN): not rewritten, as blueprint §8.2 says.
+			// Uploads on another host (a CDN) are not rewritten.
 			$cache[ $key ] = $pairs;
 			return $pairs;
 		}
@@ -336,8 +325,8 @@ final class Item_Context {
 	}
 
 	/**
-	 * Taxonomies whose assignments the item sets on live: the ones the source names in its scope
-	 * (or, without a scope, the ones the item carries) that live includes for the type.
+	 * Taxonomies the item sets on live: those the source names (or the item carries) that live
+	 * includes for the type.
 	 *
 	 * @param string $object_type Post type.
 	 * @param array  $terms       Terms of the item: taxonomy => IDs.
@@ -383,8 +372,8 @@ final class Item_Context {
 	}
 
 	/**
-	 * The live user an item's author maps to (blueprint §6.8): by login, then by email, then the
-	 * pairing's default author, then the first administrator. Never the receiver user.
+	 * The live user an item's author maps to: by login, email, the pairing's default author, then the
+	 * first administrator. Never the receiver user.
 	 *
 	 * @param mixed $author Author entry: login and email.
 	 * @return int

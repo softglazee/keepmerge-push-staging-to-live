@@ -12,12 +12,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Pure classification (no I/O) of one plan row, blueprint §6.5 with §6.4 step 5 and §6.6.
+ * Pure classification (no I/O) of one plan row from S (staging hash now), L (live hash now) and
+ * B (base hash from live's sync_state).
  *
- * Inputs per item: S (staging hash now), L (live hash now, from the manifest), B (base hash from
- * live's sync_state, or none), where the item exists, how it was matched at the baseline, the
- * modification times of both sides and the clone date.
- *
+ * Classes and default actions:
  *   exists both, S = B, L = B            unchanged             none
  *   S ≠ B, L = B                         changed on staging    Push
  *   S = B, L ≠ B                         changed on live       Keep live
@@ -29,15 +27,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   was in base, gone from live, S = B   deleted on live       Leave deleted
  * Items only on live are never touched and are not part of a plan.
  *
- * Without a base (the first plan of a pairing), only strong baseline matches are decided by
- * dates: changed on staging after the clone date and not on live → Push; on live and not on
- * staging → Keep live; both → conflict; no timestamps (terms, menus, options, widgets) or no
- * clone date → conflict "differs, no history". Medium matches that differ are conflicts. Every
- * default decided by dates carries the by_dates badge.
- *
- * Products are compared per field group (content, pricing, identity) with their own three-way;
- * the live-owned group (stock, sales, ratings) is never pushed by default, and "Push stock" is
- * offered only when live's stock is unchanged since the base.
+ * Without a base (a pairing's first plan), strong baseline matches are decided by modification
+ * dates against the clone date; anything dates cannot decide is a conflict. Products are compared
+ * per field group; the live-owned group (stock, sales, ratings) is never pushed by default.
  */
 final class Classifier {
 
@@ -341,7 +333,7 @@ final class Classifier {
 		}
 
 		// Live-owned: never pushed by default; "Push stock" only when live's stock is unchanged
-		// since the base (blueprint §7 rule 4). Without a base that cannot be shown, so it is refused.
+		// since the base. Without a base that cannot be shown, so it is refused.
 		$s_owned = self::pick( $s_groups, 'live_owned' );
 		$l_owned = self::pick( $l_groups, 'live_owned' );
 		$b_owned = self::pick( $b_groups, 'live_owned' );

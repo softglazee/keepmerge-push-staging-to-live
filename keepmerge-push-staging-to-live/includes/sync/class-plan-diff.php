@@ -16,14 +16,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Builds the field-by-field difference of one item for the diff drawer (blueprint F6: "each row
- * opens a text diff of the changed fields, content rendered as escaped text").
- *
- * This site's side is exported now; live's side comes from POST /remote/items/fetch (read-only).
- * Which fields differ is decided by the per-field hashes of both normal forms, so IDs and URLs
- * that are written differently on the two sites but name the same thing are not shown as
- * changes. Values travel as text with URL tokens in place; the screen shows each side with its
- * own address and never renders any of it as HTML.
+ * Builds the field-by-field difference of one item for the diff drawer: this site's side is
+ * exported now, live's comes from POST /remote/items/fetch (read-only), and per-field hashes
+ * decide which fields differ. Values travel as text with URL tokens; the screen never renders
+ * them as HTML.
  */
 final class Plan_Diff {
 

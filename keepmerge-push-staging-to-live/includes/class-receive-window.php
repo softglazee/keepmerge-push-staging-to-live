@@ -14,12 +14,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * "Receive pushes" on the destination (blueprint §5.3, threat model T20).
+ * "Receive pushes" on the destination.
  *
- * Remote routes exist only while the window is open. An administrator opens it for a whole
- * number of hours from 1 to 24; there is no "until I close it". When the time is up it closes by
- * itself on the next request, except while a push holds a fresh lock (heartbeat younger than
- * 5 minutes), and never later than 24 hours after it was opened. Closing by hand is immediate.
+ * Remote routes exist only while the window is open. It opens for 1 to 24 whole hours and closes
+ * by itself when the time is up, unless a push holds a fresh lock, and never later than 24 hours
+ * after opening. Closing by hand is immediate.
  */
 final class Receive_Window {
 
@@ -155,8 +154,7 @@ final class Receive_Window {
 			return false;
 		}
 
-		// An apply the source was driving can no longer be called: it waits for the live
-		// administrator (resume on live, or roll back), test plan I-07.
+		// An apply the source was driving now waits for a live administrator to resume or roll back.
 		Apply\Recovery::interrupt_running( 'window_closed' );
 
 		$args = array( 'details' => array( 'reason' => sanitize_key( $reason ) ) );
@@ -169,10 +167,7 @@ final class Receive_Window {
 	}
 
 	/**
-	 * A valid duration, or null.
-	 *
-	 * Accepts integers and digit-only strings (REST and WP-CLI deliver strings); refuses
-	 * fractions, signs, units and anything outside 1–24.
+	 * A valid duration, or null: integers or digit-only strings from 1 to 24.
 	 *
 	 * @param mixed $hours Candidate.
 	 * @return int|null

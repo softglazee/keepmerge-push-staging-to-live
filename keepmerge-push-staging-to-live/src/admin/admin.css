@@ -1556,7 +1556,7 @@ html:has(.sgsp-savebar) {
 	}
 }
 
-/* Send tab (Phase 2B) */
+/* Send tab */
 
 .sgsp-wrap .sgsp-input--key {
 	font-family: var(--sgsp-font-mono);
@@ -1774,7 +1774,7 @@ html:has(.sgsp-savebar) {
 	}
 }
 
-/* Plan, diff and code report (Phase 4) -------------------------------- */
+/* Plan, diff and code report -------------------------------- */
 
 .sgsp-stat--danger {
 	border-left-color: var(--sgsp-danger);
@@ -2323,7 +2323,7 @@ html:has(.sgsp-savebar) {
 	}
 }
 
-/* Push: dialog, progress, history (Phase 5) ------------------------------ */
+/* Push: dialog, progress, history ------------------------------ */
 
 .sgsp-pushdialog__facts {
 	display: flex;
@@ -2572,7 +2572,7 @@ html:has(.sgsp-savebar) {
 	}
 }
 
-/* --- Phase 7: apply progress, push detail and the review of held items ---------------------- */
+/* --- Apply progress, push detail and the review of held items ---------------------- */
 
 .sgsp-progress__bar--apply {
 	background: var(--sgsp-success);
@@ -2749,7 +2749,7 @@ html:has(.sgsp-savebar) {
 	}
 }
 
-/* Rollback and recovery (Phase 8) ------------------------------------ */
+/* Rollback and recovery ------------------------------------ */
 
 .sgsp-rollback__counts {
 	margin: 0 0 var(--sgsp-space-3);

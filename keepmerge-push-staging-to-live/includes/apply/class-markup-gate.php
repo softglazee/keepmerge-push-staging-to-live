@@ -12,29 +12,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Detection half of blueprint §10.5. Pure and read-only: it adds or removes no filter, switches
- * no user and writes nothing, so the source can predict with it (the plan's "will be held for
- * review" warning) and live can run it on received items at staging time (Phase 5).
- *
- * An item is held when, for any of its fields:
- * - title, content, excerpt, term description: the kses filter core applies for a user without
- *   unfiltered_html would change the value (wp_filter_kses for titles, wp_filter_post_kses for
- *   the rest; term descriptions are also checked with the stricter context core really uses for
- *   them, pre_term_description). Values are compared token by token (tags, attributes with their
- *   decoded values, decoded text, comments), so a different way of writing the same markup
- *   ("<img/>" and "<img />", quote style, "&" and "&amp;") is not a change; anything kses removes
- *   or alters is.
- * - global styles: WP_Theme_JSON::remove_insecure_properties() would change the JSON, or it holds
- *   custom CSS ("styles.css" or a "css" key anywhere under "styles").
- * - every string in meta, term meta, option and widget values (nested JSON strings decoded up to
- *   depth 8; each string also checked after one pass of URL-decoding and one of HTML-entity
- *   decoding): a case-insensitive match for a less-than sign followed by an active tag name
- *   (script, iframe, object, embed, form, meta, link, base, style, svg, math), "srcdoc",
- *   "javascript:", "vbscript:", "data:text/html", an "on…=" event attribute, or the escaped forms
- *   "&lt;", "\x3c" and "\u003c" before those tag names.
- *
- * The softglaze_sp_markup_gate_patterns filter can add literal text to look for in those strings;
- * the built-in patterns are always applied, so a filter cannot remove or weaken one.
+ * Decides which items wait for a live administrator. Pure and read-only (no filter changes, no
+ * user switch, no writes), so the source can predict holds and live can check received items.
+ * An item is held when core's kses for a user without unfiltered_html would change a title,
+ * content, excerpt or description (compared token by token, so equivalent markup is not a change),
+ * when global styles would lose insecure properties or carry custom CSS, or when any string in
+ * meta, option or widget values (also URL-, entity- and nested-JSON-decoded) looks like active
+ * markup. Filters can add patterns, never remove the built-in ones.
  */
 final class Markup_Gate {
 
@@ -75,10 +59,8 @@ final class Markup_Gate {
 	);
 
 	/**
-	 * Setting keys whose string value a theme or plugin prints as code or markup (a theme's custom
-	 * JavaScript or tracking code, header and footer scripts, custom CSS, raw HTML). Such a value
-	 * carries no pattern the gate knows (plain JavaScript has no tag), so options and the widgets
-	 * unit hold it for a live administrator by its name (security review 2026-11-22, KM-05).
+	 * Setting keys whose value a theme or plugin prints as code or markup. Plain JavaScript carries
+	 * no tag the patterns would find, so these are held by name.
 	 */
 	const CODE_KEY = '/(?:\A|[_.-])(?:js|javascript|scripts?|css|codes?|html)(?:\z|[_.-])/i';
 
@@ -86,7 +68,7 @@ final class Markup_Gate {
 	 * Hold reasons for one item.
 	 *
 	 * Core's kses does not filter meta, options or widgets, so the gate holds anything that looks like
-	 * active markup or code there for a live administrator (threat model §7.4, RR2).
+	 * active markup or code there for a live administrator.
 	 *
 	 * @param string $kind Item kind (post, product, attachment, pattern, navigation, template,
 	 *                     template_part, global_styles, term, menu, option, widgets).
@@ -304,8 +286,7 @@ final class Markup_Gate {
 	}
 
 	/**
-	 * The patterns in force: the built-in ones, then literal text added by the
-	 * softglaze_sp_markup_gate_patterns filter. Built-in keys always keep their own pattern.
+	 * The built-in patterns plus literal text added by the softglaze_sp_markup_gate_patterns filter.
 	 *
 	 * @return array<string,string> Rule ID => PCRE pattern.
 	 */
@@ -313,9 +294,8 @@ final class Markup_Gate {
 		/**
 		 * Adds text the markup gate looks for in meta, option and widget values.
 		 *
-		 * Return the array with entries added as rule ID => literal text (matched
-		 * case-insensitively). The built-in patterns cannot be removed or changed: they are
-		 * applied whatever the filter returns.
+		 * Add entries as rule ID => literal text (matched case-insensitively). The built-in
+		 * patterns are applied whatever the filter returns.
 		 *
 		 * @param array<string,string> $patterns Built-in rule IDs and their PCRE patterns.
 		 */
@@ -356,8 +336,8 @@ final class Markup_Gate {
 	}
 
 	/**
-	 * A term or menu description: wp_filter_post_kses() as the blueprint names it, and the
-	 * stricter pre_term_description context core applies to every term description.
+	 * A term or menu description: wp_filter_post_kses(), and the stricter pre_term_description
+	 * context core applies to every term description.
 	 *
 	 * @param array  $reasons Reasons (appended to).
 	 * @param array  $fields  Fields.

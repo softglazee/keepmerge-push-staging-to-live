@@ -80,8 +80,8 @@ function Lines( { field, origins } ) {
 }
 
 /**
- * The text diff of one plan item (blueprint F6): only the fields that differ, each shown as
- * escaped text. Live's copy is read when the drawer opens.
+ * The text diff of one plan item: only the fields that differ, each shown as escaped text. Live's
+ * copy is read when the drawer opens.
  *
  * @param {Object}   props
  * @param {number}   props.planId Plan ID.

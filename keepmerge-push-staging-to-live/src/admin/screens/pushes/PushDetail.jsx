@@ -18,10 +18,8 @@ import { kindName } from './labels';
 const RUNNING = [ 'snapshotting', 'applying' ];
 
 /**
- * One push received on this site (blueprint §16 Pushes, destination): what was applied, skipped,
- * held and refused, the snapshot size, the review of held items, and "Continue apply on this
- * site" (typed domain) that writes the push from this administrator's own session (§10.5), and
- * recovery: Resume, Retry, Skip, Roll back (RecoveryCard, §10.4, §11, §12).
+ * One push received on this site: its counts, the review of held items, "Continue apply on this
+ * site" (from this administrator's own session, domain typed) and recovery (RecoveryCard).
  *
  * @param {Object}   props
  * @param {number}   props.id     Push row ID.

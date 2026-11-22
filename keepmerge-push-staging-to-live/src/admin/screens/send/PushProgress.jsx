@@ -12,12 +12,9 @@ const ACTIVE = [ 'sending_files', 'sending_items', 'paused', 'staged', 'applying
 const SENDING = [ 'sending_files', 'sending_items', 'staged', 'applying' ];
 
 /**
- * A push on its way to live: progress, what live answered per batch, the apply on live and the
- * per-step log (blueprint §16 Send tab). Each step is one request (one batch, or one time-boxed
- * apply call); the browser runs the steps one after the other. When the page is closed the push
- * simply stops: opening the Send tab again shows it here with Resume, and batches live already has
- * are never stored twice. A push with items held for review stops calling apply: "Check status"
- * asks live whether its administrator finished it.
+ * A push on its way to live: progress, live's answers and the per-step log. The browser runs one
+ * request per step; a closed page simply stops the push, and Resume continues it without storing
+ * a batch twice. A push held for review only asks live for its state ("Check status").
  *
  * @param {Object}   props
  * @param {Object}   props.initial     The push.

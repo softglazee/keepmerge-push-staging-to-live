@@ -12,16 +12,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The context of one export run.
- *
- * Source: nested serialized strings are decoded, objects without a UUID get one (a write to this
- * site's own meta only), and a reference is named for the hash by the live ID it is linked to
- * through this pairing's strong baseline matches ("p:<live ID>"), or by its UUID when it has no
- * link yet ("u:<uuid>").
- *
- * Destination (answering a remote read): nothing is written, nested serialized strings stay
- * text, and a reference is named by its own ID ("p:<ID>"). For a matched object the two names
- * are equal, which is what makes the hashes of unchanged items equal on both sites.
+ * The context of one export run. On the source, nested serialized strings are decoded, objects
+ * without a UUID get one, and a reference is named for the hash by its linked live ID ("p:<ID>")
+ * or its UUID. On the destination nothing is written and a reference is named by its own ID, so
+ * unchanged matched items hash alike on both sites.
  */
 final class Export_Context {
 

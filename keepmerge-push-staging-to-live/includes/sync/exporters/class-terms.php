@@ -15,9 +15,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Terms of the included taxonomies (blueprint §6.2): taxonomy, name, slug, description, parent
- * and term meta minus the excluded keys. The term count is volatile and left out, as are
- * WooCommerce's counter meta keys.
+ * Terms of the included taxonomies: taxonomy, name, slug, description, parent and term meta minus
+ * the excluded keys. The term count and WooCommerce's counter meta keys are volatile and left out.
  */
 final class Terms extends Exporter {
 

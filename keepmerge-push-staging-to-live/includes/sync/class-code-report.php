@@ -17,21 +17,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §6.11 and F8. Code is reported, never pushed: no file content travels in either
- * direction, nothing is installed, updated, activated or switched, and nothing is written into a
- * plugin or theme folder. This is the only class that reads plugin and theme folders, and it only
- * lists them and hashes files with sha1_file().
- *
- * Live (POST /remote/code-manifest, R7, answered only while "Allow code report requests" is on):
- * - without a component: the inventory (WordPress and PHP versions, the active theme and its
- *   parent, installed themes and plugins with versions and active state, must-use plugin and
- *   drop-in file names, and the components whose files can be compared: the active theme, its
- *   parent and each active plugin);
- * - with a component from that list and a cursor: one page of at most 500 files (path, size,
- *   SHA-1; files over 5 MB by size only), at most 20,000 files per component.
- *
- * Source: asks for live's inventory and pages, compares them with its own files and keeps the
- * result in the softglaze_sp_code_report option (one record per pairing, not autoloaded).
+ * Code is reported, never pushed: no file content travels in either direction, and nothing is
+ * installed, updated, activated, switched or written into a plugin or theme folder. Live answers
+ * POST /remote/code-manifest (only while "Allow code report requests" is on) with its inventory
+ * or one page of file hashes; the source compares them with its own files and keeps the result in
+ * the softglaze_sp_code_report option. This is the only class that reads plugin and theme
+ * folders, and it only lists them and hashes files with sha1_file().
  */
 final class Code_Report {
 
@@ -53,7 +44,7 @@ final class Code_Report {
 	const COMPONENT_PATTERN = '#\A(theme|plugin):([A-Za-z0-9._-]{1,100}(?:/[A-Za-z0-9._-]{1,100})?)\z#';
 
 	// ------------------------------------------------------------------------------------------
-	// Live: answering R7.
+	// Live: answering the code manifest request.
 	// ------------------------------------------------------------------------------------------
 
 	/**
@@ -238,12 +229,10 @@ final class Code_Report {
 	}
 
 	/**
-	 * The files of a component, sorted by path (byte order). Symbolic links to folders are not
-	 * followed and files that resolve outside the component are left out. A component with more
-	 * than MAX_FILES files, or one that cannot be listed before the deadline, is "truncated".
-	 *
-	 * Lists only files inside live's own active theme and plugin folders, chosen by live; links that
-	 * resolve outside a component are left out (realpath()), and nothing is ever written.
+	 * The files of a component, sorted by path (byte order). Only live's own active theme and plugin
+	 * folders are listed: symbolic links to folders are not followed, files that resolve outside the
+	 * component are left out, and nothing is written. A component with more than MAX_FILES files, or
+	 * one that cannot be listed before the deadline, is "truncated".
 	 *
 	 * @param array      $info     Component.
 	 * @param float|null $deadline Stop listing at this time (microtime).
@@ -308,10 +297,8 @@ final class Code_Report {
 	}
 
 	/**
-	 * One file as the report carries it: path, size and SHA-1 (null over 5 MB). Never content.
-	 *
-	 * The sha1_file() call gives a hash for comparison only; the report carries path, size and hash, never file
-	 * content (threat model §7.6).
+	 * One file as the report carries it: path, size and SHA-1 (null over 5 MB). sha1_file() gives a
+	 * hash for comparison only; the report never carries file content.
 	 *
 	 * @param string $root     Component root.
 	 * @param string $relative Relative path.
@@ -455,10 +442,8 @@ final class Code_Report {
 	}
 
 	/**
-	 * Requests and compares one page of the current component.
-	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Requests and compares one page of the current component. Hashes are compared with
+	 * hash_equals(), as every hash and signature in the plugin is.
 	 *
 	 * @param array $record Record (changed).
 	 * @param mixed $client Client.
@@ -975,7 +960,7 @@ final class Code_Report {
 	}
 
 	/**
-	 * A step-12 refusal.
+	 * A refusal of a malformed request body.
 	 *
 	 * @param string $code Code.
 	 * @return WP_Error

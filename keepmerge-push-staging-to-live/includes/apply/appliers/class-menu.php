@@ -18,11 +18,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Replaces a menu unit (blueprint §6.6: items are not merged one by one in v1). The menu term is
- * updated; its item posts are reused in order and written with the fields core stores for a menu
- * item; new items are created; items beyond the staged list go to the Trash (not deleted, so a
- * rollback can bring them back). Parent items are resolved inside the unit through the source's
- * item IDs (the envelope's item_ids). Locations travel in the theme mods option.
+ * Replaces a menu as one unit (items are not merged one by one). Item posts are reused in order,
+ * new ones created, and items beyond the staged list go to the Trash so a rollback can restore
+ * them. Parents resolve inside the unit; locations travel in the theme mods option.
  */
 final class Menu extends Base {
 
@@ -112,7 +110,7 @@ final class Menu extends Base {
 			$type    = self::str( $item, 'type' );
 			$classes = isset( $item['classes'] ) && is_array( $item['classes'] ) ? array_values( array_map( 'strval', $item['classes'] ) ) : array();
 			// The same sanitizers core's wp_update_nav_menu_item() applies, so a theme's walker that
-			// prints these fields gets what core would have stored (security review 2026-11-22, KM-07).
+			// prints these fields gets what core would have stored.
 			$classes = array_map( 'sanitize_html_class', $classes );
 			$xfn     = implode( ' ', array_map( 'sanitize_html_class', explode( ' ', self::str( $item, 'xfn' ) ) ) );
 			update_post_meta( $item_id, '_menu_item_type', wp_slash( $type ) );

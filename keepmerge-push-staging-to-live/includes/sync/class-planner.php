@@ -20,23 +20,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Builds a plan (blueprint §3 F6/F7, §6.5–§6.8) in time-boxed steps. Nothing is sent for writing
- * and live is only read (manifest, baseline, code-manifest); the plan is stored on this site in
- * push_items (side "source") and expires after 60 minutes.
- *
- * Stages of one plan:
- * 1. export: every item of this site is exported and hashed (source context), its references
- *    and the markup gate's prediction recorded;
- * 2. deleted: items linked at the baseline that are gone from this site;
- * 3. manifest: live's hash, base hash and group hashes for every item, in batches of at most
- *    500 (POST /remote/manifest), plus live-only changes since the base and the block types and
- *    theme stylesheets live lacks for the listed items;
- * 4. taken: for items new on this site, whether live already has another item with the slug
- *    (POST /remote/baseline, read-only);
- * 5. code: one inventory call for the Code tab (POST /remote/code-manifest; live may refuse);
- * 6. classify: the three-way table with the first-sync date rules (Classifier);
- * 7. closure: dependencies (a pushed item pulls in its new dependencies; a dependency in conflict
- *    blocks it), warnings, the author mapping preview and the summary.
+ * Builds a dry-run plan in time-boxed steps: exports and hashes every item, reads live's hashes,
+ * slugs and code inventory, classifies each row three ways, then resolves dependencies, warnings
+ * and the summary. Live is only read; the plan is stored on this site in push_items (side
+ * "source") and expires after 60 minutes.
  */
 final class Planner {
 
@@ -60,7 +47,7 @@ final class Planner {
 	const BASELINE_ROUTE = '/keepmerge/v1/remote/baseline';
 
 	/**
-	 * Items exported per inner batch before the time budget is checked again (blueprint §13).
+	 * Items exported per inner batch before the time budget is checked again.
 	 */
 	const EXPORT_BATCH = 200;
 
@@ -462,7 +449,7 @@ final class Planner {
 	 * @return WP_Error|null
 	 */
 	private static function stage_manifest( array $plan, array &$cursor, $client, $deadline ) {
-		// Adaptive batch (blueprint §13): halved when live deferred entries for its own time budget or
+		// Adaptive batch: halved when live deferred entries for its own time budget or
 		// memory guard, doubled again (up to the maximum) after an answer without any.
 		$batch = isset( $cursor['mbatch'] ) ? max( self::MANIFEST_MIN_BATCH, min( self::MANIFEST_BATCH, (int) $cursor['mbatch'] ) ) : self::MANIFEST_BATCH;
 		while ( ! Limits::over( $deadline ) ) {
@@ -750,8 +737,7 @@ final class Planner {
 					)
 				);
 
-				// Templates, parts and global styles of a theme live does not have are skipped
-				// (blueprint §6.6), whatever their class.
+				// Templates, parts and global styles of a theme live lacks are skipped, whatever their class.
 				$stylesheet = isset( $p['stylesheet'] ) ? (string) $p['stylesheet'] : '';
 				if ( '' !== $stylesheet && in_array( $stylesheet, $cursor['missing_themes'], true ) && ( in_array( $result['action'], Classifier::SENT, true ) || '' === $result['action'] ) ) {
 					$result['class']    = Classifier::EXCLUDED;
@@ -805,7 +791,7 @@ final class Planner {
 			}
 		}
 
-		// Fresh flags.
+		// Closure flags are recomputed from scratch.
 		foreach ( $rows as $i => $row ) {
 			$rows[ $i ]['payload']['pulled_in_by'] = array();
 			$rows[ $i ]['payload']['blocked_by']   = array();

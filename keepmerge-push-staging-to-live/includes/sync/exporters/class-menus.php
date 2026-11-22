@@ -14,9 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * A menu unit (blueprint §6.2): the nav_menu term and its ordered items (type, object, object
- * ID or URL, title, classes, target, parent item, position, item meta). Menu locations travel
- * in the theme mods option.
+ * A menu unit: the nav_menu term and its ordered items (type, object, object ID or URL, title,
+ * classes, target, parent item, position, item meta). Menu locations travel in the theme mods
+ * option.
  */
 final class Menus extends Exporter {
 

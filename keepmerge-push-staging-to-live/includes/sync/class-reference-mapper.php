@@ -12,18 +12,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Finds every numeric reference to another object inside an item (blueprint §8.3) and builds
- * the reference sidecar: one entry { path, kind, id, uuid } per location. IDs are never
- * rewritten in the item on the sending side; live resolves each UUID to its own ID and rewrites
- * only those locations (Phase 7).
- *
- * Block content is read with parse_blocks() and never serialized back here. The same walk can
- * also produce the hash form of an item: every reference location replaced by a canonical
- * token that both sites compute alike (the Hasher's job), so an item has the same hash on both
- * sites even when its IDs differ.
- *
- * The registry is extensible with the softglaze_sp_reference_rules filter; built-in rules always
- * win over filtered ones, so a filter can add rules but not remove or change one.
+ * Finds every numeric reference to another object inside an item and records it in a sidecar
+ * ({ path, kind, id, uuid } per location). The source never rewrites IDs; live resolves each UUID
+ * to its own ID and rewrites only the recorded locations. The same walk builds the hash form, in
+ * which every reference is a token both sites compute alike. The softglaze_sp_reference_rules
+ * filter can add rules but never remove or change a built-in one.
  */
 final class Reference_Mapper {
 
@@ -47,7 +40,7 @@ final class Reference_Mapper {
 	const SPEC_PATTERN = '/\A(?:(?:post|attachment|pattern|navigation|menu_item|term|menu)(?:\[\]|\{\}\[\])?|nav)\z/';
 
 	/**
-	 * Block attributes holding IDs (blueprint §8.3).
+	 * Block attributes holding IDs.
 	 */
 	const BLOCK_RULES = array(
 		'core/image'              => array( 'id' => 'attachment' ),
@@ -92,7 +85,7 @@ final class Reference_Mapper {
 	);
 
 	/**
-	 * ID-valued options (blueprint §6.9, the names marked *).
+	 * Options whose value is an object ID.
 	 */
 	const OPTION_RULES = array(
 		'site_icon'                     => 'attachment',
@@ -161,8 +154,7 @@ final class Reference_Mapper {
 	private $hits = 0;
 
 	/**
-	 * Rewrite mode (live, Phase 7): path => array( kind, staging ID, live ID ). Null in scan and
-	 * hash mode, which never look at it.
+	 * Rewrite mode, on live: path => array( kind, staging ID, live ID ). Null in scan and hash mode.
 	 *
 	 * @var array|null
 	 */
@@ -251,13 +243,10 @@ final class Reference_Mapper {
 	}
 
 	/**
-	 * Live's half of blueprint §8.3: walks an item's typed data the same way scan() does, so every
-	 * path is the one the source recorded, and writes live's ID at each location the map names.
-	 * Only those locations change; block content is serialized again only when a block reference
-	 * really changed, and a JSON string only when an ID inside it changed. A location the map does
-	 * not name keeps its value inside content (blocks, HTML, shortcodes, builder JSON), and becomes
-	 * 0 in an ID field (it named nothing on the source). A map entry whose kind or staging ID
-	 * differs from what is found at its path is reported as a mismatch (the caller refuses the item).
+	 * Rewrites an item on live: walks its typed data as scan() does, so every path matches the
+	 * source's sidecar, and writes live's ID at each location the map names. Unnamed locations keep
+	 * their value inside content and become 0 in an ID field; a map entry whose kind or staging ID
+	 * differs from what is found there is reported as a mismatch (the caller refuses the item).
 	 *
 	 * @param string $kind Item kind.
 	 * @param array  $data Typed data (as staged).
@@ -436,7 +425,7 @@ final class Reference_Mapper {
 		);
 
 		/**
-		 * Adds ID-reference rules (blueprint §8.3). Entries that already exist keep their built-in
+		 * Adds ID-reference rules. Entries that already exist keep their built-in
 		 * spec; entries with an unknown name or spec are ignored.
 		 *
 		 * @param array $rules {
@@ -561,7 +550,7 @@ final class Reference_Mapper {
 	}
 
 	/**
-	 * Product fields (blueprint §6.6 groups).
+	 * Product fields, by field group.
 	 *
 	 * @param array $data  Normal form.
 	 * @param array $rules Rules.
@@ -869,7 +858,7 @@ final class Reference_Mapper {
 			$changed = $this->changed;
 			if ( false !== strpos( $value, '<!-- wp:' ) ) {
 				$blocks = $this->rewrite_blocks( $path . '/blocks', parse_blocks( $value ) );
-				// serialize_blocks() only when a block reference changed (blueprint §8.3).
+				// serialize_blocks() only when a block reference changed.
 				return $this->changed === $changed ? $value : serialize_blocks( $blocks );
 			}
 			$text = $this->chunk( $path . '/html', $value );

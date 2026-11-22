@@ -13,12 +13,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * The one place in the plugin that names WooCommerce's order, coupon, customer and session
- * storage (blueprint §7 rule 1; compliance V9 greps for these names and expects them here only).
- * Every list is a denylist: an exporter or a remote handler asks this class whether something
- * is out of bounds, never the other way round.
- *
- * It also declares compatibility with WooCommerce's order storage (HPOS) on before_woocommerce_init
- * (blueprint §7 rule 8): HPOS on or off makes no difference because orders are never touched.
+ * storage. Every list is a denylist that exporters and remote handlers consult. It also declares
+ * HPOS compatibility: orders are never touched, so the order storage makes no difference.
  */
 final class Guard {
 
@@ -72,15 +68,14 @@ final class Guard {
 	);
 
 	/**
-	 * Product fields that belong to live (blueprint §7 rule 4): never pushed by default and kept
-	 * out of a product's item hash, so a sale on live does not make the product look changed.
+	 * Product fields that belong to live: never pushed by default and kept out of a product's item
+	 * hash, so a sale on live does not make the product look changed.
 	 */
 	const LIVE_OWNED_FIELDS = array( 'stock_quantity', 'stock_status', 'total_sales', 'average_rating', 'rating_counts', 'review_count' );
 
 	/**
-	 * Product meta keys that the product exporter reads through WooCommerce getters (or that
-	 * WooCommerce derives), so they are not repeated as "other meta". _price is derived from the
-	 * regular and sale prices; _product_version records the WooCommerce version that saved.
+	 * Product meta keys read through WooCommerce getters or derived by WooCommerce, so they are not
+	 * repeated as "other meta".
 	 */
 	const PRODUCT_INTERNAL_META = array(
 		'_sku',

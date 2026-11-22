@@ -12,8 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Reads the server's PHP limits; never changes them (work in time-boxed steps
- * instead of raising limits).
+ * Reads the server's PHP limits and never changes them; work runs in time-boxed steps instead.
  */
 final class Limits {
 
@@ -23,7 +22,7 @@ final class Limits {
 	const MAX_BUDGET = 20;
 
 	/**
-	 * Share of memory_limit at which a step stops (blueprint §13).
+	 * Share of memory_limit at which a step stops.
 	 */
 	const MEMORY_SHARE = 0.7;
 
@@ -37,7 +36,7 @@ final class Limits {
 	}
 
 	/**
-	 * Time budget per request (blueprint §13): min( 20 s, 0.6 × max_execution_time ), 20 s when
+	 * Time budget per request: min( 20 s, 0.6 × max_execution_time ), 20 s when
 	 * PHP has no limit.
 	 *
 	 * @return int Seconds, at least 1.
@@ -70,8 +69,8 @@ final class Limits {
 	}
 
 	/**
-	 * Whether this request still uses less than the given share of memory_limit (blueprint §13:
-	 * a batch stops at 70 %). Always true when PHP has no memory limit.
+	 * Whether this request uses less than the given share of memory_limit; always true without a
+	 * limit.
 	 *
 	 * @param float $share Share of memory_limit.
 	 * @return bool

@@ -83,12 +83,9 @@ function SubTabs( { tabs, selected, onSelect, idPrefix } ) {
 }
 
 /**
- * The plan of one active pairing (blueprint F6, F7; §16 Send tab): scope, a dry run in
- * time-boxed steps, then the diff with its sub-tabs, conflict decisions and the push dialog.
- *
- * A push started from the dialog replaces the plan view with its progress (PushProgress); a
- * push that is still sending or paused when the tab is opened again is shown the same way, with
- * Resume. A finished push stays above the next plan.
+ * The plan of one active pairing: scope, a dry run in time-boxed steps, the diff, conflict
+ * decisions and the push dialog. A running or paused push replaces the plan view with its
+ * progress (PushProgress); a finished one stays above the next plan.
  *
  * @param {Object}   props
  * @param {Object}   props.pairing     Pairing.

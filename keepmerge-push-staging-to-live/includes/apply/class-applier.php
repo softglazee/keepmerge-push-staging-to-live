@@ -32,24 +32,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §10.3 and §10.5: applies a staged push in time-boxed steps, as passes over the push's
- * item rows (the order and the reasons for it are in dev/phase-plans/phase-7.md §2):
- *
- * 0. Review gate: a push with any held row waits (awaiting_review) and nothing is written. Such a
- *    push is then applied only from a live administrator's own session ("Continue apply on this
- *    site"), so approved markup is written by a user allowed to write it; the source's apply calls
- *    only read its state from then on.
- * 1. Snapshot pass (Snapshot_Store): every row to process, before any write.
- * 2. Allocate pass: placeholders for new items so every UUID resolves to a live ID.
- * 3. Write pass in dependency order, each item re-hashed first (changed_during_push), written by
- *    its kind's applier, hashed again, its base recorded.
- * 4. Adopt pass: UUID and base for matched, unchanged items.
- * 5. Finish: payloads reduced, temporary files removed, lock released, audit.
- *
- * Whoever runs a step writes as themselves: the receiver user for a push driven by the source (so
- * core's filters apply), or the live administrator who continues a reviewed push. Nothing here
- * removes a filter or switches the current user. A step is claimed with a compare-and-swap on the
- * session's cursor, so two requests never run the same push at once.
+ * Applies a staged push in time-boxed passes: snapshot every row first, allocate placeholders so
+ * every UUID resolves, write in dependency order (each item re-hashed first, so an edit made on live
+ * during the push is kept), adopt matched items, then finish. A push with held items waits and is
+ * applied only from a live administrator's own session. Whoever runs a step writes as themselves
+ * (filters are never removed, the user never switched), and a compare-and-swap on the cursor stops
+ * two requests from running the same push at once.
  */
 final class Applier {
 
@@ -61,8 +49,7 @@ final class Applier {
 	const RUNNING = array( 'snapshotting', 'applying' );
 
 	/**
-	 * Rank of each kind in the write pass (blueprint §10.3 step 3). Variations come after their
-	 * products; parents come before children inside a rank.
+	 * Rank of each kind in the write pass; parents come before children inside a rank.
 	 */
 	const WRITE_RANK = array(
 		'term'          => 0,
@@ -95,7 +82,7 @@ final class Applier {
 	const MAX_BODY = 1024;
 
 	/**
-	 * POST /remote/push/{id}/apply (R14), as the receiver user.
+	 * POST /remote/push/{id}/apply, as the receiver user.
 	 *
 	 * @param array $session Session (this pairing's).
 	 * @param array $body    Decoded body: after (int).
@@ -127,7 +114,7 @@ final class Applier {
 				// A live administrator decides how this push goes on (resume or roll back on live).
 				return self::answer( $session, $after );
 			}
-			// The source drove this apply: it may resume it (blueprint §12.2 resume rules).
+			// The source drove this apply, so it may resume it.
 			$resumed = Recovery::resume( $session, 'remote', 0 );
 			if ( is_wp_error( $resumed ) ) {
 				return 'push_locked' === $resumed->get_error_code() ? self::error( 'push_locked', 409 ) : self::answer( Push_Session::find( (string) $session['push_uuid'] ), $after );
@@ -162,8 +149,7 @@ final class Applier {
 
 	/**
 	 * POST /admin/pushes/{id}/continue: one step of a reviewed push from a live administrator's
-	 * session. Every held item must be decided, and the user must still hold the rights its
-	 * approvals need.
+	 * session, once every held item is decided and the user holds the rights its approvals need.
 	 *
 	 * @param array $session Session.
 	 * @param int   $user_id Current user.
@@ -230,8 +216,7 @@ final class Applier {
 	// --- gate and start --------------------------------------------------------------------------
 
 	/**
-	 * The review gate: a session with any held row waits for review (once there, it stays there
-	 * until a live administrator continues it).
+	 * The review gate: a session with any held row waits until a live administrator continues it.
 	 *
 	 * @param array $session Session.
 	 * @return array The session.
@@ -267,8 +252,7 @@ final class Applier {
 	/**
 	 * Starts the passes: review-skipped rows are marked, the snapshot pass begins.
 	 *
-	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
-	 * from Tables::table_name(): core has no API for plugin tables.
+	 * Direct write: core has no API for plugin tables.
 	 *
 	 * @param array  $session Session.
 	 * @param string $actor   'remote' or 'user'.
@@ -403,8 +387,8 @@ final class Applier {
 		}
 		$stored = Push_Session::find( (string) $session['push_uuid'] );
 		if ( is_array( $stored ) && 'interrupted' === $stored['state'] && in_array( $state, self::RUNNING, true ) ) {
-			// The window closed or the pairing was revoked while this step ran: the push stays
-			// interrupted for the live administrator's decision (its progress is kept).
+			// The window closed or the pairing was revoked during this step: the live administrator
+			// decides, and the progress is kept.
 			$state = 'interrupted';
 		}
 		Push_Lock::heartbeat( (string) $session['push_uuid'] );
@@ -454,7 +438,7 @@ final class Applier {
 				$apply['snapshot_bytes'] = (int) $apply['snapshot_bytes'] + (int) $taken;
 				$moved                   = self::changed_since_plan( $row );
 				if ( '' !== $moved ) {
-					// Live changed the item after the plan was made (F-02): it keeps live's version.
+					// Live changed the item after the plan was made: it keeps live's version.
 					self::update_row(
 						(int) $row['id'],
 						array(
@@ -503,7 +487,7 @@ final class Applier {
 				}
 				self::mark( $apply );
 				if ( 'applying' === $row['status'] ) {
-					// A step that died in the middle of this item (blueprint §12.2 resume rules).
+					// A step that died in the middle of this item.
 					$again = self::recover( $session, $row );
 					if ( 'failed' === $again ) {
 						++$apply['idx'];
@@ -580,11 +564,9 @@ final class Applier {
 	}
 
 	/**
-	 * Whether live's item differs from live's hash when the plan was made (the envelope's
-	 * live_hash): checked against the snapshot just taken.
+	 * Whether live's item changed since the plan was made, checked against the snapshot just taken.
 	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Hashes are compared in constant time with hash_equals().
 	 *
 	 * @param array $row Row (before the snapshot).
 	 * @return string The skip reason, or ''.
@@ -614,14 +596,13 @@ final class Applier {
 		$image = is_array( $row['pre_image'] ) ? $row['pre_image'] : json_decode( (string) $row['pre_image'], true );
 		$had   = is_array( $image ) && isset( $image['uuid_owners'] ) && is_array( $image['uuid_owners'] ) ? array_map( 'intval', $image['uuid_owners'] ) : array();
 		if ( array() !== array_intersect( $found, $had ) ) {
-			// The object had the UUID before this push wrote anything (its snapshot saw it): it is
-			// live's own object outside the scope, not a placeholder of this push, and is left alone.
+			// The object carried the UUID before this push wrote anything: it is live's own object
+			// outside the scope, not a placeholder, and is left alone.
 			return new WP_Error( 'target_exists', 'target_exists' );
 		}
 		if ( 1 === count( $found ) ) {
-			// A step that died after creating this placeholder and before recording it: the object
-			// with the item's UUID is that placeholder (a new item's UUID was unknown on live when it
-			// was staged), so it is recorded instead of a second one being made.
+			// A step died after creating this placeholder and before recording it: record it rather
+			// than make a second one.
 			self::update_row(
 				(int) $row['id'],
 				array(
@@ -656,10 +637,8 @@ final class Applier {
 	}
 
 	/**
-	 * Write pass for one item.
-	 *
-	 * The item is written only while live still equals its snapshot (hash_equals() on the pre-image
-	 * hash), so an edit made on live during the push is never overwritten (blueprint §10.3).
+	 * Write pass for one item, only while live still equals its snapshot, so an edit made on live
+	 * during the push is never overwritten.
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row.
@@ -670,7 +649,7 @@ final class Applier {
 		$action = (string) $row['action'];
 		$ref    = Snapshot_Store::ref( $kind, $row );
 
-		// Optimistic concurrency (blueprint §10.3): live's item must still be what the snapshot saw.
+		// Optimistic concurrency: live's item must still be what the snapshot saw.
 		if ( in_array( $action, array( 'update', 'trash' ), true ) ) {
 			$now = self::current_hash( $kind, $ref );
 			if ( ! hash_equals( (string) $row['pre_hash'], $now ) ) {
@@ -731,8 +710,7 @@ final class Applier {
 	/**
 	 * Adopt pass for one item: UUID and base of a matched, unchanged item.
 	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Hashes are compared in constant time with hash_equals().
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row.
@@ -756,13 +734,11 @@ final class Applier {
 	}
 
 	/**
-	 * A row left in "applying" by a step that died (blueprint §12.2): live's hash equals the
-	 * intended post-apply hash (the staging hash in post_hash) → the write finished, it is recorded
-	 * as applied without writing again; it equals the snapshot's pre_hash (or the row is a
-	 * placeholder) → processed again; anything else → a decision for the live administrator.
+	 * A row left in "applying" by a step that died: recorded as applied when live already holds the
+	 * intended hash (never written twice), processed again when live still holds the snapshot, and
+	 * otherwise left for the live administrator to decide.
 	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Hashes are compared in constant time with hash_equals().
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row (light or full).
@@ -847,8 +823,8 @@ final class Applier {
 	}
 
 	/**
-	 * Runs one item's work; anything it throws stops the push at that item (blueprint §10.4)
-	 * instead of ending the request with the row half done.
+	 * Runs one item's work; anything it throws stops the push at that item instead of ending the
+	 * request with the row half done.
 	 *
 	 * @param callable $work Work.
 	 * @return mixed|WP_Error
@@ -877,10 +853,9 @@ final class Applier {
 	}
 
 	/**
-	 * Finish (blueprint §10.3 step 5): payloads reduced in batches, then the end.
+	 * Finish: payloads reduced in batches, then the end.
 	 *
-	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
-	 * from Tables::table_name(): core has no API for plugin tables.
+	 * Direct write: core has no API for plugin tables.
 	 *
 	 * @param array $session Session.
 	 * @param array $apply   Cursor (changed).
@@ -978,8 +953,8 @@ final class Applier {
 	}
 
 	/**
-	 * A failed item: the push stops as failed_partial (blueprint §10.4); the live administrator
-	 * chooses Retry, Skip this item and continue, or Roll back (Apply\Recovery, Rollback_Runner).
+	 * A failed item: the push stops as failed_partial until the live administrator retries, skips
+	 * the item or rolls back.
 	 *
 	 * @param array    $session Session.
 	 * @param array    $apply   Cursor (changed).
@@ -1034,8 +1009,7 @@ final class Applier {
 	 * @param int    $live_id  Live object ID.
 	 * @param string $hash     Live's post-apply hash.
 	 * @param array  $warnings Warning codes.
-	 * @param array  $groups   Live's product group hashes after the write (the rollback tells an
-	 *                         order placed since from a content edit by the live-owned group).
+	 * @param array  $groups   Live's product group hashes after the write.
 	 * @return void
 	 */
 	private static function applied( array $row, $action, $live_id, $hash, array $warnings, array $groups = array() ) {
@@ -1098,12 +1072,10 @@ final class Applier {
 	// --- order ------------------------------------------------------------------------------------
 
 	/**
-	 * Row IDs of the allocate or write pass in dependency order (blueprint §10.3 step 3): by kind
-	 * rank, then parents before children (references to the parent inside this push), then by row.
+	 * Row IDs of the allocate or write pass in dependency order: by kind rank, then parents before
+	 * children, then by row.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param array  $session Session.
 	 * @param string $pass    allocate or write.
@@ -1255,9 +1227,7 @@ final class Applier {
 	/**
 	 * Rows of the push by UUID: id, kind, action, status, local_object_id.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param array $session Session.
 	 * @return array
@@ -1288,9 +1258,7 @@ final class Applier {
 	/**
 	 * One item row with payload, refs and pre-image decoded.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param int $id Row ID.
 	 * @return array|null
@@ -1306,8 +1274,7 @@ final class Applier {
 	/**
 	 * The next row of a session after a row ID matching a condition of this class.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(); the condition is a class
-	 * constant, never input, and the table name comes from Tables::table_name().
+	 * Direct query; the condition is a class constant, never input.
 	 *
 	 * @param array  $session   Session.
 	 * @param int    $after     Row ID.
@@ -1325,8 +1292,7 @@ final class Applier {
 	/**
 	 * Rows of a session matching a condition of this class.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(); the condition is a class
-	 * constant, never input, and the table name comes from Tables::table_name().
+	 * Direct query; the condition is a class constant, never input.
 	 *
 	 * @param array  $session   Session.
 	 * @param string $condition SQL condition (a constant of this class).
@@ -1356,8 +1322,7 @@ final class Applier {
 	/**
 	 * Updates columns of a row.
 	 *
-	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
-	 * from Tables::table_name(): core has no API for plugin tables.
+	 * Direct write: core has no API for plugin tables.
 	 *
 	 * @param int   $id     Row ID.
 	 * @param array $fields Columns.
@@ -1423,11 +1388,10 @@ final class Applier {
 	}
 
 	/**
-	 * The destination lock must be this session's (it is taken again when nothing holds it, for
-	 * example after a deactivation); another push's lock stops the step.
+	 * The destination lock must be this session's (taken again when nothing holds it); another
+	 * push's lock stops the step.
 	 *
-	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
-	 * signature in the plugin.
+	 * Hashes are compared in constant time with hash_equals().
 	 *
 	 * @param array $session Session.
 	 * @return true|WP_Error
@@ -1443,12 +1407,10 @@ final class Applier {
 	// --- answers ----------------------------------------------------------------------------------
 
 	/**
-	 * The answer of an apply step: state, progress, counts and a page of item results after a row
-	 * ID (so the source can record live's IDs).
+	 * The answer of an apply step: state, progress, counts and a page of item results, so the source
+	 * can record live's IDs.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * Direct query: core has no API for plugin tables, and a cache could be stale during a push.
 	 *
 	 * @param array $session Session.
 	 * @param int   $after   Row ID cursor of the results.

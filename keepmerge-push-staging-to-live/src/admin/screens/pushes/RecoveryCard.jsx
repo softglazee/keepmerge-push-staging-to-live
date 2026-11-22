@@ -63,8 +63,8 @@ function DomainField( { id, host, value, onChange } ) {
 }
 
 /**
- * The rollback dialog (blueprint §11.3): the preview with exact counts, the conflicts (none
- * ticked), the items the administrator's own filter would change, and the typed domain.
+ * The rollback dialog: the preview with exact counts, the conflicts (none ticked), the items the
+ * administrator's own filter would change, and the typed domain.
  *
  * @param {Object}   props
  * @param {Object}   props.push      Push detail.
@@ -184,9 +184,8 @@ function RollbackDialog( { push, onCancel, onConfirm } ) {
 }
 
 /**
- * Recovery of a push received on this site (blueprint §10.4, §11, §12): Resume an interrupted
- * apply; Retry, Skip or Roll back after a failed item; Roll back an applied push. Every action
- * runs from this administrator's own session after the site's domain is typed.
+ * Recovery of a push received on this site: Resume, Retry, Skip or Roll back. Every action runs
+ * from this administrator's own session after the site's domain is typed.
  *
  * @param {Object}   props
  * @param {Object}   props.push      Push detail.

@@ -31,9 +31,8 @@ import { errorMessage, getOverview } from './api';
 const ID_PREFIX = 'sgsp';
 
 /**
- * The six tabs, in the order of the work: where things stand, sending (staging), receiving
- * (live), the history of pushes, the audit log and settings. Both sites show all six, because
- * one install can send and receive (blueprint §4.1).
+ * The six tabs, in the order of the work. Both sites show all six, because one install can send
+ * and receive.
  */
 const TABS = [
 	{

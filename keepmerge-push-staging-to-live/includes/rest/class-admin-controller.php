@@ -33,7 +33,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Routes under keepmerge/v1/admin/ used by the admin screen on both sites (threat model §5.2).
+ * Routes under keepmerge/v1/admin/ used by the admin screen on both sites.
  *
  * Every route needs manage_options and a valid wp_rest nonce in the X-WP-Nonce header, so they
  * work from the logged-in admin screen only, not with an Application Password. Every input is
@@ -117,7 +117,7 @@ final class Admin_Controller {
 					'callback'            => array( $this, 'update_receive' ),
 					'permission_callback' => $permission,
 					// Not "required": core checks required args before permission_callback, and an
-					// anonymous request must be refused for its missing rights first (S-38).
+					// anonymous request must be refused for its missing rights first.
 					'args'                => array(
 						'action' => array(
 							'type' => 'string',
@@ -214,7 +214,7 @@ final class Admin_Controller {
 		);
 
 		// The key is not "required": core checks required args before permission_callback, and
-		// an anonymous request must be refused for its missing rights first (S-38).
+		// an anonymous request must be refused for its missing rights first.
 		$key_args = array(
 			'key' => array(
 				'type'      => 'string',
@@ -421,8 +421,7 @@ final class Admin_Controller {
 	}
 
 	/**
-	 * GET /admin/receive: the Receive tab. Expired keys and approvals are cleaned up first
-	 * (blueprint §5.3 step 6).
+	 * GET /admin/receive: the Receive tab. Expired keys and approvals are cleaned up first.
 	 *
 	 * @return WP_REST_Response
 	 */
@@ -640,10 +639,8 @@ final class Admin_Controller {
 	}
 
 	/**
-	 * POST /admin/connect: preview of the live site a pasted key points to.
-	 *
-	 * The key is read by name and validated by the key parser only (one pattern per part), so
-	 * nothing in it is altered before the check.
+	 * POST /admin/connect: preview of the live site a pasted key points to. The key is checked
+	 * by the key parser only, so nothing in it is altered before the check.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error
@@ -948,12 +945,9 @@ final class Admin_Controller {
 	}
 
 	/**
-	 * Argument schema for POST settings: types only. Names, ranges and the denylist are checked
-	 * by Settings::validate(), which explains each refusal.
-	 *
-	 * The number fields also take a short string: a number field the admin emptied arrives as '',
-	 * and Settings::validate() answers it with the field's own range message instead of core's
-	 * "Invalid parameter(s)", which names no field.
+	 * Argument schema for POST settings: types only; Settings::validate() checks the rest and
+	 * explains each refusal. Number fields also take a string, so an emptied field gets its own
+	 * range message instead of core's generic one.
 	 *
 	 * @return array
 	 */

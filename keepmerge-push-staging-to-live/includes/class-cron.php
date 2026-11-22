@@ -12,8 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Schedules and runs softglaze_sp_daily_prune (blueprint §14.5). It deletes only expired
- * plugin data and takes no input.
+ * Schedules and runs softglaze_sp_daily_prune, which deletes only expired plugin data and takes
+ * no input.
  */
 final class Cron {
 
@@ -40,13 +40,9 @@ final class Cron {
 	}
 
 	/**
-	 * The prune itself.
-	 *
-	 * Blueprint §14.5, every part bounded per run: audit rows past retention, expired pairing keys
-	 * and approvals (with their receivers), a receive window whose time is up, nonces older than
-	 * 900 s, spent throttle rows, expired plans, push sessions never applied within 24 hours, applies
-	 * whose lock went stale (marked interrupted), temporary folders older than 24 hours, and the
-	 * item rows and snapshot files of pushes past the snapshot retention (never the newest pushes).
+	 * The prune itself, each part bounded per run: expired audit rows, keys, approvals, nonces,
+	 * throttle rows, plans and unapplied sessions, stale applies (marked interrupted), old
+	 * temporary folders, and snapshots past retention (never the newest pushes).
 	 *
 	 * @return array Counts of what was pruned (for WP-CLI and tests).
 	 */

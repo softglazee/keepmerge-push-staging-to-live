@@ -4,10 +4,8 @@ import Modal from './Modal';
 
 /**
  * ConfirmDialog: asks before a consequential action. The cancel button has focus first, so
- * pressing Enter by habit does not confirm.
- *
- * The confirming button can wait for a condition (confirmDisabled), for example a domain typed
- * into the dialog (push, continue and rollback need the live domain typed).
+ * pressing Enter by habit does not confirm. The confirming button can wait for a condition
+ * (confirmDisabled), for example the live domain typed into the dialog.
  *
  * @param {Object}   props
  * @param {string}   props.title        Dialog title.

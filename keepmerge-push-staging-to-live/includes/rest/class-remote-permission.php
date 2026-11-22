@@ -24,13 +24,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The permission_callback of every remote route: threat model §6, steps 1 to 11, in that
- * order. Step 0 (routes exist only while the receive window is open) is Plugin's job and step
- * 12 (the body schema) is each handler's.
+ * The permission_callback of every remote route: steps 1 to 11 below, in that order. Routes exist
+ * only while the receive window is open (Plugin); each handler validates its own body.
  *
- * The first failure ends the request. Nothing is written for a request that fails before the
- * nonce is stored except the address's failure counter and one collapsed audit row per address
- * and reason. Error codes are fixed; the details stay in the local audit log.
+ * The first failure ends the request. Before the nonce is stored, a refused request writes only
+ * the address's failure counter and one collapsed audit row; error codes are fixed.
  */
 final class Remote_Permission {
 
@@ -65,9 +63,8 @@ final class Remote_Permission {
 	const ROUTE_PUSH_APPLY = 'push_apply';
 
 	/**
-	 * Routes an active pairing answers with its long-term credentials (threat model §5.1: R1,
-	 * the read-only routes R4 to R7, the push routes R8, R9, R13, R14, R15 and the media routes R10
-	 * to R12). The pairing routes R2 and R3 end with approval.
+	 * Routes an active pairing answers with its long-term credentials: status, the read-only
+	 * routes, the push routes and the media routes. The pairing routes end with approval.
 	 */
 	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST, self::ROUTE_PUSH, self::ROUTE_PUSH_GET, self::ROUTE_PUSH_ITEMS, self::ROUTE_PUSH_ABORT, self::ROUTE_PUSH_FILES, self::ROUTE_PUSH_CHUNK, self::ROUTE_PUSH_COMMIT, self::ROUTE_PUSH_APPLY );
 
@@ -85,19 +82,17 @@ final class Remote_Permission {
 	const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 
 	/**
-	 * Context of requests that passed the signature check: the pairing, the verified secret (to
-	 * sign the response) and the request nonce. Keyed by the request object itself, so an ID of
-	 * a finished request can never be mistaken for a new one.
+	 * Pairing, verified secret and nonce of requests that passed the signature check, keyed by
+	 * the request object so a finished request is never mistaken for a new one.
 	 *
 	 * @var \SplObjectStorage|null
 	 */
 	private static $contexts = null;
 
 	/**
-	 * Outcome of the chain per request object. Core calls a route's permission_callback a second
-	 * time in rest_send_allow_header() (rest_post_dispatch) to build the Allow header; the second
-	 * call must return the first outcome instead of storing the nonce again or counting the
-	 * failure twice.
+	 * Outcome of the chain per request object. Core calls permission_callback again in
+	 * rest_send_allow_header(); that call returns the first outcome instead of storing the nonce
+	 * or counting the failure twice.
 	 *
 	 * @var \SplObjectStorage|null
 	 */
@@ -164,7 +159,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for POST /remote/code-manifest (R7): the full chain, then live's own switch.
+	 * Chain for POST /remote/code-manifest: the full chain, then live's own switch.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -174,7 +169,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for POST /remote/push (R8).
+	 * Chain for POST /remote/push.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -184,7 +179,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for GET /remote/push/{id} (R9).
+	 * Chain for GET /remote/push/{id}.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -194,7 +189,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for POST /remote/push/{id}/items (R13).
+	 * Chain for POST /remote/push/{id}/items.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -204,7 +199,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for POST /remote/push/{id}/abort (R15).
+	 * Chain for POST /remote/push/{id}/abort.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -214,7 +209,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for POST /remote/push/{id}/files (R10).
+	 * Chain for POST /remote/push/{id}/files.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -224,7 +219,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for PUT /remote/push/{id}/files/{ref}/chunks/{n} (R11): the raw chunk is the body that
+	 * Chain for PUT /remote/push/{id}/files/{ref}/chunks/{n}: the raw chunk is the body that
 	 * the content hash and the signature cover.
 	 *
 	 * @param WP_REST_Request $request Request.
@@ -235,7 +230,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for POST /remote/push/{id}/files/{ref}/commit (R12).
+	 * Chain for POST /remote/push/{id}/files/{ref}/commit.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -245,7 +240,7 @@ final class Remote_Permission {
 	}
 
 	/**
-	 * Chain for POST /remote/push/{id}/apply (R14).
+	 * Chain for POST /remote/push/{id}/apply.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return true|WP_Error
@@ -277,7 +272,7 @@ final class Remote_Permission {
 	 * Steps 1 to 11.
 	 *
 	 * Every received value checked against a secret-derived one goes through hash_equals(), so how
-	 * long a refusal takes says nothing about how much of it matched (threat model T17).
+	 * long a refusal takes says nothing about how much of it matched.
 	 *
 	 * @param WP_REST_Request $request  Request.
 	 * @param string          $route_id Route.
@@ -286,10 +281,9 @@ final class Remote_Permission {
 	private static function run_chain( WP_REST_Request $request, $route_id ) {
 		$ip = Throttle::client_ip();
 
-		// Steps 1 and 2 need no secret to refuse, so they do not count toward the address block
-		// (threat model §6: steps 4 to 9 count). Counting them let anyone who shares the source's
-		// address, behind a proxy for example, lock it out with header-less requests (security
-		// review 2026-11-22, KM-04). They are still audited, collapsed per address.
+		// Steps 1 and 2 do not count toward the address block (steps 4 to 9 do): otherwise anyone
+		// sharing the source's address could lock it out with header-less requests. They are
+		// still audited, collapsed per address.
 
 		// 1. HTTPS.
 		if ( ! is_ssl() ) {
@@ -408,10 +402,9 @@ final class Remote_Permission {
 
 		self::touch( $pairing );
 
-		// R7 only, after the request is known to be authentic: code reports stay off until a live
-		// administrator switches on "Allow code report requests" (blueprint §6.11, off by
-		// default). The refusal is signed like any answer to an authentic request, so the source
-		// can tell it from a forged one; strangers never get this far and never learn the setting.
+		// Code reports stay off until a live administrator switches on "Allow code report
+		// requests". Checked only once the request is authentic, so strangers never learn the
+		// setting; the refusal is signed so the source can tell it from a forged one.
 		if ( self::ROUTE_CODE_MANIFEST === $route_id && empty( Settings::get()['allow_code_report'] ) ) {
 			Audit_Log::write(
 				'code_manifest_requested',
@@ -435,9 +428,9 @@ final class Remote_Permission {
 	 * Which credential set a pairing in its current state accepts on a route, or the refusal.
 	 *
 	 * The pairing is bound to the hash of this site's stored home URL, compared with hash_equals(), so
-	 * a copied database cannot answer for the original site (threat model T21).
+	 * a copied database cannot answer for the original site.
 	 *
-	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phases 3 to 6):
+	 * The state × route table:
 	 *
 	 *   state              status      confirm     finalize    baseline / manifest / fetch / code_manifest /
 	 *                                                          push / push_get / push_items / push_abort /
@@ -447,7 +440,7 @@ final class Remote_Permission {
 	 *   active             long-term   401         401         long-term
 	 *   repair_needed,
 	 *   revoked            401 pairing_invalid on every route
-	 *   (* only once confirm issued the long-term credentials)
+	 *   * only once confirm issued the long-term credentials
 	 *
 	 * @param array|null $pairing  Pairing row.
 	 * @param string     $route_id Route.

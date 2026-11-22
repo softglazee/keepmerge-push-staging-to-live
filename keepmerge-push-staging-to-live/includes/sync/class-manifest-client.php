@@ -16,11 +16,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Compares this site's items with live's (blueprint §4.3 "Plan", first half): every item is
- * exported and hashed here, then live is asked for its hash and base hash of the same items in
- * batches of at most 500 UUIDs with live-ID hints (POST /remote/manifest, read-only on live).
- *
- * The planner (Phase 4) classifies the result; this class only gathers S, L and B per item.
+ * Gathers S, L and B per item for the planner: every item is exported and hashed here, then live
+ * is asked for its hash and base hash in batches of at most 500 UUIDs with live-ID hints
+ * (POST /remote/manifest, read-only on live).
  */
 final class Manifest_Client {
 

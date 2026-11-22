@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Builds and parses the pairing key (blueprint §5.2): one line of plain ASCII, no base64,
+ * Builds and parses the pairing key: one line of plain ASCII, no base64,
  *
  *     SGSP1|<live REST root>|<pairing UUID>|<receiver login>|<bootstrap password>|<bootstrap secret>|<expiry>
  *

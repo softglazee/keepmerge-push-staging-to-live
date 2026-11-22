@@ -25,12 +25,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Admin routes keepmerge/v1/admin/plans… and admin/code-report (threat model §5.2): the dry run, its rows,
- * the diff of one item, the conflict decisions, and the code report.
+ * Admin routes for plans and the code report: the dry run, its rows, one item's diff, the
+ * conflict decisions and the code report.
  *
- * Same permission as every admin route: manage_options and a valid wp_rest nonce (cookie auth).
- * Route args are cheap type checks only (core checks them before the permission callback); each
- * value is read by name with get_param() and validated in the handler against an allowlist.
+ * Every route needs manage_options and a valid wp_rest nonce. Route args are cheap type checks
+ * only, because core runs them before the permission callback; handlers validate each value.
  */
 final class Plan_Controller {
 

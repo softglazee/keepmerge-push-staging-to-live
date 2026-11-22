@@ -2,12 +2,8 @@
  * Tailwind configuration (Tailwind 3.4).
  *
  * Every utility carries the sgsp- prefix (sgsp-flex, md:sgsp-grid-cols-2) and
- * Preflight is off, so nothing reaches wp-admin's own markup. Tailwind 4 would
- * turn the prefix into a variant (sgsp:flex); 3.4 keeps the sgsp- form the
- * project rules use.
- *
- * Colours point at the CSS variables in src/admin/admin.css, so the tokens are
- * defined once and utilities and component styles cannot drift apart.
+ * Preflight is off, so nothing reaches wp-admin's own markup. Colours point at
+ * the CSS variables in src/admin/admin.css, so tokens are defined once.
  */
 module.exports = {
 	prefix: 'sgsp-',

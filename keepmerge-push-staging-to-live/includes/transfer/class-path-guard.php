@@ -14,17 +14,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The path guard of blueprint §9 step 2 (threat model §7.5). Live is authoritative: every
- * relative path that arrives in a push (an attachment's file, the files of its metadata) passes
- * this check before it is stored, and the files steps of Phase 6 use the same check before
- * anything is written.
- *
- * A path is accepted only if: it is at most 255 bytes; it has no NUL, backslash or colon; core's
- * validate_file() accepts it; no segment is empty, "." or ".." or starts with a dot; it has at
- * most 4 segments; its first segment is not a protected folder; its basename is what
- * sanitize_file_name() makes of it; every dot-separated part of the basename after the first is
- * not a script or markup extension (so "x.php.jpg" is refused); and the last extension is one
- * WordPress allows a user without unfiltered_upload to upload.
+ * Live's check of every relative path a push names, before anything is stored or written. A path
+ * is accepted only if it is short, has no control character, backslash, colon or dot segment,
+ * passes validate_file(), stays out of protected folders, is already sanitized, carries no script
+ * or markup extension anywhere in its name ("x.php.jpg" is refused), and ends in an extension a
+ * user without unfiltered_upload may upload.
  */
 final class Path_Guard {
 
@@ -33,24 +27,18 @@ final class Path_Guard {
 	const MAX_SEGMENTS = 4;
 
 	/**
-	 * First segments that are never written by a push: Keepmerge's own folder, WooCommerce's logs
-	 * (its downloads folder comes from Woo\Guard), the Font Library's folder, the uploads of other
-	 * sites of a multisite network (sites/<id>/), and the protected upload folders of common
-	 * download and form plugins. The filter softglaze_sp_protected_upload_dirs may add names.
+	 * First path segments a push never writes into: Keepmerge's own folder, WooCommerce logs, fonts,
+	 * other network sites and the protected folders of common download and form plugins.
 	 */
 	const PROTECTED_DIRS = array( 'keepmerge-push-staging-to-live', 'wc-logs', 'fonts', 'sites', 'edd', 'wpforms', 'gravity_forms' );
 
 	/**
-	 * Extensions refused anywhere in a basename, whatever the upload settings allow. Entries ending
-	 * in "*" are prefixes (php3, php7, phtml are covered by "php*" and the list).
+	 * Extensions refused anywhere in a basename, whatever the upload settings allow ("*" = prefix).
 	 */
 	const HARD_EXTENSIONS = array( 'php*', 'phtml', 'phar', 'pht', 'phps', 'cgi', 'pl', 'py', 'sh', 'asp*', 'jsp', 'exe', 'dll', 'htaccess', 'htpasswd', 'ini', 'svg', 'svgz', 'html', 'htm', 'js', 'shtml', 'xhtml' );
 
 	/**
 	 * Why a relative upload path is refused, or '' when it is accepted.
-	 *
-	 * Every relative path a push names passes here before anything is stored or written, so a received
-	 * path can never leave the uploads tree or reach a protected folder (threat model §7.5).
 	 *
 	 * @param mixed $path Relative path (uploads base excluded), as received.
 	 * @return string '' or a reason code.
@@ -92,8 +80,7 @@ final class Path_Guard {
 	}
 
 	/**
-	 * The protected first segments: the built-in list plus what the filter adds. The filter can
-	 * only add (filters narrow what is pushed); built-in names always stay.
+	 * The protected first segments: the built-in list plus what the filter adds (it can only add).
 	 *
 	 * @return string[]
 	 */
@@ -114,13 +101,8 @@ final class Path_Guard {
 	}
 
 	/**
-	 * Why an attachment's metadata names a file it may not have, or '' (threat model §7.5, S-49).
-	 * The metadata's own "file" must pass the guard; every "sizes" entry and "original_image" must
-	 * be a plain name that passes the guard inside the folder of the attachment's file; a "thumb"
-	 * (written by WordPress before 2.9) must be one of those files.
-	 *
-	 * Core deletes every file named in attachment metadata together with the attachment, so a name a
-	 * push stores there must be the attachment's own file (S-49, security review KM-01).
+	 * Why an attachment's metadata names a file it may not have, or ''. Core deletes every file
+	 * named there with the attachment, so each name must be the attachment's own file.
 	 *
 	 * @param string $attached The attachment's relative path (already accepted).
 	 * @param mixed  $metadata Attachment metadata as received.
@@ -147,9 +129,8 @@ final class Path_Guard {
 		if ( isset( $metadata['original_image'] ) && '' !== self::sibling_reason( $attached, $metadata['original_image'] ) ) {
 			return 'metadata.original_image';
 		}
-		// Core deletes "thumb" with the attachment, checked only against the attachment's folder,
-		// which is the whole uploads base for a file in the root: it may only name one of the
-		// attachment's own files (security review 2026-11-22, KM-01).
+		// Core deletes "thumb" checking only the attachment's folder (the whole uploads base for a
+		// file in the root), so it may only name one of the attachment's own files.
 		if ( isset( $metadata['thumb'] ) && '' !== $metadata['thumb'] && ! self::is_own_file( $attached, $metadata, $metadata['thumb'] ) ) {
 			return 'metadata.thumb';
 		}
@@ -177,9 +158,7 @@ final class Path_Guard {
 	}
 
 	/**
-	 * The relative paths of every file an attachment has: its own file, each size and the
-	 * original image of a scaled image (the same set the source's exporter lists). Only names
-	 * that pass the guard are returned.
+	 * The relative paths of an attachment's file, sizes and original image that pass the guard.
 	 *
 	 * @param string $attached The attachment's relative path.
 	 * @param mixed  $metadata Attachment metadata.
@@ -242,8 +221,7 @@ final class Path_Guard {
 	}
 
 	/**
-	 * Whether a file name in an attachment's metadata ("sizes" entries, "original_image") is
-	 * acceptable inside the folder of the attachment's file.
+	 * Why a file name from attachment metadata is refused inside the attachment's folder, or ''.
 	 *
 	 * @param string $attached The attachment's own relative path (already accepted).
 	 * @param mixed  $basename File name from the metadata.
@@ -258,14 +236,12 @@ final class Path_Guard {
 	}
 
 	/**
-	 * Mime types a user without unfiltered_upload (and without unfiltered_html) may upload here,
-	 * keyed by extension pattern, as core reports them.
+	 * Mime types a user without unfiltered_upload may upload here, keyed by extension pattern.
 	 *
 	 * @return array<string,string>
 	 */
 	public static function allowed_mime_types() {
-		// A user object with no capabilities: core then removes the types only trusted users may
-		// upload, whatever the current user is.
+		// A user with no capabilities, so the types only trusted users may upload are left out.
 		return (array) get_allowed_mime_types( new \WP_User( 0 ) );
 	}
 

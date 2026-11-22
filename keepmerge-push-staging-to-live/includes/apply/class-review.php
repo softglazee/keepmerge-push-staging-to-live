@@ -16,18 +16,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §10.5 and threat model §7.4: a live administrator decides each held item on live's own
- * screen, never the remote.
- *
- * - approve: written as staged, by the administrator who continues the apply. Allowed only for a
- *   user with unfiltered_html, and edit_css as well when the item is global styles with custom CSS
- *   (checked per item on the server).
- * - filtered: the content fields go through the same HTML filter core applies for a user without
- *   unfiltered_html (run here explicitly), and the filtered result is written. Only for items whose
- *   every reason is a content field: core's filter does not reach meta, options or widgets.
- * - skip: nothing of the item is written.
- *
- * Nothing is pre-chosen; decisions and who made them are audited (held_items_decided).
+ * A live administrator decides each held item on live's own screen, never the remote: approve
+ * (needs unfiltered_html, plus edit_css for global styles with custom CSS), filtered (core's HTML
+ * filter on content fields only, since it does not reach meta, options or widgets) or skip.
+ * Nothing is pre-chosen and every decision is audited.
  */
 final class Review {
 
@@ -41,8 +33,7 @@ final class Review {
 	const CONTENT_FIELD = '/\A(?:post_title|post_content|post_excerpt|description|groups\.content\.(?:name|description|short_description)|items\.[0-9]+\.(?:title|attr_title|description))\z/';
 
 	/**
-	 * Held rows of a session with their reasons, for the review screen (excerpts are plain text;
-	 * the screen renders them as text).
+	 * Held rows of a session with their reasons, for the review screen (excerpts are plain text).
 	 *
 	 * @param array $session Session.
 	 * @return array[]
@@ -87,8 +78,8 @@ final class Review {
 	}
 
 	/**
-	 * POST /admin/pushes/{id}/held: records decisions for held items of a session waiting for
-	 * review. Every decision is checked before any is stored; one refused decision stores none.
+	 * Records decisions for held items. Every decision is checked first; one refused decision
+	 * stores none.
 	 *
 	 * @param array $session   Session.
 	 * @param mixed $decisions uuid => decision, as received.
@@ -234,11 +225,8 @@ final class Review {
 	}
 
 	/**
-	 * Applies "Apply with WordPress's HTML filter" to the decoded data of an item: the kses core
-	 * runs for a user without unfiltered_html, on the content fields only (wp_filter_kses() for
-	 * titles, wp_filter_post_kses() for content and excerpts, pre_term_description's context for
-	 * term descriptions; for global styles also WP_Theme_JSON::remove_insecure_properties() and every
-	 * custom CSS key removed, as core does for a user without edit_css).
+	 * Runs the kses core applies for a user without unfiltered_html over an item's content fields
+	 * ("Apply with WordPress's HTML filter").
 	 *
 	 * @param string $kind Kind.
 	 * @param array  $data Decoded data.
@@ -302,8 +290,7 @@ final class Review {
 		}
 		unset( $decoded['isGlobalStylesUserThemeJSON'] );
 		$clean = class_exists( 'WP_Theme_JSON' ) ? \WP_Theme_JSON::remove_insecure_properties( $decoded, 'custom' ) : $decoded;
-		// remove_insecure_properties() keeps custom CSS for a user with edit_css; this choice means
-		// "as WordPress would store it from a user without those rights", so CSS goes as well.
+		// This choice means "as stored for a user without edit_css", so custom CSS goes as well.
 		$clean                                = self::without_css( $clean, 0 );
 		$clean['isGlobalStylesUserThemeJSON'] = true;
 		$text                                 = wp_json_encode( $clean, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );

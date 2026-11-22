@@ -16,10 +16,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Base of the exporters (blueprint §6.2). An exporter reads one object through WordPress APIs
- * and returns an item: its normal form (typed JSON, URLs as tokens), the reference sidecar, the
- * problems that make it unsupported, and its hash. Exporters only read; the only write any of
- * them can cause is a UUID for an object that has none, and only on the source (Export_Context).
+ * Base of the exporters. An exporter reads one object through WordPress APIs and returns an item:
+ * its normal form (typed JSON, URLs as tokens), the reference sidecar, the problems that make it
+ * unsupported, and its hash. Exporters only read; the one write they can cause is a UUID for an
+ * object that has none, on the source only.
  */
 abstract class Exporter {
 
@@ -98,8 +98,8 @@ abstract class Exporter {
 	}
 
 	/**
-	 * Post meta minus the excluded keys (blueprint §6.10): key => list of values, as WordPress
-	 * returns them for the key (already unserialized by core).
+	 * Post meta minus the excluded keys: key => list of values, as WordPress returns them for the
+	 * key (already unserialized by core).
 	 *
 	 * @param int           $post_id Post ID.
 	 * @param string[]      $skip    Keys this exporter carries as fields.
@@ -142,8 +142,8 @@ abstract class Exporter {
 	}
 
 	/**
-	 * The author as login (and email on the source: live maps by login, then email; blueprint
-	 * §6.8). Live's own answers never carry an email (threat model §7.6).
+	 * The author as login, plus the email on the source (live maps by login, then email); live's own
+	 * answers never carry an email.
 	 *
 	 * @param int $user_id User ID.
 	 * @return array{login:string,email?:string}

@@ -8,9 +8,8 @@ import { errorMessage, getPlan, startPush } from '../../api';
 import { actionLabel, groupLabel, number } from './plan-labels';
 
 /**
- * The push dialog: what the push will do, with exact counts, the conflicts as decided, and the
- * live domain typed to confirm. The domain is compared again on the server
- * (POST /admin/pushes); the button only saves a round trip.
+ * The push dialog: exact counts, the conflicts as decided, and the live domain typed to confirm.
+ * The server compares the domain again; the button check only saves a round trip.
  *
  * @param {Object}   props
  * @param {Object}   props.summary   Plan summary.

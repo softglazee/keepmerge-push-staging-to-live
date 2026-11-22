@@ -12,8 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Tools → Staging Push (blueprint §16): one page on both sites, no top-level menu, no notices
- * anywhere else.
+ * Tools → Staging Push: one page on both sites, no top-level menu, no notices anywhere else.
  */
 final class Menu {
 
@@ -42,10 +41,8 @@ final class Menu {
 	}
 
 	/**
-	 * The page shell. The heading is printed here so the page has its title without
-	 * JavaScript; the React app fills the status line and everything below the header. The
-	 * masthead is a div, not a header element: the page sits inside core's main landmark, where a
-	 * header would be a nested banner landmark.
+	 * The page shell: the heading works without JavaScript and the React app fills the rest. The
+	 * masthead is a div because a header inside core's main landmark would be a nested banner.
 	 *
 	 * @return void
 	 */

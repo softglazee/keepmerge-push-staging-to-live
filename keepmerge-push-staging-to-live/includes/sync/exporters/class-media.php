@@ -14,10 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Attachments (blueprint §6.2): the post fields, _wp_attached_file, the metadata, the alt text
- * and the list of its files (the original, every size and the original_image of a scaled image)
- * with their size and SHA-256. Files are only read; nothing about them leaves the site but
- * their path, size and checksum. Paths are checked before a file is opened.
+ * Attachments: the post fields, _wp_attached_file, the metadata, the alt text and the list of its
+ * files (original, every size, and the original_image of a scaled image) with size and SHA-256.
+ * Files are only read, after their path is checked; only path, size and checksum leave the site.
  */
 final class Media extends Exporter {
 
@@ -123,8 +122,8 @@ final class Media extends Exporter {
 	}
 
 	/**
-	 * Whether a relative uploads path is safe to open: relative, no dot segments, no backslash,
-	 * colon or NUL, and accepted by core's validate_file().
+	 * Whether a relative uploads path may be opened: relative, no dot segments, no backslash, colon
+	 * or NUL, and accepted by core's validate_file().
 	 *
 	 * @param string $path Relative path.
 	 * @return bool

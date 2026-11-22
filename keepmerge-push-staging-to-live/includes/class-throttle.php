@@ -12,10 +12,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The one place that reads the client address, and the per-address failure counter (blueprint
- * §5.6, threat model §6 step 3): 10 failed authentications within 10 minutes block the address
- * for 15 minutes; a blocked address gets 429 ip_blocked with Retry-After before any signature
- * work.
+ * The one place that reads the client address, and the per-address failure counter: 10 failed
+ * authentications within 10 minutes block the address for 15 minutes (429 before any signature
+ * work).
  */
 final class Throttle {
 
@@ -26,10 +25,8 @@ final class Throttle {
 	const BLOCK = 900;
 
 	/**
-	 * The client IP address, from REMOTE_ADDR only.
-	 *
-	 * Forwarded-for headers are never read: anyone can send them, and the address is used for
-	 * throttling and the optional IP pin (threat model §6).
+	 * The client IP address, from REMOTE_ADDR only: forwarded-for headers can be sent by anyone,
+	 * and the address drives throttling and the IP pin.
 	 *
 	 * @return string Validated IPv4 or IPv6 address, or '' when there is none.
 	 */
@@ -69,10 +66,8 @@ final class Throttle {
 	}
 
 	/**
-	 * Counts one failed authentication for an address and blocks it at the limit.
-	 *
-	 * The counter restarts when its window has passed. One statement creates or updates the
-	 * row, so parallel failures are not lost.
+	 * Counts one failed authentication for an address and blocks it at the limit. One statement
+	 * creates or updates the row, so parallel failures are not lost.
 	 *
 	 * @param string $ip Address.
 	 * @return bool True when the address is blocked after this failure.
@@ -157,10 +152,8 @@ final class Throttle {
 	}
 
 	/**
-	 * Throttle bucket for an address: "ip:" plus an IPv4 address, or an IPv6 address's /64 network
-	 * in canonical text form with "/64". One IPv6 host usually holds a whole /64, so a bucket per
-	 * address would let it rotate past the block and add a row per address (security review
-	 * 2026-11-22, KM-04). An IPv4-mapped IPv6 address is its IPv4 address.
+	 * Throttle bucket for an address: the IPv4 address, or an IPv6 address's /64 network, since
+	 * one IPv6 host usually holds a whole /64 and could rotate past a per-address block.
 	 *
 	 * @param string $ip Address.
 	 * @return string '' when the address is not valid.

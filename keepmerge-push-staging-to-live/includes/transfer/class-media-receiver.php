@@ -21,21 +21,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The destination half of blueprint §9 steps 3–5, 8 and 9 (threat model R10–R12, §7.5, §7.7):
- * the need list, chunks and commit of a push's media files, kept in the push's own temporary
- * folder until apply. Nothing here touches the uploads tree outside
- * uploads/keepmerge-push-staging-to-live/tmp/<32 hex>/; files are moved into place in Phase 7.
- *
- * Files are addressed by an integer ref chosen by the source, never by a path in a URL. Every
- * path in a need list passes Path_Guard first (live is authoritative). Temporary names are made
- * here: <ref>.part<n> and <ref>.bin inside a random folder that has index.php and an .htaccess
- * deny rule. Files are written through WP_Filesystem with the direct method only.
- *
- * Each file is a push_items row (object_type "file", uuid "file:<ref>", seq = ref) whose
- * transfer JSON keeps its path, final path, size, SHA-256, owning attachment, chunk size and a
- * received-chunk bitmap for resume. A file that will be written in Phase 7 also reserves its final
- * path with a marker row (object_type "file_path", uuid "path:<sha1 of the lower-case path>"), so
- * two files of one push can never be given the same name.
+ * The destination side of the media transfer: need list, chunks and commit of a push's files,
+ * kept in the push's random temporary folder under uploads/keepmerge-push-staging-to-live/tmp/
+ * until the apply moves them into place. Files are addressed by an integer ref, never by a path
+ * in a URL; every path passes Path_Guard, temporary names are made here, and files are written
+ * through WP_Filesystem's direct method only. Each file is a push_items row, and a final path is
+ * reserved by a marker row so two files of one push never get the same name.
  */
 final class Media_Receiver {
 
@@ -46,17 +37,17 @@ final class Media_Receiver {
 	const RESERVATION = 'file_path';
 
 	/**
-	 * Largest file a push may carry (blueprint §9.9; the filter softglaze_sp_limits may lower it).
+	 * Largest file a push may carry (the filter softglaze_sp_limits may lower it).
 	 */
 	const MAX_FILE_BYTES = 536870912;
 
 	/**
-	 * Largest media total of a push (blueprint §9.9; the filter may lower it).
+	 * Largest media total of a push (the filter may lower it).
 	 */
 	const MAX_PUSH_BYTES = 2147483648;
 
 	/**
-	 * Most files in one need list (threat model R10).
+	 * Most files in one need list.
 	 */
 	const MAX_FILES_PER_CALL = 2000;
 
@@ -76,8 +67,7 @@ final class Media_Receiver {
 	const COMMIT_MAX_BYTES = 1024;
 
 	/**
-	 * Chunk sizes: the setting is kept between 256 KB and 8 MB and below half of post_max_size;
-	 * 413 halving on the source goes down to 64 KB.
+	 * Chunk sizes: the setting stays between 256 KB and 8 MB; the source may halve down to 64 KB.
 	 */
 	const CHUNK_MIN = 65536;
 
@@ -86,12 +76,12 @@ final class Media_Receiver {
 	const CHUNK_MAX = 8388608;
 
 	/**
-	 * Share of the free disk space a push's media may use (blueprint §9.9).
+	 * Share of the free disk space a push's media may use.
 	 */
 	const FREE_SHARE = 0.8;
 
 	/**
-	 * Seconds after which a temporary folder no session uses is removed (blueprint §9.8).
+	 * Seconds after which a temporary folder no session uses is removed.
 	 */
 	const TEMP_TTL = DAY_IN_SECONDS;
 
@@ -124,8 +114,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * The per-file and per-push caps. The filter softglaze_sp_limits may lower them, never raise
-	 * them above 512 MB and 2 GB.
+	 * The per-file and per-push caps; the filter softglaze_sp_limits may only lower them.
 	 *
 	 * @return array{max_file:int,max_push:int}
 	 */
@@ -150,8 +139,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Chunk size this site accepts: the setting (256 KB to 8 MB), never above half of
-	 * post_max_size (blueprint §13), never below 64 KB.
+	 * Chunk size this site accepts: the setting, at most half of post_max_size, at least 64 KB.
 	 *
 	 * @return int Bytes.
 	 */
@@ -166,9 +154,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Free bytes on the uploads volume, or -1 when the host does not say. The filter
-	 * softglaze_sp_free_space may only report less space than the host does (or add a figure
-	 * where the host gives none), so it can make the check stricter, never weaker.
+	 * Free bytes on the uploads volume, or -1 when unknown; the filter can only make it stricter.
 	 *
 	 * @return float
 	 */
@@ -197,8 +183,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Why a push with this much media cannot start here, or '' (S-64): the per-push cap, then 80%
-	 * of the free space when it is known.
+	 * Why a push with this much media cannot start here (per-push cap, free space), or ''.
 	 *
 	 * @param int $bytes Media total the source declared.
 	 * @return string '' or push_cap / free_space.
@@ -218,17 +203,13 @@ final class Media_Receiver {
 		return '';
 	}
 
-	// --- R10: the need list --------------------------------------------------------------------
+	// --- the need list ------------------------------------------------------------------------
 
 	/**
-	 * POST /remote/push/{id}/files: which files live needs (blueprint §9 step 3).
+	 * POST /remote/push/{id}/files: which files live needs.
 	 *
-	 * A file already on live is hashed only when it is a regular file inside the uploads base;
-	 * announced hashes are compared with hash_equals().
-	 *
-	 * Body: chunk_size and files [{ref, path, size, sha256, attachment}], each read by name. One
-	 * refused path or oversize file refuses the whole call. Existing files are hashed within the
-	 * time budget; files not reached are answered as "later" and not stored.
+	 * Every entry is read by name; one refused path or oversize file refuses the whole call. Files
+	 * not hashed within the time budget are answered as "later" and not stored.
 	 *
 	 * @param array $session Session (this pairing's).
 	 * @param array $pairing Pairing row.
@@ -404,7 +385,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Have, need or renamed for one new file (blueprint §9 step 3).
+	 * Have, need or renamed for one new file.
 	 *
 	 * @param array  $session Session.
 	 * @param array  $pairing Pairing row.
@@ -422,8 +403,8 @@ final class Media_Receiver {
 			);
 		}
 
-		// Free, or the file this very attachment has on live (replaced in Phase 7, after its
-		// snapshot): the path is kept if no other file of this push reserved it.
+		// Free, or this attachment's own file on live (replaced after its snapshot): the path is
+		// kept if no other file of this push reserved it.
 		if ( 'absent' === $state || self::owned_by( $pairing, $entry['attachment'], $entry['path'] ) ) {
 			if ( self::reserve( (int) $session['id'], $entry['path'], $entry['ref'] ) ) {
 				return array(
@@ -449,11 +430,7 @@ final class Media_Receiver {
 
 	/**
 	 * What is at a path on live: absent, the same file, or something else. Only a regular file
-	 * inside the uploads base is read; a link, a folder or a path that resolves elsewhere is
-	 * "other" and never opened.
-	 *
-	 * The hash_file() call runs only on a regular file that resolves inside the uploads base, so a received
-	 * path can never make live read a file elsewhere.
+	 * that resolves inside the uploads base is hashed, so a received path never reads elsewhere.
 	 *
 	 * @param string $base  Uploads base.
 	 * @param array  $entry Entry.
@@ -476,8 +453,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Whether live's own attachment with this UUID (UUID meta, or the pairing's linked sync
-	 * state) has this file: then the file is that attachment's own and may be replaced.
+	 * Whether live's attachment with this UUID owns this file, so it may be replaced.
 	 *
 	 * @param array  $pairing Pairing row.
 	 * @param string $uuid    Attachment UUID.
@@ -503,8 +479,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * A free name in the same folder: core's wp_unique_filename() (which avoids files on disk),
-	 * then the same with a counter while another file of this push holds the name.
+	 * A free name in the same folder, avoiding files on disk and names this push reserved.
 	 *
 	 * @param int    $push_id Session row ID.
 	 * @param string $base    Uploads base.
@@ -535,10 +510,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Reserves a final path for one file of a push (the unique key makes it atomic).
-	 *
-	 * INSERT IGNORE on the plugin's own table's unique key reserves a final file name atomically, so
-	 * two files of one push never get the same name; prepared, table name from Tables::table_name().
+	 * Reserves a final path for one file of a push; INSERT IGNORE on the unique key makes it atomic.
 	 *
 	 * @param int    $push_id Session row ID.
 	 * @param string $path    Final relative path.
@@ -554,17 +526,14 @@ final class Media_Receiver {
 		if ( 1 === (int) $result ) {
 			return true;
 		}
-		// Held already: by this same file (an answer sent again) it still counts as its own.
+		// Held already: by this same file (a repeated call) it still counts as its own.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; unique key lookup.
 		$owner = $wpdb->get_var( $wpdb->prepare( 'SELECT seq FROM %i WHERE push_id = %d AND side = %s AND uuid = %s', Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE, $uuid ) );
 		return null !== $owner && (int) $owner === (int) $ref;
 	}
 
 	/**
-	 * Stores a new file row.
-	 *
-	 * INSERT IGNORE on the plugin's own table keeps the first row of a file ref, so a repeated
-	 * announcement never creates a second row; prepared, table name from Tables::table_name().
+	 * Stores a new file row; INSERT IGNORE keeps the first row of a ref on a repeated announcement.
 	 *
 	 * @param int   $push_id  Session row ID.
 	 * @param array $entry    Entry.
@@ -615,9 +584,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Starts a file's chunks again at another size (the source halved it after a 413).
-	 *
-	 * Deletes only part files inside this push's random temporary folder, through WP_Filesystem.
+	 * Starts a file's chunks again at another size, deleting its parts in the push's temporary folder.
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row.
@@ -668,14 +635,13 @@ final class Media_Receiver {
 		return $out;
 	}
 
-	// --- R11: one chunk ------------------------------------------------------------------------
+	// --- one chunk ---------------------------------------------------------------------------
 
 	/**
-	 * PUT /remote/push/{id}/files/{ref}/chunks/{n}: stores one chunk (blueprint §9 step 4).
+	 * PUT /remote/push/{id}/files/{ref}/chunks/{n}: stores one chunk.
 	 *
-	 * Writes a chunk only inside this push's random temporary folder under uploads, through
-	 * WP_Filesystem, after its SHA-256 matched (hash_equals()); file names come from live, never from
-	 * the request.
+	 * Written through WP_Filesystem into the push's random temporary folder after its SHA-256
+	 * matched; file names come from live, never from the request.
 	 *
 	 * @param array  $session Session (this pairing's).
 	 * @param array  $pairing Pairing row.
@@ -749,8 +715,7 @@ final class Media_Receiver {
 			}
 		}
 
-		// The bitmap is read again just before it is written, so chunks of one file sent close
-		// together do not undo each other; commit checks every part on disk anyway.
+		// Read again just before writing, so chunks sent close together do not undo each other.
 		$fresh = self::row( (int) $session['id'], $ref );
 		$t     = null === $fresh ? $t : $fresh['t'];
 		if ( isset( $t['got'][ $n ] ) && '1' !== $t['got'][ $n ] ) {
@@ -768,15 +733,11 @@ final class Media_Receiver {
 		);
 	}
 
-	// --- R12: commit ---------------------------------------------------------------------------
+	// --- commit ------------------------------------------------------------------------------
 
 	/**
-	 * POST /remote/push/{id}/files/{ref}/commit: one file from its parts, checked (blueprint §9
-	 * step 5). The file stays in the push's temporary folder until apply.
-	 *
-	 * Appends parts into one temporary file inside the push's random folder (WP_Filesystem has no
-	 * append, hence the reasoned file_put_contents()), then checks size, SHA-256 and real file type
-	 * before the file may be used.
+	 * POST /remote/push/{id}/files/{ref}/commit: joins a file's parts in the push's temporary
+	 * folder, then checks its size, SHA-256 and real file type.
 	 *
 	 * @param array  $session Session (this pairing's).
 	 * @param array  $pairing Pairing row.
@@ -837,8 +798,7 @@ final class Media_Receiver {
 			}
 			hash_update( $ctx, $data );
 			$total += strlen( $data );
-			// WP_Filesystem has no append, and holding the whole file (up to 512 MB) in memory is
-			// not an option: the direct method was confirmed above and the path is ours.
+			// WP_Filesystem cannot append and a whole file may not fit in memory; the path is ours.
 			if ( false === file_put_contents( $bin, $data, FILE_APPEND ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- append one part at a time; WP_Filesystem (direct, checked) cannot append.
 				$fs->delete( $bin );
 				return self::error( 'storage_unwritable', 500 );
@@ -899,9 +859,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Why the committed bytes are not acceptable under their final name, or '': core's check of
-	 * the real content against the name (for a user without unfiltered_upload), and a readable
-	 * image for image types.
+	 * Why the committed bytes do not match their final name's allowed type, or ''.
 	 *
 	 * @param string $bin    Path of the committed file.
 	 * @param string $target Final relative path.
@@ -942,8 +900,7 @@ final class Media_Receiver {
 	// --- the files phase and cleanup -----------------------------------------------------------
 
 	/**
-	 * Whether the session still takes files: open or receiving, holding the lock, and no item
-	 * batch received yet (files come first; blueprint §12.1).
+	 * Whether the session still takes files (it holds the lock and no item batch arrived yet).
 	 *
 	 * @param array $session Session.
 	 * @return true|WP_Error
@@ -963,10 +920,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Ends the files phase when the first item batch arrives: parts of files that were never
-	 * committed are deleted (their attachments are refused when staged).
-	 *
-	 * Deletes only part files inside this push's random temporary folder, through WP_Filesystem.
+	 * Ends the files phase when the first item batch arrives, deleting uncommitted parts.
 	 *
 	 * @param array $session Session.
 	 * @return void
@@ -994,10 +948,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Deletes a session's temporary folder (finish, abort, expiry, failed final pass).
-	 *
-	 * Deletes only this push's random temporary folder under uploads, through WP_Filesystem, after its
-	 * path resolved inside the uploads base.
+	 * Deletes a session's temporary folder, once its path resolved inside the uploads base.
 	 *
 	 * @param array $session Session.
 	 * @return bool Whether it is gone.
@@ -1018,11 +969,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * The daily prune (blueprint §9.8, §14.5): temporary folders older than 24 hours that no
-	 * session still receiving or waiting for apply uses.
-	 *
-	 * Deletes only temporary folders under uploads/keepmerge-push-staging-to-live/tmp/ that no running
-	 * push uses; the list of folders in use is a prepared query on the plugin's own table.
+	 * The daily prune: deletes temporary folders older than 24 hours that no running push uses.
 	 *
 	 * @param int $max_age Seconds.
 	 * @return int Folders deleted.
@@ -1073,10 +1020,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * The committed (or already present) file of a ref, for apply: absolute path of the
-	 * temporary file, or '' for a file live already has. The attachment applier moves it to its
-	 * final path after checking that realpath() of the target folder lies inside the uploads base
-	 * (Apply\Appliers\Attachment).
+	 * The absolute path of a ref's committed temporary file for the apply, or ''.
 	 *
 	 * @param array $session Session.
 	 * @param int   $ref     Ref.
@@ -1098,9 +1042,6 @@ final class Media_Receiver {
 
 	/**
 	 * WP_Filesystem with the direct method only, for the apply (moves and snapshot copies).
-	 *
-	 * Only WP_Filesystem's direct method: a remote request cannot stop to ask for FTP credentials, and
-	 * every path is checked with realpath() against the uploads base.
 	 *
 	 * @return \WP_Filesystem_Base|WP_Error
 	 */
@@ -1133,10 +1074,6 @@ final class Media_Receiver {
 	/**
 	 * Every file row of a session (for the apply), keyed by ref.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
-	 *
 	 * @param int $push_id Session row ID.
 	 * @return array<int,array>
 	 */
@@ -1157,10 +1094,6 @@ final class Media_Receiver {
 
 	/**
 	 * File rows of a session by ref (for the item stager).
-	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
 	 *
 	 * @param int   $push_id Session row ID.
 	 * @param int[] $refs    Refs.
@@ -1208,10 +1141,6 @@ final class Media_Receiver {
 	/**
 	 * Counts of a session's file rows: have, need, renamed, committed, refused, total.
 	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
-	 *
 	 * @param int $push_id Session row ID.
 	 * @return array<string,int>
 	 */
@@ -1242,12 +1171,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * The URL rewrite list of a push: each renamed file's path on the source and its new path on
-	 * live (blueprint §9 step 3). Phase 7 rewrites the pushed content with it.
-	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
+	 * The URL rewrite list of a push: each renamed file's source path and its new path on live.
 	 *
 	 * @param int $push_id Session row ID.
 	 * @return array<string,string> path => final path.
@@ -1267,10 +1191,6 @@ final class Media_Receiver {
 
 	/**
 	 * File rows of a session.
-	 *
-	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
-	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
-	 * during a push.
 	 *
 	 * @param int $push_id Session row ID.
 	 * @return int
@@ -1315,9 +1235,6 @@ final class Media_Receiver {
 
 	/**
 	 * Updates a file row.
-	 *
-	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
-	 * from Tables::table_name(): core has no API for plugin tables.
 	 *
 	 * @param int   $id     Row ID.
 	 * @param array $fields status, error, transfer (array).
@@ -1382,9 +1299,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Deletes the parts of one file.
-	 *
-	 * Deletes only part files inside this push's random temporary folder, through WP_Filesystem.
+	 * Deletes the parts of one file from the push's temporary folder.
 	 *
 	 * @param \WP_Filesystem_Base $fs     Filesystem.
 	 * @param string              $dir    Push folder.
@@ -1429,13 +1344,8 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * The session's temporary folder: uploads/keepmerge-push-staging-to-live/tmp/<32 hex>, each
-	 * level with index.php and an .htaccess deny rule, written with the direct method only and
-	 * resolving inside the uploads base.
-	 *
-	 * The temporary folder has a random 32-hex name from random_bytes() under uploads, is created
-	 * through WP_Filesystem and gets index.php and a deny rule, so received bytes are never reachable
-	 * by a guessable URL.
+	 * The session's temporary folder, uploads/keepmerge-push-staging-to-live/tmp/<32 hex>: a random
+	 * name with index.php and a deny rule at each level, so received bytes have no guessable URL.
 	 *
 	 * @param array $session Session.
 	 * @param bool  $create  Create it (and name it) when missing.
@@ -1475,8 +1385,8 @@ final class Media_Receiver {
 			if ( ! $fs->is_dir( $folder ) && ! $fs->mkdir( $folder, FS_CHMOD_DIR ) ) {
 				return self::error( 'storage_unwritable', 500 );
 			}
-			// tmp/ and the push folder get index.php and the deny rule; the plugin's own folder
-			// holds only tmp/ (and snapshots/ from Phase 7, protected the same way).
+			// tmp/ and the push folder get index.php and the deny rule (snapshots/ is protected the
+			// same way).
 			if ( $root !== $folder && ! self::protect( $fs, $folder ) ) {
 				return self::error( 'storage_unwritable', 500 );
 			}
@@ -1488,11 +1398,8 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Writes index.php and an .htaccess deny rule into a folder (blueprint §9.10). On nginx the
-	 * rule is ignored: the folder name is random and file names carry no meaning.
-	 *
-	 * Writes only the fixed index.php and .htaccess deny rule into the plugin's own folders under
-	 * uploads, through WP_Filesystem.
+	 * Writes the fixed index.php and .htaccess deny rule into one of the plugin's upload folders.
+	 * On nginx the rule is ignored; the random folder name still keeps files unguessable.
 	 *
 	 * @param \WP_Filesystem_Base $fs     Filesystem.
 	 * @param string              $folder Folder.
@@ -1513,8 +1420,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * WP_Filesystem with the direct method only (blueprint §9 step 4): anything else would need
-	 * credentials a remote request cannot give, and fails with storage_unwritable.
+	 * WP_Filesystem with the direct method only: a remote request cannot give FTP credentials.
 	 *
 	 * @return \WP_Filesystem_Base|WP_Error
 	 */
@@ -1539,10 +1445,7 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Whether a path resolves inside the uploads base.
-	 *
-	 * A realpath() call on each side resolves links and dot segments, so a path is accepted only when it
-	 * really lies inside the uploads base.
+	 * Whether a path resolves inside the uploads base (realpath() on both sides resolves links).
 	 *
 	 * @param string $path Path.
 	 * @param string $base Uploads base.

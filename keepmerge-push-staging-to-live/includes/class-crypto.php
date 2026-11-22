@@ -14,16 +14,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Encrypts pairing secrets before they are stored (blueprint §5.7).
+ * Encrypts pairing secrets before they are stored: sodium_crypto_secretbox (XSalsa20-Poly1305)
+ * with a fresh nonce per value, from PHP's sodium extension or WordPress's bundled
+ * sodium_compat. Stored form: "v1:" + hex( nonce . ciphertext ).
  *
- * Uses sodium_crypto_secretbox (XSalsa20-Poly1305) with a fresh 24-byte nonce per value. PHP's
- * sodium extension is used when loaded, otherwise the sodium_compat copy that WordPress core
- * bundles, so the functions exist on every supported PHP version. Stored form: "v1:" followed
- * by hex( nonce . ciphertext ). Binary values are stored as hex, never base64.
- *
- * Key material: the SOFTGLAZE_SP_KEY constant when the site configuration defines it with at
- * least 32 characters, otherwise wp_salt( 'secure_auth' ). The key itself is an HMAC of a fixed
- * context string under that material, so it is never the raw salt.
+ * The key is an HMAC of a fixed context string under SOFTGLAZE_SP_KEY (when defined with at
+ * least 32 characters) or wp_salt( 'secure_auth' ), so it is never the raw salt.
  */
 final class Crypto {
 
@@ -40,10 +36,7 @@ final class Crypto {
 	const SOURCE_DATABASE = 'database salts';
 
 	/**
-	 * Encrypts a string.
-	 *
-	 * Authenticated encryption (sodium secretbox, a fresh random nonce per value) keeps pairing
-	 * secrets unreadable in a database dump or backup (threat model §7.1).
+	 * Encrypts a string, so pairing secrets are unreadable in a database dump or backup.
 	 *
 	 * @param string $plaintext Value to protect.
 	 * @return string "v1:" + hex, or '' when sodium is unavailable (readiness reports that).
@@ -60,13 +53,8 @@ final class Crypto {
 	}
 
 	/**
-	 * Decrypts a value written by encrypt().
-	 *
-	 * A value that does not decrypt fails closed with no fallback key, so a copied database with other
-	 * salts never yields usable secrets.
-	 *
-	 * A changed key (new salts, a changed constant) and a tampered value both fail the same way;
-	 * callers mark the pairing "Re-pair needed" and never fall back to another key.
+	 * Decrypts a value written by encrypt(). A changed key or a tampered value fails closed with
+	 * no fallback key; callers then mark the pairing "Re-pair needed".
 	 *
 	 * @param string $stored Stored value.
 	 * @return string|WP_Error Plaintext, or WP_Error code decrypt_failed.
@@ -98,10 +86,8 @@ final class Crypto {
 	}
 
 	/**
-	 * Whether the secretbox functions exist (native extension or core's sodium_compat).
-	 *
-	 * The secretbox comes from the PHP extension or from the sodium_compat library WordPress bundles;
-	 * the plugin ships no cryptography of its own.
+	 * Whether the secretbox functions exist (native extension or core's sodium_compat); the
+	 * plugin ships no cryptography of its own.
 	 *
 	 * @return bool
 	 */
@@ -110,10 +96,7 @@ final class Crypto {
 	}
 
 	/**
-	 * Which implementation provides sodium: the PHP extension or WordPress's sodium_compat.
-	 *
-	 * Reported on the Overview tab so an administrator can see which sodium implementation protects
-	 * the stored secrets.
+	 * Which implementation provides sodium, as the Overview tab reports it.
 	 *
 	 * @return string 'ext-sodium', 'sodium_compat' or 'none'.
 	 */
@@ -147,13 +130,8 @@ final class Crypto {
 
 	/**
 	 * Classifies the key source from a set of constant values, mirroring core's wp_salt() for the
-	 * secure_auth scheme (core 7.1.3 pluggable.php): a constant counts only when it is defined,
-	 * non-empty, not the sample phrase and not shared with another salt constant; SECRET_KEY can
-	 * stand in for a missing SECURE_AUTH_KEY, nothing stands in for SECURE_AUTH_SALT, and
-	 * whatever is missing comes from the database.
-	 *
-	 * Kept separate from key_source() so it can be tested: constants cannot be undefined inside
-	 * one PHP process.
+	 * secure_auth scheme. Separate from key_source() so it can be tested, since constants cannot
+	 * be undefined inside one PHP process.
 	 *
 	 * @param array    $constants       Constant name => value, only for defined constants.
 	 * @param string[] $sample_phrases  Phrases the sample configuration file ships with.
@@ -195,10 +173,7 @@ final class Crypto {
 	}
 
 	/**
-	 * The 32-byte secretbox key.
-	 *
-	 * A hash_hmac() call derives a separate 32-byte key from SOFTGLAZE_SP_KEY or wp_salt( 'secure_auth' ), so
-	 * the salt itself is never the encryption key.
+	 * The 32-byte secretbox key, derived with hash_hmac() so the salt itself is never the key.
 	 *
 	 * @return string Binary key.
 	 */

@@ -25,25 +25,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The source half of blueprint §10.1–§10.2 and §12: a planned plan becomes a push. Its row in
- * pushes (side "source") moves through these states:
- *
- * - Planned, then sending_files (only when the push carries media; Media_Sender), then
- *   sending_items, then applying (live applies it in time-boxed calls of POST /remote/push/{id}/apply
- *   and returns live's IDs, which this site records as links), then done.
- * - awaiting_review: live holds items for review; this site stops calling apply and only asks
- *   live's state ("Check status") until a live administrator finished the push on live.
- * - Paused from sending_files or sending_items (network, 5xx after retries, window closed, rate,
- *   clock, live's storage); Resume goes back to the phase it paused in (cursor "phase").
- * - Failed: the session is gone or closed on live, or the pairing cannot be used.
- * - Aborted: the admin aborted it before apply; live purged the staged rows.
- *
- * Work is driven by the admin's browser (or WP-CLI) one step at a time; each step sends one
- * batch of at most 50 items and 1.9 MB. The batch's range is recorded before it is sent, so a
- * step that dies (a closed tab, a lost answer) sends the same batch with the same sequence number
- * again and live answers from its records: batches are idempotent by (push, seq) and items by
- * (push, uuid) (blueprint §12.2). A step is claimed with a compare-and-swap on the cursor, so two
- * tabs never send at the same time.
+ * The source side of a push: a planned plan is sent to live as files, then item batches, then
+ * applied by live in time-boxed calls (pausing on network or server trouble, stopping at
+ * awaiting_review when live holds items). Each step is claimed with a compare-and-swap on the
+ * cursor and records a batch's range before sending it, so a step that dies resends the same batch
+ * and live answers it idempotently.
  */
 final class Push_Runner {
 
@@ -70,13 +56,12 @@ final class Push_Runner {
 	const ROUTE = '/keepmerge/v1/remote/push';
 
 	/**
-	 * Most items in one push (blueprint §13).
+	 * Most items in one push.
 	 */
 	const MAX_ITEMS = 5000;
 
 	/**
-	 * Most bytes of item envelopes per batch, below live's 2 MB body limit with room for the
-	 * batch's own keys.
+	 * Most bytes of item envelopes per batch, below live's 2 MB body limit.
 	 */
 	const MAX_BATCH_BYTES = 1900000;
 
@@ -90,8 +75,7 @@ final class Push_Runner {
 	const SAMPLES = 50;
 
 	/**
-	 * Codes after which the push waits for the admin (Resume) rather than failing: the cause is
-	 * on the network, the window, the clock or the server, and the session on live is intact.
+	 * Codes after which the push pauses for Resume rather than failing (live's session is intact).
 	 */
 	const PAUSE_CODES = array( 'window_closed', 'network_error', 'server_error', 'tls_failed', 'rate_limited', 'ip_blocked', 'clock_skew', 'authorization_header_missing', 'https_required', 'transport_unpinned', 'response_invalid', 'response_unsigned', 'response_signature_invalid', 'address_refused', 'replay_blocked', 'redirect_refused', 'unexpected_status' );
 
@@ -173,8 +157,7 @@ final class Push_Runner {
 			return new WP_Error( 'plan_changed', __( 'The plan changed since its summary was made. Plan again.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
 		}
 
-		// The media, by size only, before anything is sent: live refuses a push it has no room
-		// for at open (blueprint §9.9).
+		// The media size goes first so live can refuse a push it has no room for.
 		$media = Media_Sender::plan( $attachments );
 		if ( is_wp_error( $media ) ) {
 			return $media;
@@ -281,8 +264,7 @@ final class Push_Runner {
 	}
 
 	/**
-	 * One step: one batch sent (and, inside the time budget, its 413 halving, 429 wait or the
-	 * resend of a batch whose answer was lost).
+	 * One step: one batch sent, with its retries inside the time budget.
 	 *
 	 * @param int        $push_id Push (plan) ID.
 	 * @param array      $args    steps (int): the step count the screen last saw.
@@ -315,8 +297,7 @@ final class Push_Runner {
 			return self::present( $row );
 		}
 
-		// Claim the step: only the request whose compare-and-swap succeeds sends. A paused push
-		// goes back to the phase it paused in.
+		// Only the request whose compare-and-swap succeeds sends; a paused push resumes its phase.
 		$phase                        = isset( $p['phase'], self::PHASE_STATES[ $p['phase'] ] ) ? (string) $p['phase'] : 'items';
 		$budget                       = Limits::time_budget();
 		$cursor['push']['busy_until'] = $now + $budget + 15;
@@ -346,7 +327,7 @@ final class Push_Runner {
 		$ctx      = Export_Context::source( (int) $row['pairing_id'] );
 
 		if ( 'files' === $phase ) {
-			// Every file first (blueprint §12.1): live checks attachments against them.
+			// Every file first: live checks attachments against them.
 			$outcome = Media_Sender::step( $row, $cursor, $client, $ctx, $deadline );
 			$state   = $outcome['state'];
 			$error   = $outcome['error'];
@@ -408,8 +389,7 @@ final class Push_Runner {
 	}
 
 	/**
-	 * Steps until the push leaves sending (WP-CLI and test tools). A wait for Retry-After is
-	 * slept through.
+	 * Steps until the push leaves sending (WP-CLI), sleeping through any Retry-After wait.
 	 *
 	 * @param int        $push_id Push ID.
 	 * @param mixed|null $client  Client.
@@ -451,7 +431,7 @@ final class Push_Runner {
 			return self::present( $row );
 		}
 		if ( in_array( $row['state'], array( 'applying', 'done' ), true ) ) {
-			// Once live writes, only its administrator can undo it (Phase 8 roll back on live).
+			// Once live writes, only its administrator can undo it (roll back on live).
 			return new WP_Error( 'push_applying', __( 'Live is applying this push or has applied it. A live administrator can roll it back on the live site.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
 		}
 		$cursor = $row['cursor_json'];
@@ -649,8 +629,7 @@ final class Push_Runner {
 				'from' => (int) $p['pos'],
 				'to'   => (int) $p['pos'] + count( $built['items'] ),
 			);
-			// The range is stored before anything is sent: a step that dies after sending sends
-			// exactly this batch again.
+			// Stored before sending, so a step that dies resends exactly this batch.
 			Plan_Store::update( (int) $row['id'], array( 'cursor_json' => $cursor ) );
 		} else {
 			$built = self::build( $row, $cursor, (int) $p['pending']['from'], (int) $p['pending']['to'], $ctx, $links );
@@ -681,8 +660,7 @@ final class Push_Runner {
 
 		$busy = 503 === $status && isset( $data['remote_code'] ) && 'server_busy' === $data['remote_code'];
 		if ( $busy && (int) $pending['to'] - (int) $pending['from'] > 1 ) {
-			// Live stopped the batch at its time budget or memory guard (blueprint §13): smaller
-			// batches from here; the items it staged already are answered from its rows.
+			// Live stopped the batch at its time or memory limit: smaller batches from here.
 			$p['batch_size']  = max( 1, intdiv( (int) $pending['to'] - (int) $pending['from'], 2 ) );
 			$p['batch_bytes'] = max( self::MIN_BATCH_BYTES, intdiv( (int) $p['batch_bytes'], 2 ) );
 			$p['pending']     = null;
@@ -745,11 +723,8 @@ final class Push_Runner {
 	}
 
 	/**
-	 * One step of the apply phase (blueprint §10.3, §10.5): calls POST /remote/push/{id}/apply
-	 * (time-boxed on live), records the item results it returns (live's IDs become this site's
-	 * links, so later hashes name references as live does), and stops at awaiting_review. In the
-	 * review phase it only asks live's state; once live says the push is applied, it collects the
-	 * results.
+	 * One step of the apply phase: calls live's apply route and records the item results, or, while
+	 * live reviews held items, only asks live's state until the push is applied.
 	 *
 	 * @param array $row      Push row.
 	 * @param array $cursor   Cursor (changed).
@@ -774,8 +749,7 @@ final class Push_Runner {
 				return self::next( 'stop', 'failed', new WP_Error( 'push_' . $live, Remote_Client::message( 'push_' . $live ) ) );
 			}
 			if ( 'applied' !== $live ) {
-				// Still under review, being applied by a live administrator, or waiting for their
-				// decision after a failure or an interruption.
+				// A live administrator is reviewing, applying or deciding after a failure.
 				$waiting = in_array( $live, array( 'failed_partial', 'interrupted' ), true ) ? new WP_Error( 'push_' . $live, Remote_Client::message( 'push_' . $live ) ) : null;
 				return self::next( 'stop', 'awaiting_review', $waiting );
 			}
@@ -825,8 +799,7 @@ final class Push_Runner {
 				return self::next( 'stop', 'awaiting_review' );
 			}
 			if ( in_array( $live, array( 'failed_partial', 'interrupted' ), true ) ) {
-				// A live administrator decides on live (Retry, Skip, Resume or Roll back); "Check
-				// status" here collects the results once live has applied the push.
+				// A live administrator decides on live; "Check status" collects the results later.
 				$p['phase'] = 'review';
 				self::log( $cursor, 'failed', array( 'code' => 'push_' . $live ) );
 				return self::next( 'stop', 'awaiting_review', new WP_Error( 'push_' . $live, Remote_Client::message( 'push_' . $live ) ) );
@@ -862,8 +835,7 @@ final class Push_Runner {
 	}
 
 	/**
-	 * Records one item result of the apply: the plan row remembers it, and an applied item's live
-	 * ID becomes this site's link (sync state "pushed").
+	 * Records one item result of the apply; an applied item's live ID becomes this site's link.
 	 *
 	 * @param array $row    Push row.
 	 * @param array $cursor Cursor (changed).
@@ -939,8 +911,7 @@ final class Push_Runner {
 				'field'  => isset( $result['field'] ) && is_string( $result['field'] ) ? substr( sanitize_text_field( $result['field'] ), 0, 64 ) : '',
 				'held'   => isset( $result['held'] ) ? (int) $result['held'] : 0,
 			);
-			// Each item counts once on this side: an answer sent again (a replayed batch) counts
-			// the items whose first answer never arrived here.
+			// Each item counts once, also when a replayed batch is answered again.
 			if ( ! isset( $plan['payload']['live'] ) && isset( $batch[ $status ] ) ) {
 				++$batch[ $status ];
 				++$p['counts'][ $status ];
@@ -1063,8 +1034,7 @@ final class Push_Runner {
 	}
 
 	/**
-	 * One item envelope: identity, the fresh export (data and references with live ID hints), or
-	 * a stub that tells live why the item is not sent.
+	 * One item envelope: identity and fresh export, or a stub that says why the item is not sent.
 	 *
 	 * @param array|null     $plan_row Plan row.
 	 * @param string         $uuid     UUID.
@@ -1163,9 +1133,7 @@ final class Push_Runner {
 	}
 
 	/**
-	 * What this site manages for an item, sent beside it so live never clears what this site does
-	 * not include: the taxonomies of the item's type that are included here, and this site's own
-	 * excluded meta entries (Settings).
+	 * The taxonomies and excluded meta this site manages, so live never clears what it does not send.
 	 *
 	 * @param string $kind Kind.
 	 * @param string $type Post type.

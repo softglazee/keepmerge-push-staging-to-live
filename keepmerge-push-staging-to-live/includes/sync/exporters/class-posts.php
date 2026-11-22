@@ -14,9 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Post-like items of kind "post" (blueprint §6.2): the post fields, parent, author, page
- * template, term assignments, featured image and post meta minus the excluded keys. Volatile
- * fields (modification dates, GUID, comment count) are not part of the item.
+ * Post-like items of kind "post": the post fields, parent, author, page template, term
+ * assignments, featured image and post meta minus the excluded keys. Volatile fields
+ * (modification dates, GUID, comment count) are not part of the item.
  */
 final class Posts extends Exporter {
 

@@ -14,17 +14,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Uninstall (blueprint §18.3). uninstall.php loads only this class and Tables: the plugin is
- * inactive then, and nothing here may depend on its hooks.
+ * Uninstall. uninstall.php loads only this class and Tables, so nothing here depends on the
+ * plugin's hooks.
  *
- * Always, whatever the "Remove all Keepmerge data on uninstall" setting says (threat model §7.1,
- * credentials never outlive the plugin): receiver users and their Application Passwords, the
- * receiver role, the stored secrets and Application Passwords of every pairing, the nonces and
- * throttle tables, the push lock, the receive window option, the daily prune and the temporary
- * folder. With the setting on (default off): every remaining table, the UUID meta in bounded
- * batches, the whole uploads/keepmerge-push-staging-to-live/ folder (snapshots included) and every
- * softglaze_sp_ option. With it off, the audit log, sync state, push history, snapshots, UUIDs and
- * settings stay, so a reinstall keeps identity and history; pairings then need a new key.
+ * Always removed, so credentials never outlive the plugin: receiver users, the receiver role,
+ * every stored secret and Application Password, the nonce and throttle tables, the push lock,
+ * the receive window, the daily prune and the temporary folder. With "Remove all Keepmerge data
+ * on uninstall" on (default off), every remaining table, the UUID meta, the uploads folder and
+ * every softglaze_sp_ option go too; otherwise history and identity stay for a reinstall.
  */
 final class Uninstaller {
 
@@ -189,9 +186,8 @@ final class Uninstaller {
 	}
 
 	/**
-	 * Deletes every receiver user of this site with its Application Passwords. Only users with the
-	 * receiver role, or recorded by a pairing with a receiver login, are touched; a receiver owns
-	 * nothing, but anything attributed to one is reassigned to an administrator, never deleted.
+	 * Deletes every receiver user of this site with its Application Passwords; anything attributed
+	 * to one is reassigned to an administrator, never deleted.
 	 *
 	 * @param int[] $recorded Receiver IDs recorded by pairings.
 	 * @return int[] IDs removed from this site.
@@ -349,9 +345,9 @@ final class Uninstaller {
 	}
 
 	/**
-	 * Deletes uploads/keepmerge-push-staging-to-live/<sub>/ (the whole plugin folder when $sub is
-	 * ''), only through WP_Filesystem's direct method and only when the folder resolves inside the
-	 * uploads base: uninstall cannot stop to ask for FTP credentials.
+	 * Deletes uploads/keepmerge-push-staging-to-live/<sub>/ (the whole folder when $sub is ''),
+	 * only inside the uploads base and only with WP_Filesystem's direct method, because uninstall
+	 * cannot ask for FTP credentials.
 	 *
 	 * @param string $sub '' or 'tmp'.
 	 * @return bool Whether the folder is gone.
@@ -385,8 +381,8 @@ final class Uninstaller {
 	}
 
 	/**
-	 * One data_removed row in the audit log that stays (setting off), so a reinstall shows when the
-	 * credentials went. Written directly: the plugin's Audit_Log is not loaded during uninstall.
+	 * One data_removed row in the audit log that stays, so a reinstall shows when the credentials
+	 * went. Written directly because Audit_Log is not loaded during uninstall.
 	 *
 	 * @param array $out Counts.
 	 * @return void

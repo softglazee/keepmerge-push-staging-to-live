@@ -12,12 +12,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Object identity (blueprint §6.1): a UUID v4 in the meta key _softglaze_sp_uuid, post meta for
- * post-like objects and term meta for terms and menus. Options and units are identified by name.
- *
- * Reading is safe on both sites. assign(), adopt(), renew() and dedupe() are for the source only:
- * live receives its UUIDs through a push (blueprint §6.4 step 6), written by stamp() inside an
- * apply after the item's snapshot (so a rollback can remove them).
+ * Object identity: a UUID v4 in the meta key _softglaze_sp_uuid (post meta, or term meta for
+ * terms and menus); options and units are identified by name. assign(), adopt(), renew() and
+ * dedupe() run on the source only; live gets its UUIDs from a push, through stamp() inside an
+ * apply after the item's snapshot, so a rollback can remove them.
  */
 final class Identity {
 
@@ -60,7 +58,7 @@ final class Identity {
 	}
 
 	/**
-	 * Sets an object's UUID to one live already uses for the matched object (blueprint §6.1).
+	 * Sets an object's UUID to one live already uses for the matched object.
 	 * Source side only.
 	 *
 	 * @param string $space 'post' or 'term'.
@@ -93,7 +91,7 @@ final class Identity {
 	}
 
 	/**
-	 * Live, inside an apply: gives an object the UUID the push names for it (blueprint §6.4 step 6).
+	 * Live, inside an apply: gives an object the UUID the push names for it.
 	 *
 	 * @param string $space 'post' or 'term'.
 	 * @param int    $id    Object ID.

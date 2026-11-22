@@ -16,11 +16,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Products and variations, read through the WooCommerce getters in the "edit" context (stored
- * values, no display filters) and grouped into the field groups of blueprint §6.6: content,
- * pricing, identity and live-owned. Only used while WooCommerce is active on this site.
- *
- * Product meta that the getters already cover, or that WooCommerce derives, is not repeated as
- * "other meta" (Woo\Guard::PRODUCT_INTERNAL_META).
+ * values, no display filters) and grouped into the field groups content, pricing, identity and
+ * live-owned. Only used while WooCommerce is active. Meta the getters cover or WooCommerce derives
+ * is not repeated as other meta (Woo\Guard::PRODUCT_INTERNAL_META).
  */
 final class Products extends Exporter {
 

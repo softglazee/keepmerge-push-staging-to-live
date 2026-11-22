@@ -12,20 +12,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The hash of an item (blueprint §6.3): SHA-256 of the JSON of its hash form, with object keys
- * sorted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE.
- *
- * The hash form is the normal form with URLs as tokens (Normalizer), every reference replaced by
- * a canonical token that names the same object on both sites (Reference_Mapper with the export
- * context's resolver), term assignment lists sorted, and nested serialized values in their
- * canonical text form. Volatile data (modification dates, edit locks, caches, Keepmerge's own
- * meta) is never part of the normal form, so it never enters the hash. The same content on both
- * sites therefore gives the same hash even though URLs and IDs differ.
+ * The hash of an item: SHA-256 of the canonical JSON (keys sorted, unescaped slashes and Unicode)
+ * of its hash form, in which URLs and references are tokens that name the same thing on both
+ * sites and volatile data (dates, locks, caches, Keepmerge's own meta) is left out, so the same
+ * content hashes alike on both sites.
  */
 final class Hasher {
 
 	/**
-	 * Hashes of an item: the item hash and, for products, one per field group (blueprint §6.6).
+	 * Hashes of an item: the item hash and, for products, one per field group.
 	 * The live-owned group of a product is hashed on its own and left out of the item hash, so
 	 * a sale on live does not make the product look changed.
 	 *

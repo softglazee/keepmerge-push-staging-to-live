@@ -14,27 +14,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Every query on a source-side plan (blueprint §14.1: plans are push_items rows with side
- * "source"; the plan itself is a pushes row with side "source").
- *
- * Columns of a plan's push_items rows:
- * - uuid, object_type (the item kind), local_object_id (the ID on this site);
- * - status: the class (Classifier::CLASSES), or "pending" / "manifested" while the plan is built;
- * - action: the default action; decision: the admin's choice ('' = the default, and for a
- *   conflict: undecided; "groups" for a product whose group conflicts are all decided);
- * - seq: the tab band times 1,000,000 plus the item's position, so rows sort by sub-tab, then in
- *   listing order, and a sub-tab is a range of seq;
- * - payload: JSON with what the screen shows (title, type, hashes, badges, groups, warnings);
- * - refs: JSON list of the UUIDs the item references (its dependencies, blueprint §6.7).
- *
- * Filters reach SQL only as allowlisted values or prepared placeholders (S-74).
+ * Every query on a source-side plan. The plan is a pushes row with side "source"; its items are
+ * push_items rows (status = class, action = default, decision = the admin's choice, seq = tab
+ * band × 1,000,000 + position, payload and refs as JSON). Filters reach SQL only as allowlisted
+ * values or prepared placeholders.
  */
 final class Plan_Store {
 
 	const SIDE = 'source';
 
 	/**
-	 * Minutes a plan can be used (blueprint §6.5 task: plans expire after 60 minutes).
+	 * Minutes a plan can be used.
 	 */
 	const TTL = 3600;
 

@@ -15,19 +15,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Answers POST /remote/baseline (threat model R4; blueprint §6.4 step 2). Read-only: it writes
- * nothing on live. For each fingerprint it says:
- * - strong: same type and ID, and either the same GUID after URL tokenization (host copies
- *   search-replace GUIDs) or the same slug and post_date_gmt (the normal case for a clone); or
- *   the same template slug and theme; or the same global styles stylesheet; or the same
- *   attachment path and file size; or, for terms and menus, the same taxonomy, ID and slug;
- * - medium: same type, slug and date on a different ID (terms: same slug, other ID), whatever
- *   the GUID says: WordPress gives a page created again with the same slug the same
- *   permalink-shaped GUID, so a GUID alone does not prove that two IDs are one item. Medium
- *   matches are never linked automatically;
- * - none, with the IDs of live items of the same type whose slug (or file path) is taken;
- * - excluded: the type is not part of the sync on live.
- * plus the UUID live already uses for a matched object, which the source adopts.
+ * Answers POST /remote/baseline, read-only. Each fingerprint is strong (same ID with the same
+ * tokenized GUID or the same slug and date; or the same template, styles, file path and size,
+ * or term slug), medium (same slug and date on another ID, never linked automatically because
+ * WordPress gives a page re-created with the same slug the same GUID), none (with the IDs whose
+ * slug is taken) or excluded, plus the UUID live already uses for a matched object.
  */
 final class Baseline_Matcher {
 
@@ -102,7 +94,7 @@ final class Baseline_Matcher {
 	}
 
 	/**
-	 * Step 12 of the chain for this route: the fingerprint list, each field read by name.
+	 * Validates the fingerprint list after the permission chain, each field read by name.
 	 *
 	 * @param array $body Body.
 	 * @return array|WP_Error
@@ -528,7 +520,7 @@ final class Baseline_Matcher {
 	}
 
 	/**
-	 * The step-12 refusal.
+	 * The refusal of a malformed request body.
 	 *
 	 * @return WP_Error
 	 */

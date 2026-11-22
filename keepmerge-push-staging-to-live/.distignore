@@ -13,3 +13,9 @@ phpcs.xml*
 phpunit.xml*
 *.md
 src/**/*.test.js
+LICENSE
+.wordpress-org
+tests
+composer.json
+composer.lock
+vendor

@@ -14,16 +14,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Site editor items exactly as blueprint §6.2 (storage checked in core 7.1.3):
- * - wp_template / wp_template_part: slug, content, title, excerpt, status, the theme (the
- *   wp_theme term, a stylesheet), the origin meta, and for parts the wp_template_part_area term;
- * - wp_global_styles: the post of one stylesheet (wp_theme term), content = theme.json-shaped
- *   JSON;
- * - wp_block (patterns, synced and unsynced): content, title, slug, status, the
- *   wp_pattern_sync_status meta and the wp_pattern_category terms;
- * - wp_navigation: content (block markup), title, slug, status.
- * wp_theme and wp_template_part_area are not public taxonomies, so they are fields here; the
- * term exporter never touches them.
+ * Site editor items as core stores them: templates and template parts (with their wp_theme and
+ * area terms and origin meta), global styles (one post per stylesheet, theme.json-shaped JSON),
+ * patterns (with sync status meta and pattern categories) and navigation. wp_theme and
+ * wp_template_part_area are not public taxonomies, so they are fields here, never term items.
  */
 final class Site_Editor extends Exporter {
 

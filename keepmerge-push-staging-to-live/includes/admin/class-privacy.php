@@ -12,9 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Adds Keepmerge's section to Settings → Privacy → Policy Guide (blueprint §19). The text is
- * static: it states what the plugin stores and where data goes, using the default retention
- * periods; a site that changes them in Keepmerge Settings edits its own policy.
+ * Adds Keepmerge's section to Settings → Privacy → Policy Guide. The text is static and uses the
+ * default retention periods; a site that changes them edits its own policy.
  */
 final class Privacy {
 

@@ -59,15 +59,14 @@ final class Plugin {
 
 		add_action( Cron::HOOK, array( Cron::class, 'daily_prune' ) );
 
-		// WooCommerce is optional: the hook only fires when it is active (blueprint §7 rule 8).
+		// WooCommerce is optional: the hook only fires when it is active.
 		add_action( 'before_woocommerce_init', array( Woo\Guard::class, 'declare_hpos_compatibility' ) );
 
-		// The receiver lock-down applies whether or not the window is open (blueprint §5.8).
+		// The receiver lock-down applies whether or not the window is open.
 		Receiver_User::register_hooks();
 		Rest\Remote_Controller::register_hooks();
 
-		// Pins the plugin's own outbound requests to the checked address (blueprint §5.10); it
-		// leaves every request it did not arm untouched.
+		// Pins the plugin's own outbound requests to the checked address; other requests are untouched.
 		add_action( 'http_api_curl', array( Transfer\Outbound_Guard::class, 'pin_handle' ), 10, 3 );
 
 		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'WP_CLI' ) ) {
@@ -76,17 +75,13 @@ final class Plugin {
 	}
 
 	/**
-	 * Registers the admin routes, and the remote routes only while the receive window is open
-	 * (threat model §6 step 0): with the window closed, the site has no remote route at all.
-	 *
-	 * Clone detection (Installer::ensure_site_id() on init) has already run by now, so a copied
-	 * database has its window closed before this check.
+	 * Registers the admin routes, and the remote routes only while the receive window is open, so
+	 * a site with the window closed exposes no remote route at all.
 	 *
 	 * @return void
 	 */
 	public function register_rest_routes() {
-		// Runs again here in case another plugin started the REST server before init: the
-		// clone check must precede the window check. It is a no-op when nothing changed.
+		// Clone detection must precede the window check, even if the REST server started before init.
 		Installer::ensure_site_id();
 
 		( new Rest\Admin_Controller() )->register_routes();

@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstall routine (blueprint §18.3; SoftGlaze\SafePush\Uninstaller says what goes and when).
+ * Uninstall routine (SoftGlaze\SafePush\Uninstaller says what goes and when).
  *
  * @package SoftGlaze\SafePush
  */

@@ -14,10 +14,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Options on this site's allowlist (blueprint §6.9), each an item named option:<name>, and the
- * widgets unit (sidebars_widgets plus every widget_* option) named unit:widgets. The hard
- * denylist applies before anything is read. Theme mods never carry custom_css_post_id: Additional
- * CSS lives in a custom_css post that v1 does not push.
+ * Options on this site's allowlist, each an item named option:<name>, and the widgets unit
+ * (sidebars_widgets plus every widget_* option) named unit:widgets. The hard denylist applies
+ * before anything is read. Theme mods never carry custom_css_post_id: Additional CSS lives in a
+ * custom_css post that is not pushed.
  */
 final class Options extends Exporter {
 

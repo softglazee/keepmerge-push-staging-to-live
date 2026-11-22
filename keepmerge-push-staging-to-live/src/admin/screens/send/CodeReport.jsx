@@ -91,10 +91,8 @@ function fileBadge( file, changed ) {
 }
 
 /**
- * The Code sub-tab (blueprint §6.11, F8): plugins and themes missing, extra or at another version
- * on live, and per-file hash differences of live's active theme, its parent and active plugins.
- * Code is reported, never pushed. Live answers only after its administrator allows code report
- * requests; until then this tab says how to do that.
+ * The Code sub-tab: plugin and theme versions and per-file hash differences against live. Code is
+ * reported, never pushed; live answers only after its administrator allows code report requests.
  *
  * @param {Object} props
  * @param {Object} props.pairing Pairing.

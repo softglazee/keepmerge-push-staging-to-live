@@ -386,7 +386,7 @@ export function continueApply( id, confirm ) {
 	} );
 }
 
-// Destination recovery (blueprint §10.4, §11, §12): every write needs this site's domain typed.
+// Destination recovery: every write needs this site's domain typed.
 export function getRollbackPreview( id ) {
 	return apiFetch( { path: `${ BASE }/pushes/${ id }/rollback-preview` } );
 }

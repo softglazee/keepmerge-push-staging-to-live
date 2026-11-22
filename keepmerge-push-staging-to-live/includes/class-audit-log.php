@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Records what happened on this site (blueprint §17): who, what, from which address, with what
+ * Records what happened on this site: who, what, from which address, with what
  * result. Never secrets, credentials, signatures, request bodies, content or option values.
  *
  * Rules enforced here rather than trusted to callers:
@@ -236,9 +236,8 @@ final class Audit_Log {
 	}
 
 	/**
-	 * Takes the database's named lock that serialises collapsing writes on this site's audit
-	 * table (waits at most 2 seconds; without it the row is still written, the count may then
-	 * miss a parallel increment).
+	 * Takes a named database lock that serialises collapsing writes (waits at most 2 seconds;
+	 * without it the row is still written, but a parallel increment may be lost).
 	 *
 	 * @return bool Whether the lock is held.
 	 */
@@ -439,7 +438,7 @@ final class Audit_Log {
 	/**
 	 * One CSV cell, quoted, with spreadsheet formula triggers neutralised: a cell that starts
 	 * with =, +, -, @, a tab or a carriage return gets a leading apostrophe, so a value such as
-	 * =HYPERLINK(...) is shown as text instead of being evaluated (threat model S-72).
+	 * =HYPERLINK(...) is shown as text instead of being evaluated.
 	 *
 	 * @param mixed $value Cell value.
 	 * @return string
@@ -544,9 +543,6 @@ final class Audit_Log {
 
 	/**
 	 * The newest row inside the collapse window for this event, address and reason.
-	 *
-	 * Rows inside one window are already collapsed per reason, so a handful of rows is the most
-	 * that can match; the LIMIT keeps the lookup bounded either way.
 	 *
 	 * @param string   $event      Event.
 	 * @param string   $ip         Address.

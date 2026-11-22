@@ -15,21 +15,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Writes site editor items as core stores them (blueprint §6.2, storage checked in core 7.1.5):
- * the post, then the non-public taxonomies set with wp_set_object_terms() (wp_theme for templates,
- * parts and global styles; wp_template_part_area for parts), the origin meta, a pattern's
- * wp_pattern_sync_status meta and wp_pattern_category terms. A template, part or global styles of a
- * theme live does not have is skipped (theme_missing). Global styles written by the receiver go
- * through core's wp_filter_global_styles_post(), which removes custom CSS and unsafe properties;
- * those were held for review on live first.
+ * Writes site editor items as core stores them: the post, then its wp_theme,
+ * wp_template_part_area and wp_pattern_category terms and meta. Items of a theme live does not have
+ * are skipped. Global styles written by the receiver pass core's wp_filter_global_styles_post().
  */
 final class Site_Editor extends Base {
 
 	const THEMED = array( 'template', 'template_part', 'global_styles' );
 
 	/**
-	 * Allocate pass: a draft without any theme term (a draft template with a wp_theme term would
-	 * already take over the theme's template).
+	 * Allocate pass: a draft without a theme term, which would already override the theme's template.
 	 *
 	 * @param Item_Context $ctx Context.
 	 * @return int|WP_Error

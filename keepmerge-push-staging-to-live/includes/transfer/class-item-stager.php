@@ -22,20 +22,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Step 12 of the remote chain for item batches (blueprint §10.2, threat model §7.4): one
- * received item envelope in, one row to stage out. Nothing here writes; Push_Session stores the
- * result.
- *
- * Every field is read by name and checked on its own against the schema of the item's kind;
- * unknown keys are dropped. Live decides with its own settings: the post type or taxonomy must be
- * included here and never denied, an option must be on this site's own allowlist and pass
- * Option_Policy (the source's allowlist cannot widen it), meta keys excluded here are dropped, a
- * page template must exist in this site's theme, attachment paths must pass Path_Guard and an
- * attachment's files must be among this push's committed files (or files live already has), and
- * every reference must name an item of this push or an object this site includes. Values are decoded
- * with Normalizer::decode(), which builds arrays, scalars and stdClass only: nothing received is
- * ever unserialized. The markup gate (Phase 4, unchanged) then holds items for a live
- * administrator.
+ * Turns one received item envelope into one row to stage; nothing here writes. Every field is read
+ * by name against the schema of the item's kind (unknown keys are dropped), and live decides with
+ * its own settings: types, options, meta, templates, attachment paths and references must all be
+ * inside live's scope. Values are decoded as typed JSON only (nothing received is unserialized),
+ * then the markup gate holds items for a live administrator.
  */
 final class Item_Stager {
 
@@ -52,8 +43,7 @@ final class Item_Stager {
 	);
 
 	/**
-	 * Reasons the source may give for an item it could not send as planned (the row is refused
-	 * with that reason, so the counts of the session still add up).
+	 * Reasons the source may give for an item it could not send as planned (the row is refused).
 	 */
 	const SKIPS = array( 'changed_since_plan', 'too_large', 'not_exportable' );
 
@@ -344,8 +334,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * The envelope's identity, read by name: what a row needs before anything else is looked at.
-	 * A malformed identity makes the whole batch invalid (nothing can be recorded for it).
+	 * The envelope's identity, read by name; a malformed identity makes the whole batch invalid.
 	 *
 	 * @param mixed $raw Envelope as decoded from JSON.
 	 * @return array|null uuid, kind, type, plan_action, action, hash, live_id, skip.
@@ -447,7 +436,7 @@ final class Item_Stager {
 		$out['target'] = $target;
 
 		if ( in_array( $id['action'], array( 'trash', 'adopt' ), true ) ) {
-			// No content travels: live's own object is trashed or adopted (Phase 7).
+			// No content travels: live's own object is trashed or adopted.
 			$out['status'] = 'staged';
 			$this->remember( $id );
 			return $this->finish( $out );
@@ -468,9 +457,8 @@ final class Item_Stager {
 			return $this->refuse( $out, 'invalid_refs', 'refs' );
 		}
 
-		// Serialized PHP text travels only as "ser" nodes, which live rebuilds from plain data; a
-		// string that is serialized text would be stored as it is and could name any class to code
-		// on live that unserializes it (security review 2026-11-22, KM-02).
+		// Serialized PHP travels only as "ser" nodes rebuilt from plain data; a serialized string
+		// stored as it is could name any class to code on live that unserializes it.
 		if ( Normalizer::holds_serialized_text( $data ) ) {
 			return $this->refuse( $out, 'invalid_value', 'serialized_string' );
 		}
@@ -489,8 +477,7 @@ final class Item_Stager {
 			}
 		}
 
-		// The files of an attachment arrived first (blueprint §12.1) and were checked at commit:
-		// the item names them, live finds them among this push's file rows.
+		// An attachment's files arrived first and were checked at commit; match them by row.
 		$media = null;
 		if ( 'attachment' === $id['kind'] ) {
 			$problem = array();
@@ -500,8 +487,7 @@ final class Item_Stager {
 			}
 		}
 
-		// What the source manages for this item (outside the data and its hash), so live never
-		// clears something the source simply does not include (blueprint §6.2, Phase 7).
+		// What the source manages for this item, so live never clears what the source leaves out.
 		$problem = array();
 		$extra   = self::envelope_extras( $id['kind'], $raw, $data, $problem );
 		if ( null === $extra ) {
@@ -525,9 +511,8 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Final pass of a push (every declared item received): references left pending must name a
-	 * row of the push that was not refused, of a kind that fits; a refused row breaks the
-	 * references to it in turn. Rows are given as uuid => array( kind, status, refs ).
+	 * Final pass once every item is received: pending references must name a fitting row that was
+	 * not refused; a refused row breaks the references to it in turn.
 	 *
 	 * @param array $rows uuid => array( 'kind' => string, 'status' => string, 'refs' => array ).
 	 * @return array uuid => array( 'refused' => bool, 'refs' => array ) for the rows that changed.
@@ -1195,8 +1180,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Meta of an item: keys excluded on live are dropped; keys carried as fields elsewhere are
-	 * dropped or, for attachment paths, refuse the item.
+	 * Meta of an item without the keys live excludes; attachment path keys refuse the item.
 	 *
 	 * @param string $kind    Kind ('menu_item' for the items of a menu).
 	 * @param array  $meta    key => list of values.
@@ -1234,8 +1218,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Term assignments: taxonomies live does not include (or that the type does not use here) are
-	 * dropped with a warning.
+	 * Term assignments without the taxonomies live does not include for the type (with a warning).
 	 *
 	 * @param array  $terms Taxonomy => IDs.
 	 * @param string $type  Post type.
@@ -1282,8 +1265,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Whether a page template is one live's theme has: '' and "default", a classic template file
-	 * of the active theme for the type, or a block template slug that live knows.
+	 * Whether a page template exists on live: default, a classic file or a known block template.
 	 *
 	 * @param string $template  Value.
 	 * @param string $post_type Post type.
@@ -1324,8 +1306,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Every path of an attachment through Path_Guard: the file, the metadata's file, sizes and
-	 * original image, the file list.
+	 * Checks every path of an attachment with Path_Guard.
 	 *
 	 * @param array $clean Attachment data.
 	 * @return string '' or the field that was refused.
@@ -1350,13 +1331,9 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Checks an attachment against the files of this push (blueprint §9, Phase 6): its file list
-	 * may name only the files its own file and metadata imply; the main file must be there; every
-	 * listed file needs a file row of this push, named in the envelope's "media" map (path → ref),
-	 * with the same path, size and SHA-256, that live already had or that was committed.
-	 *
-	 * A file live already had (status have) must not belong to another attachment on live: the new
-	 * owner would share it, and deleting either attachment deletes the other's file.
+	 * Checks an attachment against this push's committed (or already present) file rows, matched by
+	 * path, size and SHA-256. A file live already had must not belong to another attachment there:
+	 * deleting either attachment would delete the other's file.
 	 *
 	 * @param array $data    Cleaned attachment data.
 	 * @param mixed $map     The envelope's media map as received.
@@ -1441,10 +1418,8 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Whether a file in the uploads tree belongs to an attachment on live other than $target: as its
-	 * attached file, or as a size or original image in the same folder (core keeps those as plain
-	 * names in the metadata, so the same name in another folder is another file). Fails closed
-	 * when there are too many candidates to check.
+	 * Whether a file in the uploads tree belongs to an attachment on live other than $target, as its
+	 * file or as a size in the same folder. Fails closed when there are too many candidates.
 	 *
 	 * @param string $path   Relative path.
 	 * @param int    $target Live attachment allowed to own it (0 for none).
@@ -1479,12 +1454,8 @@ final class Item_Stager {
 	}
 
 	/**
-	 * The envelope's extra fields, each read by name: scope (taxonomies the source includes for
-	 * the item, its own excluded meta entries), item_ids (a menu's item IDs on the source, in item
-	 * order, so parents resolve inside the unit), group_hashes (a product's group hashes on the
-	 * source, the base of a group live keeps) and live_hash (live's hash of the item when the plan
-	 * was made, so the apply skips an item live changed since: blueprint §5 data safety). Absent
-	 * fields stay absent.
+	 * The envelope's extra fields, each read by name: scope, item_ids, group_hashes and live_hash
+	 * (so the apply skips an item live changed since the plan). Absent fields stay absent.
 	 *
 	 * @param string $kind    Kind.
 	 * @param array  $raw     Envelope.
@@ -1616,8 +1587,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Resolves each reference: the item itself, a row of this push, live's own object, the menu's
-	 * own items, or pending until the push is complete.
+	 * Resolves each reference to the item, a row of this push, a live object, or pending.
 	 *
 	 * @param array $id   Identity.
 	 * @param array $refs Cleaned references.
@@ -1655,8 +1625,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Live's own object a reference names, inside live's scope: by UUID meta, by this pairing's
-	 * linked sync state, or by the source's live ID hint. 0 when none fits.
+	 * Live's object a reference names inside live's scope (UUID, sync link or ID hint), or 0.
 	 *
 	 * @param string $kind Reference kind.
 	 * @param string $uuid UUID.
@@ -1706,8 +1675,7 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Reports ID fields that carry a value without a reference: live will not guess what they
-	 * point to (the applier of Phase 7 decides how to write them).
+	 * Reports ID fields that carry a value without a reference: live never guesses their target.
 	 *
 	 * @param string $kind Kind.
 	 * @param array  $data Cleaned data.
@@ -1725,7 +1693,7 @@ final class Item_Stager {
 				$value = is_array( $value ) && isset( $value[ $part ] ) ? $value[ $part ] : 0;
 			}
 			if ( is_int( $value ) && $value > 0 && ! in_array( $path, $paths, true ) ) {
-				// Reported only: the apply writes an unmapped ID field as 0 (Reference_Mapper::rewrite()), never as this number.
+				// Reported only: the apply writes an unmapped ID field as 0, never as this number.
 				$this->warn( 'unmapped_reference', str_replace( '/', '.', $path ) );
 			}
 		}

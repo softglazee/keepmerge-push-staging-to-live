@@ -16,10 +16,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Writes an item of kind "post" (blueprint §6.2, §10.3): wp_insert_post() / wp_update_post()
- * without tax_input, term assignments with wp_set_object_terms(), the featured image as
- * _thumbnail_id, the page template only when live's theme has it, the post format, and the meta
- * key by key. The author maps by login, then email, then the pairing's default author.
+ * Writes an item of kind "post" with wp_insert_post() / wp_update_post(). Terms are set with
+ * wp_set_object_terms() rather than tax_input, which needs assign_terms; the page template is
+ * written only when live's theme has it.
  */
 final class Post extends Base {
 
@@ -101,8 +100,7 @@ final class Post extends Base {
 		$postarr = array(
 			'post_type'   => (string) $type,
 			'post_author' => $ctx->author_id( isset( $data['author'] ) ? $data['author'] : array() ),
-			// Keeps the dates given here for drafts too (wp_update_post() clears a draft's date
-			// otherwise).
+			// Without this, wp_update_post() clears a draft's date.
 			'edit_date'   => true,
 		);
 		if ( $ctx->live_id > 0 ) {

@@ -15,12 +15,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Scope of the sync on this site (blueprint §2, §6.9): included post types and taxonomies,
- * the statuses of items, the allowlisted options and whether the widgets unit is on.
- *
- * Both sites use it. On the source it decides what is offered; on live it decides what a remote
- * request may read (threat model §7.6: only included types, only options on live's own
- * allowlist). Every list is narrowed by the hard denylists; nothing here can widen them.
+ * Scope of the sync on this site: included post types and taxonomies, item statuses, the
+ * allowlisted options and the widgets unit. On the source it decides what is offered; on live it
+ * decides what a remote request may read. Every list is narrowed by the hard denylists; nothing
+ * here can widen them.
  */
 final class Scope {
 
@@ -42,7 +40,7 @@ final class Scope {
 	);
 
 	/**
-	 * Internal core post types that are never items, whatever a setting says (threat model §7.4).
+	 * Internal core post types that are never items, whatever a setting says.
 	 */
 	const NEVER_POST_TYPES = array( 'revision', 'customize_changeset', 'oembed_cache', 'user_request', 'custom_css', 'wp_font_family', 'wp_font_face' );
 
@@ -310,7 +308,7 @@ final class Scope {
 	/**
 	 * Whether a widget_* option is the instance store of a widget registered on this site. The
 	 * widgets unit writes only those: any other widget_ name could be a plugin's own setting that
-	 * the plugin evaluates (security review 2026-11-22, KM-05).
+	 * the plugin evaluates.
 	 *
 	 * @param string $name Option name.
 	 * @return bool
@@ -366,8 +364,8 @@ final class Scope {
 	}
 
 	/**
-	 * Whether this site's own allowlist contains an option and its denylist does not (blueprint
-	 * §6.9: live is authoritative). Widget options are not single options here.
+	 * Whether this site's own allowlist contains an option and its denylist does not (live is
+	 * authoritative). Widget options are not single options here.
 	 *
 	 * @param string $name Option name.
 	 * @return bool
@@ -413,7 +411,7 @@ final class Scope {
 	}
 
 	/**
-	 * Meta keys excluded on this site: the hard list (blueprint §6.10) plus the Settings entries.
+	 * Meta keys excluded on this site: the hard list plus the Settings entries.
 	 *
 	 * @return string[]
 	 */

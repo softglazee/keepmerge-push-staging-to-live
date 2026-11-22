@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * HMAC-SHA256 signatures over every remote request and response (blueprint §5.4).
+ * HMAC-SHA256 signatures over every remote request and response.
  *
  * The secret is the pairing's 64-hex value; the HMAC key is its 32 raw bytes. Every comparison
  * uses hash_equals(). The class uses plain PHP only, so both sites and the test client compute
@@ -47,10 +47,7 @@ final class Signer {
 	const EXCLUDED_QUERY_KEYS = array( 'rest_route' );
 
 	/**
-	 * A fresh one-time nonce: 32 lowercase hex characters from 16 random bytes.
-	 *
-	 * PHP's CSPRNG random_bytes(): the nonce makes each request unique for the replay guard (threat
-	 * model §7.2).
+	 * A fresh one-time nonce for the replay guard: 32 hex characters from random_bytes().
 	 *
 	 * @return string
 	 */
@@ -59,10 +56,7 @@ final class Signer {
 	}
 
 	/**
-	 * A fresh pairing secret: 64 lowercase hex characters from 32 random bytes.
-	 *
-	 * PHP's CSPRNG random_bytes(): the secret is the HMAC key of every request and response of the
-	 * pairing.
+	 * A fresh pairing secret (the HMAC key): 64 hex characters from random_bytes().
 	 *
 	 * @return string
 	 */
@@ -146,10 +140,7 @@ final class Signer {
 	}
 
 	/**
-	 * Signs a canonical string.
-	 *
-	 * HMAC-SHA256 through PHP's own hash_hmac(), the integrity and replay protection of the protocol
-	 * (blueprint §5.4); no custom cryptography.
+	 * Signs a canonical string with HMAC-SHA256 through PHP's hash_hmac(); no custom cryptography.
 	 *
 	 * @param string $canonical  Canonical string.
 	 * @param string $secret_hex Pairing secret, 64 hex.
@@ -164,10 +155,8 @@ final class Signer {
 	}
 
 	/**
-	 * Verifies a signature over a canonical string in constant time.
-	 *
-	 * The hash_equals() call keeps the comparison time independent of how many characters of a forged signature
-	 * were right.
+	 * Verifies a signature with hash_equals(), so the time taken says nothing about how much of a
+	 * forged signature matched.
 	 *
 	 * @param string $canonical  Canonical string.
 	 * @param string $secret_hex Pairing secret, 64 hex.

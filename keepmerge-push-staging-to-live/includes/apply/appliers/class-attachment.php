@@ -19,14 +19,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §9 steps 6 and 7: the committed files of an attachment move from the push's temporary
- * folder into the uploads tree with WP_Filesystem::move(), each target folder checked with
- * realpath() to lie inside the uploads base. A target path must still be free, or be a file of this
- * same attachment, which the snapshot pass copied first (file_replaced); a file that appeared there
- * since the need list belongs to someone else and the attachment is skipped (path_taken). Each
- * moved file is checked against its SHA-256 again. _wp_attached_file and the metadata are written
- * from the staged values with the final names, after Path_Guard checked every path in them again;
- * image sizes are not regenerated.
+ * Moves an attachment's committed files from the push's temporary folder into the uploads tree
+ * with WP_Filesystem, each target folder checked with realpath() to lie inside the uploads base. A
+ * target must be free or a file of this same attachment (snapshotted first); anything else skips
+ * the item as path_taken. Moved files are re-checked against their SHA-256.
  */
 final class Attachment extends Base {
 

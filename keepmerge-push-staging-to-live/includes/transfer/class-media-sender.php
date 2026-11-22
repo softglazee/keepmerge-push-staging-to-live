@@ -19,20 +19,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The source half of blueprint §9 steps 1, 3 and 4 and §12: the files of the attachments a push
- * sends go to live before the items (state sending_files), so that live can check each attachment
- * against files it already holds when the item arrives.
- *
- * - At start the files are counted by size only (nothing is read), so live can refuse a push it
- *   has no room for before any transfer (blueprint §9.9).
- * - While sending, each attachment is exported again (its hash must still be the planned one) and
- *   its files are recorded as rows (push_items, side "source_file", uuid "path:<sha1>", seq = the
- *   file's ref), then announced to live in need lists of at most 200 files.
- * - Files live does not have are sent in chunks of live's size; each step first asks live where a
- *   file stands, so a step that died mid-file resumes at the next chunk live is missing (I-02).
- * - A chunk damaged on the way is sent again (I-03); a 413 halves the chunk size (≥ 64 KB).
- *
- * The rows are bookkeeping for one push; they are deleted when the push ends.
+ * The source side of the media transfer: the files of a push's attachments go to live before the
+ * items, so live can check each attachment against files it already holds. Files are recorded as
+ * push_items rows (side "source_file") for the life of the push, announced in need lists and sent
+ * in resumable chunks of live's size.
  */
 final class Media_Sender {
 
@@ -68,10 +58,7 @@ final class Media_Sender {
 	const ROUTE = '/keepmerge/v1/remote/push';
 
 	/**
-	 * The file plan of a push, by size only: every file of the attachments sent with data that the
-	 * path guard accepts and that exists. An attachment with a file over the per-file cap is not
-	 * sent (a too_large stub); a media total over the per-push cap stops the push before any
-	 * request (blueprint §9.9).
+	 * The file plan of a push, by size only, so live can refuse a push it has no room for first.
 	 *
 	 * @param array $attachments List of array( uuid, local ID ).
 	 * @return array{media:array,files:int,bytes:int,stubs:array}|WP_Error
@@ -123,8 +110,7 @@ final class Media_Sender {
 	}
 
 	/**
-	 * The chunk size to use: live's own (it is never above half of live's post_max_size), between
-	 * 64 KB and 8 MB.
+	 * The chunk size to use: live's own, between 64 KB and 8 MB.
 	 *
 	 * @param mixed $limits Live's limits from its answer.
 	 * @return int
@@ -227,8 +213,7 @@ final class Media_Sender {
 	}
 
 	/**
-	 * The media map of an attachment envelope: each sent file's path and its ref (Item_Stager
-	 * finds the file rows with it).
+	 * The media map of an attachment envelope: each sent file's path and its ref.
 	 *
 	 * @param int   $plan_id Push ID.
 	 * @param mixed $files   The item's data.files.
@@ -265,8 +250,7 @@ final class Media_Sender {
 	}
 
 	/**
-	 * Files of a local attachment that can be sent: accepted by the path guard here too (live
-	 * checks again) and present on disk.
+	 * Files of a local attachment that the path guard accepts and that exist on disk.
 	 *
 	 * @param int  $local_id Attachment ID.
 	 * @param bool $hash     Whether to read the files for their SHA-256.
@@ -456,7 +440,7 @@ final class Media_Sender {
 		$ref     = (int) $file['ref'];
 
 		// Once per step, live says where this file stands: a step that died after live stored a
-		// chunk resumes at the next chunk live is missing (blueprint §12.2, I-02).
+		// chunk resumes at the next chunk live is missing.
 		if ( ! isset( $synced[ $ref ] ) ) {
 			$synced[ $ref ] = true;
 			$out            = self::announce( $row, $cursor, $client, array( $file ), $deadline );
@@ -528,7 +512,7 @@ final class Media_Sender {
 				}
 
 				if ( in_array( $code, array( 'body_hash_mismatch', 'chunk_hash_mismatch' ), true ) ) {
-					// Damaged on the way: the same chunk again, a few times (I-03).
+					// Damaged on the way: the same chunk again, a few times.
 					$t['retries'] = isset( $t['retries'] ) ? (int) $t['retries'] + 1 : 1;
 					self::update_row( (int) $file['id'], 'need', $t );
 					if ( $t['retries'] <= self::CHUNK_RETRIES ) {

@@ -17,17 +17,9 @@ import { useTick } from './receive/time';
 const CHECKABLE = [ 'pending', 'awaiting_approval', 'active' ];
 
 /**
- * Send tab (the staging side): the connection to live, then plan, diff and push.
- *
- * The connection card pastes a key, previews the live site, connects and follows the approval
- * on live. Status calls go through this site's admin routes; the long-term credentials never
- * reach the browser.
- *
- * Each active pairing has its baseline card (Phase 3) and its plan card (Phase 4: dry run, diff,
- * conflict decisions, code report).
- *
- * The push dialog sends the decided items to live, where they are staged (Phase 5); the plan
- * card then shows the push's progress and can resume it after the page was closed.
+ * Send tab (the staging side): the connection to live, then baseline, plan, diff and push for
+ * each active pairing. Status calls go through this site's admin routes; the long-term
+ * credentials never reach the browser.
  *
  * @param {Object}   props
  * @param {Function} props.notify    Toast.

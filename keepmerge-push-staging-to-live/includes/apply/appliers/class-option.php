@@ -18,12 +18,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Writes an allowlisted option or the widgets unit (blueprint §6.9). Live is authoritative: the
- * option must still be on live's own allowlist and pass Option_Policy when it is written (the
- * settings may have changed since it was staged). ID-valued options arrive with live's IDs.
- * Theme mods keep live's own custom_css_post_id (Additional CSS is not pushed in v1). The widgets
- * unit writes sidebars_widgets and each widget_* option it carries; widget options only live has
- * stay.
+ * Writes an allowlisted option or the widgets unit. The option must still be on live's own
+ * allowlist and pass Option_Policy at write time, since live's settings may have changed. Theme
+ * mods keep live's custom_css_post_id because Additional CSS is not pushed.
  */
 final class Option extends Base {
 

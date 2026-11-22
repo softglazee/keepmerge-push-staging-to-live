@@ -12,13 +12,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The hard option denylist (blueprint §6.9), the always-excluded meta keys (§6.10) and the
- * allowlist groups shown in Settings.
- *
- * Entries use one syntax: an exact name, a prefix ending in "*", or "*text*" for "contains".
- * The softglaze_sp_option_denylist and softglaze_sp_excluded_meta_keys filters may add entries
- * in the same syntax; their result is merged with the hard list, so a filter that returns less
- * than it was given cannot remove anything (filters only narrow).
+ * The hard option denylist, the always-excluded meta keys and the allowlist groups shown in
+ * Settings. Entries are an exact name, a "prefix*" or a "*contains*". The denylist filters may
+ * only add entries: their result is merged with the hard list, so nothing can be removed.
  */
 final class Option_Policy {
 
@@ -110,7 +106,7 @@ final class Option_Policy {
 		'_softglaze_sp_*',
 		'_thumbnail_id',
 		// Edited-image backups: their files never travel, and core deletes every name listed here
-		// together with the attachment (security review 2026-11-22, KM-01).
+		// together with the attachment.
 		'_wp_attachment_backup_sizes',
 		'_stock',
 		'_stock_status',
@@ -184,10 +180,8 @@ final class Option_Policy {
 
 	/**
 	 * Why a custom allowlist entry (a name or a "prefix*") is refused, or '' when it is accepted.
-	 *
-	 * A prefix is refused when it is too short, when it falls under a denied pattern, or when it
-	 * would also match an exact denied name or overlap a denied prefix, so the admin learns at
-	 * once that the entry reaches protected settings instead of finding out at push time.
+	 * A prefix that is too short or reaches a denied name or pattern is refused at once, so the
+	 * admin does not find out at push time.
 	 *
 	 * @param string $entry Normalised entry (lowercase, names-only syntax already checked).
 	 * @return string Reason, or ''.
@@ -290,8 +284,7 @@ final class Option_Policy {
 	}
 
 	/**
-	 * The option allowlist groups offered in Settings (blueprint §6.9). "*" marks ID-valued
-	 * options in the blueprint; that detail belongs to the exporters (Phase 3).
+	 * The option allowlist groups offered in Settings.
 	 *
 	 * @return array<string,array{label:string,options:string[],requires:string}>
 	 */

@@ -20,25 +20,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §11.3: puts an item back exactly as its snapshot recorded it (Snapshot_Store's raw
- * values), through WordPress's own write functions, from the live administrator's session (so the
- * admin's own filters apply; Rollback_Runner lists beforehand what they would change).
- *
- * - Post rows go back with wp_update_post(), a trashed post is untrashed first, term assignments
- *   are set with wp_set_object_terms() to exactly the IDs recorded.
- * - Meta goes back key by key, only for keys that differ and that live manages (excluded keys such
- *   as _edit_lock are left as they are). A value stored as plain text goes through add_metadata()
- *   unchanged. A value stored as serialized text is written back as that text with one prepared
- *   insert and the meta cache cleared: add_metadata() would serialize the text a second time, and
- *   rebuilding the value would need PHP's unserialize function, which Keepmerge never calls.
- * - Options follow the same rule (the typed form is used when it rebuilds exactly the stored text,
- *   so the option's update hooks run).
- * - Products and variations go back through the WooCommerce CRUD only, with their
- *   content, pricing and identity groups; the live-owned group (stock, sales, ratings) is never
- *   written by a rollback, so orders placed since the push keep their effect on stock.
- * - Objects the push created: posts, site editor items and products to the Trash (without their
- *   UUID, so the item can be pushed again); terms and menu items deleted; attachments deleted
- *   while their files stay (the files pass removes a file only when nothing references it).
+ * Puts an item back exactly as its snapshot recorded it, through WordPress's own write functions
+ * in the live administrator's session, and removes objects the push created (posts and products to
+ * the Trash). Serialized meta and option text goes back with one prepared write, because
+ * add_metadata() would serialize it again and rebuilding it would need unserialize(). Stock, sales
+ * and ratings are never written back, so orders placed since the push keep their effect.
  */
 final class Raw_Restore {
 
@@ -78,7 +64,7 @@ final class Raw_Restore {
 	}
 
 	/**
-	 * Removes an object the push created (blueprint §11.3 "created").
+	 * Removes an object the push created.
 	 *
 	 * @param array $row Item row.
 	 * @return true|WP_Error
@@ -202,8 +188,8 @@ final class Raw_Restore {
 	}
 
 	/**
-	 * Moves a post the push created to the Trash, without its UUID (blueprint §11.3: "posts to
-	 * Trash"; on a site without a Trash it becomes a draft instead of being deleted).
+	 * Moves a post the push created to the Trash without its UUID (a draft on a site without a
+	 * Trash, instead of being deleted).
 	 *
 	 * @param int $id Post ID.
 	 * @return true|WP_Error
@@ -259,8 +245,7 @@ final class Raw_Restore {
 	}
 
 	/**
-	 * Deletes an attachment the push created while every file stays on disk (the files pass
-	 * removes a file only when no attachment references it any more).
+	 * Deletes an attachment the push created; its files stay for the files pass to decide.
 	 *
 	 * @param int $id Attachment ID.
 	 * @return true|WP_Error
@@ -357,8 +342,7 @@ final class Raw_Restore {
 	// --- products ---------------------------------------------------------------------------------
 
 	/**
-	 * A product pre-image through the CRUD: live's own normal form decoded and written by the same
-	 * applier with the content, pricing and identity groups. The live-owned group is not written.
+	 * A product pre-image through the CRUD, without the live-owned group.
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row.
@@ -475,8 +459,7 @@ final class Raw_Restore {
 		$value = $text;
 		$api   = ! is_serialized( $text );
 		if ( ! $api && null !== $typed ) {
-			// The typed form rebuilds the value without unserializing anything; it is used only when
-			// it gives exactly the recorded text, so the option's own update hooks run.
+			// The typed form is used when it rebuilds exactly the recorded text, so update hooks run.
 			$decoded = Normalizer::decode( $typed, Normalizer::local_origins() );
 			if ( ! is_wp_error( $decoded ) && maybe_serialize( $decoded ) === $text ) {
 				$value = $decoded;
@@ -491,7 +474,7 @@ final class Raw_Restore {
 				add_option( $name, $value, '', $auto );
 			}
 		} else {
-			// The recorded text goes back as it was stored (see the class comment).
+			// Otherwise the recorded text goes back as stored, never unserialized.
 			if ( $now['exists'] ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Exact restore of a serialized option text recorded by the snapshot; the caches are cleared below.
 				$wpdb->update( $wpdb->options, array( 'option_value' => $text ), array( 'option_name' => $name ), array( '%s' ), array( '%s' ) );

@@ -10,11 +10,9 @@ import { gateRuleLabel, kindName } from './labels';
 const DECISIONS = [ 'approve', 'filtered', 'skip' ];
 
 /**
- * Review of held items (blueprint §10.5): every item with the reason it was held and an excerpt of
- * each flagged field, shown as plain text. Nothing is pre-chosen. "Approve as is" is offered only
- * to an account with unfiltered_html (and edit_css for global styles with CSS); the server checks
- * again per item. "Apply with WordPress's HTML filter" exists only for items held for titles,
- * content, excerpts or descriptions.
+ * Review of held items: each item with its reason and an excerpt as plain text; nothing is
+ * pre-chosen. "Approve as is" is offered only to an account with unfiltered_html (and edit_css for
+ * global styles with CSS), and the server checks again per item.
  *
  * @param {Object}   props
  * @param {Object}   props.push     The received push in detail.

@@ -66,12 +66,9 @@ function fileCell( done, total, renamed ) {
 }
 
 /**
- * Pushes tab: sessions received on this site (live) and pushes sent from it (staging).
- *
- * On live each session shows its state (an interrupted one has had no heartbeat for 5
- * minutes), what was staged, applied, held for review or refused; Details opens one push with
- * the review of its held items and "Continue apply on this site" (blueprint §10.5), and recovery
- * (Resume, Retry, Skip, Roll back). A stale push lock can be released here (typed domain).
+ * Pushes tab: sessions received on this site (live) and pushes sent from it (staging). Details
+ * opens one received push with its review and recovery; a stale push lock can be released here
+ * (typed domain).
  *
  * @param {Object}   props
  * @param {Function} props.notify Toast.

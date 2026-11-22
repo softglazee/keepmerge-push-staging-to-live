@@ -17,14 +17,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Answers POST /remote/manifest (R5) and POST /remote/items/fetch (R6). Both are read-only on
- * live: exports run in the destination context, which writes nothing.
- *
- * Only items of the kinds and types live itself includes are answered; options only when live's
- * own allowlist has them (threat model §7.6). There is no kind for users, comments or orders, so
- * a request naming one is refused as a whole; an item of a type live excludes (orders, coupons,
- * skipped types) is answered "excluded" with nothing about it. A live-ID hint is used only when
- * the object at that ID is of the kind and type the request names.
+ * Answers POST /remote/manifest and POST /remote/items/fetch, read-only: exports run in the
+ * destination context, which writes nothing. Only kinds and types live itself includes are
+ * answered, options only from live's own allowlist; a request naming an unknown kind is refused
+ * as a whole, an excluded item is answered "excluded" with nothing about it, and a live-ID hint
+ * counts only when that object has the kind and type the request names.
  */
 final class Manifest {
 
@@ -213,7 +210,7 @@ final class Manifest {
 	}
 
 	/**
-	 * Step 12 for both routes: the item list, each field read by name and checked.
+	 * Validates the item list of both routes after the permission chain, each field read by name.
 	 *
 	 * @param array $body Body.
 	 * @param int   $max  Most items.
@@ -351,7 +348,7 @@ final class Manifest {
 
 	/**
 	 * Items whose live hash moved away from their base hash since the last push (paged by
-	 * sync_state row). Base hashes exist from Phase 7 on; until then the list is empty.
+	 * sync_state row).
 	 *
 	 * @param array          $pairing  Pairing row.
 	 * @param int            $cursor   Row ID cursor.
@@ -482,7 +479,7 @@ final class Manifest {
 	}
 
 	/**
-	 * The step-12 refusal.
+	 * The refusal of a malformed request body.
 	 *
 	 * @return WP_Error
 	 */

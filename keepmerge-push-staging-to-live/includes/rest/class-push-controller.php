@@ -24,12 +24,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Routes under keepmerge/v1/admin/pushes (threat model §5.2): start a push with the live domain typed and
- * checked here (†), run it step by step, abort it before apply, and the history of both sides. On
- * the destination: a received push in detail, the decisions on its held items, and "Continue
- * apply on this site" (†, blueprint §10.5), and recovery: rollback preview and rollback (†), resume or
- * retry (†), skip the failed item (†), release a stale lock (†). There is no remote rollback. Every
- * route needs manage_options and the wp_rest nonce; every input is read by name.
+ * Routes under keepmerge/v1/admin/pushes: start, step and abort a push on the source; on the
+ * destination, push detail, held-item decisions, continue apply and recovery (rollback, resume,
+ * skip, lock release). There is no remote rollback. Routes marked † need the domain typed and
+ * checked on the server. Every route needs manage_options and the wp_rest nonce.
  */
 final class Push_Controller {
 

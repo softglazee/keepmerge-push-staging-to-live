@@ -16,17 +16,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Helpers for writing through WordPress APIs on live (blueprint §10.3). Values passed to core's
- * write functions are slashed first, because those functions unslash what they receive. Nothing
- * here removes a filter or changes the current user: whoever runs the apply (the receiver for a
- * push from the source, a live administrator for a reviewed push) writes with their own filters.
+ * Helpers for writing through WordPress APIs on live. Values are slashed first because core's
+ * write functions unslash them. Nothing here removes a filter or switches the user: whoever runs
+ * the apply (the receiver, or a live administrator for a reviewed push) writes with their own filters.
  */
 abstract class Base {
 
 	/**
-	 * Meta replaced key by key: every key the item carries gets exactly its values; a key live has
-	 * that the item lacks is deleted only when Item_Context allows it (not excluded here, not
-	 * excluded by the source itself, not Keepmerge's own).
+	 * Replaces meta key by key; a key live has that the item lacks is deleted only when
+	 * Item_Context allows it.
 	 *
 	 * @param string       $type Meta type: 'post' or 'term'.
 	 * @param int          $id   Object ID.

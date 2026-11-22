@@ -101,9 +101,8 @@ function ItemLink( { href, id, where } ) {
 }
 
 /**
- * The baseline of one active pairing (blueprint §6.4; F5): the clone date, the run in
- * time-boxed steps, the match counts and a sample table with links to each item on both sites.
- * Live is only read; this site keeps the result.
+ * The baseline of one active pairing: the clone date, the run in time-boxed steps, the match counts
+ * and a sample table. Live is only read; this site keeps the result.
  *
  * @param {Object}   props
  * @param {Object}   props.pairing  Active pairing.

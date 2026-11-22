@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Lists this site's items (in a fixed order, so a list can be walked in steps), exports one by
- * kind, and builds the baseline fingerprints (blueprint §6.4 step 1).
+ * kind, and builds the baseline fingerprints.
  */
 final class Items {
 
@@ -108,8 +108,8 @@ final class Items {
 	}
 
 	/**
-	 * Baseline fingerprints of every post-like object, term and menu (blueprint §6.4 step 1),
-	 * menu items included so references to them can be matched. GUIDs travel tokenized.
+	 * Baseline fingerprints of every post-like object, term and menu (menu items included, so
+	 * references to them can be matched). GUIDs travel tokenized.
 	 *
 	 * @param Normalizer $normalizer This site's normalizer (for the GUID tokens).
 	 * @return array[]

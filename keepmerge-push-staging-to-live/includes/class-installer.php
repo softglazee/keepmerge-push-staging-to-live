@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Creates and maintains what the plugin needs on each site (blueprint §18): the seven tables,
+ * Creates and maintains what the plugin needs on each site: the seven tables,
  * the receiver role, the site ID, default settings and the daily prune. Nothing is redirected
  * and no notice is shown.
  */
@@ -27,7 +27,7 @@ final class Installer {
 	const CAPABILITY = 'softglaze_sp_receive_push';
 
 	/**
-	 * Folder under uploads that holds the plugin's temporary files and snapshots (§14.6).
+	 * Folder under uploads that holds the plugin's temporary files and snapshots.
 	 */
 	const UPLOADS_DIR = 'keepmerge-push-staging-to-live';
 
@@ -35,7 +35,7 @@ final class Installer {
 	 * Activation hook.
 	 *
 	 * Network activation is refused: the plugin pairs single sites, and a network-wide
-	 * receiver would put every subsite's content behind one decision (blueprint §1.3).
+	 * receiver would put every subsite's content behind one decision.
 	 *
 	 * @param bool $network_wide Whether WordPress is activating for the whole network.
 	 * @return void
@@ -52,17 +52,14 @@ final class Installer {
 		self::install();
 
 		// Receivers left without a live pairing (for example after a deactivation, which needs a
-		// new key) are deleted, so no account outlives its purpose (threat model §7.1, S-06).
+		// new key) are deleted, so no account outlives its purpose.
 		Receiver_User::delete_orphans();
 	}
 
 	/**
-	 * Deactivation hook (blueprint §18.2). Every receiver Application Password and secret is
-	 * revoked, the receive window closes, pairings need a new key, the push lock and the temp
-	 * directory go. Content, logs, snapshots and tables stay.
-	 *
-	 * Source pairings become repair_needed as well, and their stored credentials are deleted
-	 * (Source_Pairing::mark_repair_needed_for_deactivation() explains why).
+	 * Deactivation hook. Every receiver Application Password and secret is revoked, source
+	 * pairings lose their stored credentials, the receive window closes, and the push lock and
+	 * temporary folder go; pairings then need a new key. Content, logs, snapshots and tables stay.
 	 *
 	 * @return void
 	 */
@@ -77,11 +74,8 @@ final class Installer {
 	}
 
 	/**
-	 * Deletes uploads/keepmerge-push-staging-to-live/tmp/ through WP_Filesystem.
-	 *
-	 * Only with the direct method: a deactivation cannot stop to ask for FTP credentials, and
-	 * the daily prune removes leftovers. The path is built from wp_upload_dir() and must resolve
-	 * inside the uploads base.
+	 * Deletes uploads/keepmerge-push-staging-to-live/tmp/ through WP_Filesystem's direct method
+	 * only (deactivation cannot ask for FTP credentials), and only inside the uploads base.
 	 *
 	 * @return bool Whether the directory is gone.
 	 */
@@ -158,9 +152,8 @@ final class Installer {
 	}
 
 	/**
-	 * The receiver role with exactly one capability. A role left over with extra capabilities
-	 * (by another plugin or a role editor) is reduced back to that one. The lock-down hooks are
-	 * in Receiver_User.
+	 * The receiver role with exactly one capability; extra capabilities added by a role editor
+	 * are removed again.
 	 *
 	 * @return void
 	 */
@@ -184,15 +177,11 @@ final class Installer {
 
 	/**
 	 * Returns this install's site ID, creating it when missing and regenerating it when the
-	 * database now serves a different home URL than the one the ID was created for.
+	 * database serves another home URL than the ID was created for (a copied database).
 	 *
-	 * A different home URL means the database was copied (a host re-cloned live into staging,
-	 * for example). The record keeps a SHA-256 of the normalised home URL: clone tools
-	 * search-replace URLs in every table, serialized options included, so a stored URL would be
-	 * rewritten to match the copy, while the hash is not. On a mismatch, before any remote route
-	 * is registered (this runs on init, priority 2): new site ID, receive window closed, every
-	 * pairing recorded for the other URL loses its receiver Application Passwords and secrets
-	 * and needs a new key, clone_detected is audited (blueprint §5.9, threat model T21).
+	 * The record keeps a SHA-256 of the home URL because clone tools search-replace stored URLs
+	 * but not hashes. On a mismatch, before any remote route is registered: new site ID, window
+	 * closed, pairings for the other URL lose their credentials, clone_detected is audited.
 	 *
 	 * @return string UUID.
 	 */
@@ -266,10 +255,8 @@ final class Installer {
 	/**
 	 * The home URL in a stable form: lowercase scheme and host, no trailing slash.
 	 *
-	 * Read from the stored home option (WP_HOME included), not home_url(): home_url() switches to
-	 * https whenever is_ssl() is true and passes through per-request filters, so a site whose home
-	 * is http:// behind a TLS-terminating proxy would get another hash on HTTPS requests than in
-	 * cron or WP-CLI, and clone detection would reset its pairings.
+	 * Read from the stored home option, not home_url(), which changes per request (https under
+	 * is_ssl(), filters) and would make clone detection reset pairings behind a TLS proxy.
 	 *
 	 * @return string
 	 */

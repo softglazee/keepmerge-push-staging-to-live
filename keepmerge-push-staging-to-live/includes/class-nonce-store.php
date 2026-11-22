@@ -12,12 +12,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Replay guard and per-pairing request count (blueprint §5.6).
+ * Replay guard and per-pairing request count.
  *
- * A nonce is stored only after the request's signature has been verified (threat model §6
- * step 10), so strangers cannot fill the table. (pairing_id, nonce) is unique; a second insert
- * of the same pair is a replay. Rows live 900 seconds, three times the ±300 s clock window, so a
- * replay outside the window fails the clock check instead.
+ * A nonce is stored only after the signature has been verified, so strangers cannot fill the
+ * table. (pairing_id, nonce) is unique, so a second insert is a replay. Rows live 900 seconds,
+ * longer than the ±300 s clock window, so older replays fail the clock check instead.
  */
 final class Nonce_Store {
 

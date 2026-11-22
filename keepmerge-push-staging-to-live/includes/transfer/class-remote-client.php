@@ -17,17 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The only class in the plugin that makes HTTP requests (compliance V10). It is used by the
- * source side only; the destination never calls out (blueprint §4.1).
- *
- * Every request: Outbound_Guard first, then core's own URL check, then wp_safe_remote_request()
- * with certificate verification, no redirects, a 16 MB response limit and a timeout of at most
- * 30 seconds. Every request is signed (blueprint §5.4); every 2xx response must carry a valid
- * response signature bound to this request's nonce, or it is discarded. Nothing found in a
- * response is ever requested as a URL.
- *
- * Credentials live in this object for one operation only and are never returned, logged or put
- * into an error.
+ * The only class in the plugin that makes HTTP requests, used by the source only. Each request
+ * passes Outbound_Guard and core's URL check, is signed, verifies certificates and follows no
+ * redirects; a 2xx answer without a valid signature bound to the request's nonce is discarded.
+ * Credentials are never returned, logged or put into an error.
  */
 final class Remote_Client {
 
@@ -38,7 +31,7 @@ final class Remote_Client {
 	const MAX_RESPONSE_BYTES = 16777216;
 
 	/**
-	 * Seconds to wait before each retry of a network error or 5xx (blueprint §12.2).
+	 * Seconds to wait before each retry of a network error or 5xx.
 	 */
 	const BACKOFF = array( 1, 2, 4, 8, 16 );
 
@@ -50,8 +43,7 @@ final class Remote_Client {
 	const ROUTE_PATTERN = '#\A/keepmerge/v1/remote/[a-z0-9_-]+(?:/[a-z0-9_-]+)*\z#';
 
 	/**
-	 * Transport error numbers (as cURL reports them) of TLS and certificate failures: never
-	 * retried, reported as tls_failed.
+	 * Transport error numbers of TLS and certificate failures: never retried, reported as tls_failed.
 	 */
 	const TLS_ERRORS = array( 35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91 );
 
@@ -201,8 +193,7 @@ final class Remote_Client {
 	}
 
 	/**
-	 * PUT of one media chunk: the raw bytes as an application/octet-stream body (covered by the
-	 * content hash and the signature like any body) with X-SGSP-Chunk-SHA256 (blueprint §9.4).
+	 * PUT of one media chunk as a raw, signed octet-stream body with X-SGSP-Chunk-SHA256.
 	 *
 	 * @param string $route Route under /keepmerge/v1/remote/.
 	 * @param string $bytes Chunk.
@@ -270,8 +261,7 @@ final class Remote_Client {
 	}
 
 	/**
-	 * The request URL for a route under the REST root. A plain-permalink root (…?rest_route=/)
-	 * carries the route in rest_route; its other query parameters are kept (and signed).
+	 * The request URL for a route under the REST root (also a plain-permalink ?rest_route= root).
 	 *
 	 * @param string $route Route.
 	 * @param array  $query Query parameters.
@@ -415,8 +405,7 @@ final class Remote_Client {
 		$pinned = Outbound_Guard::take( $nonce );
 
 		if ( ! $pinned ) {
-			// The request did not go through the pinned cURL handle (another transport, or a
-			// plugin answered it before the transport ran): whatever came back is discarded.
+			// Not sent through the pinned cURL handle: whatever came back is discarded.
 			$this->audit_rejected( 'transport_unpinned', $checked['host'] );
 			update_option( 'softglaze_sp_last_unpinned', time(), false );
 			return $this->failure( 'transport_unpinned', 0, '', false );
@@ -475,8 +464,7 @@ final class Remote_Client {
 		}
 
 		if ( $status >= 500 ) {
-			// A signed answer that live cannot write its temporary files is not a passing server
-			// fault: it keeps its code and is not retried (the admin fixes the folder on live).
+			// Unwritable temporary files on live need the admin, not a retry.
 			if ( $signed && 'storage_unwritable' === $remote ) {
 				return $this->failure( $remote, $status, $remote, true );
 			}
@@ -540,8 +528,7 @@ final class Remote_Client {
 	}
 
 	/**
-	 * Codes that mean something more specific while a pairing key's bootstrap credentials are
-	 * used, or that core sends under its own name.
+	 * Maps core's codes, and codes seen with a pairing key's bootstrap credentials, to our own.
 	 *
 	 * @param string $code    Code.
 	 * @param string $context 'key' or 'pairing'.
@@ -566,7 +553,7 @@ final class Remote_Client {
 	}
 
 	/**
-	 * The message for an error code, with what to do about it (blueprint §12.2).
+	 * The message for an error code, with what to do about it.
 	 *
 	 * @param string $code   Code.
 	 * @param int    $status HTTP status received.

@@ -17,14 +17,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Writes a term (blueprint §6.2): name, slug, description and parent with wp_insert_term() /
- * wp_update_term() (core's term filters apply), then the term meta key by key.
+ * Writes a term with wp_insert_term() / wp_update_term(), so core's term filters apply, then its
+ * meta key by key.
  */
 final class Term extends Base {
 
 	/**
-	 * Allocate pass: the term with its name, slug and parent (parents are allocated first, so two
-	 * new terms with one name under different parents do not collide).
+	 * Allocate pass: the term with its parent, so two new terms with one name under different
+	 * parents do not collide.
 	 *
 	 * @param Item_Context $ctx Context.
 	 * @return int|WP_Error

@@ -18,20 +18,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Blueprint §10.4 and §12: what live does when an apply stops.
- *
- * - Detection: a session in snapshotting or applying whose lock is not fresh (no heartbeat for 5
- *   minutes, or no lock at all) and whose step claim has passed is "interrupted". Closing the
- *   receive window or revoking the pairing interrupts an apply the source drives at once.
- * - Resume (interrupted): rows left "applying" by the step that died are checked: live's hash
- *   equals the intended post_hash → recorded as applied (never written twice); equals the pre_hash →
- *   processed again; anything else → failed_partial for the administrator's decision.
- * - Retry / Skip this item (failed_partial): the failed item is first put back to its snapshot (it
- *   may be half-written), then processed again, or marked skipped and the push goes on.
- * - Release lock: only a stale lock, or one whose session no longer runs.
- *
- * Every decision here is taken by a live administrator on live (admin routes, WP-CLI), except
- * that the source may resume an apply it was driving itself (R14, as the receiver).
+ * What live does when an apply stops: detects interrupted applies (stale lock, no running step),
+ * resumes them without writing an item twice, retries or skips a failed item after putting it back
+ * to its snapshot, and releases a stale lock. Only a live administrator decides here, except that
+ * the source may resume an apply it was driving itself.
  */
 final class Recovery {
 
@@ -85,8 +75,7 @@ final class Recovery {
 			}
 			$apply = Applier::progress( $session );
 			if ( 'remote' !== $apply['actor'] ) {
-				// A live administrator is finishing it from their own session: it does not need the
-				// window or the pairing.
+				// A live administrator is finishing it and needs neither the window nor the pairing.
 				continue;
 			}
 			self::mark( $session, $reason );
@@ -96,10 +85,10 @@ final class Recovery {
 	}
 
 	/**
-	 * Resumes an interrupted apply (blueprint §12.2).
+	 * Resumes an interrupted apply.
 	 *
 	 * @param array  $session Session (interrupted).
-	 * @param string $actor   'remote' (the source, through R14) or 'user'.
+	 * @param string $actor   'remote' (the source) or 'user'.
 	 * @param int    $user_id User (for 'user').
 	 * @return array|WP_Error The session.
 	 */
@@ -219,8 +208,8 @@ final class Recovery {
 	}
 
 	/**
-	 * Skip this item and continue (failed_partial): the item is put back as it was before the push
-	 * (its placeholder removed, its snapshot restored), marked skipped, and the passes go on.
+	 * Skip this item (failed_partial): the item is put back as it was before the push, marked
+	 * skipped, and the passes go on.
 	 *
 	 * @param array  $session Session.
 	 * @param string $uuid    The failed item's UUID (the screen names it).
@@ -248,7 +237,6 @@ final class Recovery {
 		}
 		Applier::skip_row( $row, 'admin_skipped' );
 
-		// The cursor goes on after the item.
 		$mark = isset( $apply['failed'] ) && is_array( $apply['failed'] ) ? $apply['failed'] : array();
 		if ( isset( $mark['pass'] ) && $mark['pass'] === $apply['pass'] ) {
 			if ( in_array( $apply['pass'], array( 'allocate', 'write' ), true ) ) {
@@ -268,9 +256,8 @@ final class Recovery {
 	}
 
 	/**
-	 * Releases the destination lock (threat model §7.7 "lock starvation"): only when it is stale or
-	 * its session no longer runs. A holder that never wrote anything ends (aborted); one that was
-	 * writing becomes interrupted; sessions waiting for a decision keep their state.
+	 * Releases the destination lock, only when it is stale or its session no longer runs, so a dead
+	 * push cannot block the site. A holder that was writing becomes interrupted.
 	 *
 	 * @param int $user_id User.
 	 * @return array|WP_Error

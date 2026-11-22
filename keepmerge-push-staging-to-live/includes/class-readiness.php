@@ -12,12 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * What this server needs before it can pair and push (blueprint F16). Each check reports a
- * status ('ok', 'warning', 'error'), a label and one sentence saying what was found and, when
- * something is missing, what to do.
- *
- * Sending adds two checks: PHP's cURL transport (address pinning, blueprint §5.10) and, once a
- * status call reached live, whether the Authorization header arrived there.
+ * What this server needs before it can pair and push. Each check reports a status ('ok',
+ * 'warning', 'error'), a label and one sentence saying what was found and what to do.
  */
 final class Readiness {
 
@@ -51,9 +47,8 @@ final class Readiness {
 	}
 
 	/**
-	 * Sending needs PHP's cURL extension: each connection is pinned to the address the outbound
-	 * guard checked, and without cURL the site refuses to connect (DECISIONS A6, threat model RR4).
-	 * A site that only receives does not need it, so it is a warning there.
+	 * Sending needs PHP's cURL extension to pin each connection to the checked address; a site
+	 * that only receives gets a warning.
 	 *
 	 * @return array
 	 */
@@ -151,10 +146,8 @@ final class Readiness {
 	}
 
 	/**
-	 * Core Application Passwords are available (they identify the paired site).
-	 *
-	 * Core offers them only over HTTPS (or on a "local" environment type), so on a site without
-	 * HTTPS the reason given is HTTPS, not a security plugin.
+	 * Core Application Passwords are available. Core offers them only over HTTPS, so without
+	 * HTTPS that is the reason given.
 	 *
 	 * @return array
 	 */
@@ -222,8 +215,7 @@ final class Readiness {
 			);
 		}
 
-		// A site that never stored an upload has no uploads folder yet. Media_Receiver creates it
-		// with the first file and checks the method on wp-content in that case; so does this check.
+		// Without an uploads folder yet, the method is checked on wp-content, as Media_Receiver does.
 		$exists = is_dir( $uploads['basedir'] );
 
 		if ( ! function_exists( 'get_filesystem_method' ) ) {
@@ -309,7 +301,7 @@ final class Readiness {
 	}
 
 	/**
-	 * Where the key that encrypts stored credentials comes from (blueprint §5.7).
+	 * Where the key that encrypts stored credentials comes from.
 	 *
 	 * @return array
 	 */

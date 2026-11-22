@@ -16,17 +16,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * The destination side of pairing (blueprint §5.3, §5.9).
+ * The destination side of pairing (the source side is Source_Pairing):
  *
- * 1. A live administrator creates a key: receiver user, bootstrap Application Password,
- *    bootstrap secret, pairing "pending" for 30 minutes. The key is returned once.
- * 2. The source confirms with the bootstrap credentials: live issues the long-term Application
- *    Password and secret (a repeated confirm replaces the unfinalized pair).
- * 3. The source finalizes with the long-term credentials: the bootstrap credentials are deleted,
- *    the pairing waits 24 hours in "awaiting_approval".
+ * 1. A live administrator creates a key (receiver user, bootstrap credentials, "pending" for
+ *    30 minutes); the key is returned once.
+ * 2. The source confirms with the bootstrap credentials and receives the long-term ones.
+ * 3. The source finalizes with the long-term credentials; the bootstrap ones are deleted and
+ *    the pairing waits up to 24 hours in "awaiting_approval".
  * 4. A live administrator approves (active) or rejects (revoked).
- *
- * The source side (connect, stored credentials, source-role deactivation) is Source_Pairing.
  */
 final class Pairing_Service {
 
@@ -37,11 +34,8 @@ final class Pairing_Service {
 	const APPROVAL_TTL = DAY_IN_SECONDS;
 
 	/**
-	 * Whether this site is served over HTTPS for the purpose at hand.
-	 *
-	 * In a web request that is is_ssl() plus an https REST root (the key carries it). WP-CLI
-	 * runs without a request, so is_ssl() is always false there; the CLI requires https in both
-	 * home_url() and rest_url(), because every request that uses the key arrives through them.
+	 * Whether this site is served over HTTPS: is_ssl() plus an https REST root in a web request;
+	 * under WP-CLI, where is_ssl() is always false, https home_url() and rest_url().
 	 *
 	 * @return bool
 	 */
@@ -56,13 +50,9 @@ final class Pairing_Service {
 	}
 
 	/**
-	 * Whether core makes Application Passwords available on this site.
-	 *
-	 * Web: core's own wp_is_application_passwords_available(). WP-CLI: core's answer depends on
-	 * is_ssl(), which is false without a request, so the CLI applies core's filter to the value
-	 * core starts from for an HTTPS request (true), exactly as core would for the requests that
-	 * will use the credentials. A plugin that turns Application Passwords off therefore still
-	 * blocks pairing from the CLI.
+	 * Whether core makes Application Passwords available on this site. Under WP-CLI, which has no
+	 * HTTPS request, core's filter is applied to the value core uses for one, so a plugin that
+	 * turns Application Passwords off still blocks pairing from the CLI.
 	 *
 	 * @return bool
 	 */
@@ -123,7 +113,7 @@ final class Pairing_Service {
 	}
 
 	/**
-	 * Creates a pairing key (step 1). The key is returned once and stored nowhere.
+	 * Creates a pairing key. The key is returned once and stored nowhere.
 	 *
 	 * @param int $author_id Default author for pushed content whose author does not exist on live.
 	 * @return array{key:string,pairing:array}|WP_Error
@@ -211,8 +201,8 @@ final class Pairing_Service {
 	}
 
 	/**
-	 * Confirm (step 3): issues the long-term Application Password and secret. A repeated confirm
-	 * (the first response was lost) deletes the unfinalized pair and issues a new one.
+	 * Confirm: issues the long-term Application Password and secret. A repeated confirm (the
+	 * first response was lost) replaces the unfinalized pair.
 	 *
 	 * @param array $pairing Pairing row (state checked by the permission chain).
 	 * @param array $fields  Validated body fields: site_id, home_url, wp_version, plugin_version, php_version.
@@ -289,7 +279,7 @@ final class Pairing_Service {
 	}
 
 	/**
-	 * Finalize (step 4): deletes the bootstrap credentials and waits for a live administrator.
+	 * Finalize: deletes the bootstrap credentials and waits for a live administrator.
 	 *
 	 * @param array  $pairing Pairing row.
 	 * @param string $ip      Address the request came from.
@@ -339,7 +329,7 @@ final class Pairing_Service {
 	}
 
 	/**
-	 * Approve (step 5): the pairing becomes active.
+	 * Approve: the pairing becomes active.
 	 *
 	 * @param string $uuid    Pairing UUID.
 	 * @param int    $user_id Approving administrator (0 from WP-CLI without --user).
@@ -482,7 +472,7 @@ final class Pairing_Service {
 
 	/**
 	 * Removes pending pairings older than 30 minutes and pairings that waited 24 hours for
-	 * approval, with their receivers and Application Passwords (blueprint §5.3 step 6).
+	 * approval, with their receivers and Application Passwords.
 	 *
 	 * @return int Pairings removed.
 	 */
@@ -518,7 +508,7 @@ final class Pairing_Service {
 
 	/**
 	 * Deactivation: every receiver Application Password and secret is deleted and the pairings
-	 * need a new key (blueprint §5.9).
+	 * need a new key.
 	 *
 	 * @return int Pairings changed.
 	 */
@@ -532,8 +522,8 @@ final class Pairing_Service {
 	}
 
 	/**
-	 * Clone detection (threat model T21): pairings recorded for another home URL lose their
-	 * receiver Application Passwords and secrets and need a new key.
+	 * Clone detection: pairings recorded for another home URL lose their receiver Application
+	 * Passwords and secrets and need a new key.
 	 *
 	 * @return int Pairings changed.
 	 */
@@ -653,8 +643,7 @@ final class Pairing_Service {
 	 * @return array
 	 */
 	private static function revoke_row( array $row, $event ) {
-		// An apply this pairing's source was driving stops here; the live administrator resumes it on
-		// live or rolls back what was applied (test plan I-08).
+		// An apply this source was driving stops; a live administrator resumes or rolls it back.
 		Apply\Recovery::interrupt_running( 'pairing_revoked', (int) $row['id'] );
 		Receiver_User::delete( (int) $row['receiver_user_id'], (int) $row['default_author_id'] );
 		Nonce_Store::forget_pairing( (int) $row['id'] );
