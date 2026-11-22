@@ -135,9 +135,13 @@ final class Raw_Restore {
 		}
 
 		$postarr = array(
-			'ID'        => $id,
+			'ID'            => $id,
 			// Keeps the recorded dates for drafts too (wp_update_post() clears a draft's date otherwise).
-			'edit_date' => true,
+			'edit_date'     => true,
+			// Empty: core leaves _wp_page_template alone instead of re-checking the stored value, which
+			// it refuses when the theme's classic list lacks it (WooCommerce's "archive-product").
+			// The recorded meta, template included, is put back below.
+			'page_template' => '',
 		);
 		foreach ( array( 'post_author', 'post_date', 'post_date_gmt', 'post_content', 'post_title', 'post_excerpt', 'post_status', 'comment_status', 'ping_status', 'post_password', 'post_name', 'to_ping', 'pinged', 'post_content_filtered', 'post_parent', 'menu_order', 'post_mime_type' ) as $field ) {
 			if ( array_key_exists( $field, $columns ) && is_scalar( $columns[ $field ] ) ) {
@@ -207,8 +211,10 @@ final class Raw_Restore {
 			// This site has no Trash: wp_trash_post() would delete the post for good.
 			$draft = wp_update_post(
 				array(
-					'ID'          => (int) $id,
-					'post_status' => 'draft',
+					'ID'            => (int) $id,
+					'post_status'   => 'draft',
+					// See post(): core would re-check the stored template and refuse.
+					'page_template' => '',
 				),
 				true
 			);

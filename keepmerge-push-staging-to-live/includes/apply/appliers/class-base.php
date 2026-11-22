@@ -121,6 +121,13 @@ abstract class Base {
 	 * @return int|WP_Error
 	 */
 	protected static function save_post( array $postarr ) {
+		if ( ! empty( $postarr['ID'] ) && ! array_key_exists( 'page_template', $postarr ) ) {
+			// wp_update_post() merges the stored _wp_page_template back in and refuses the whole
+			// update when the theme's classic template list lacks it (WooCommerce's block template
+			// "archive-product" on the Shop page). An empty value skips that; the appliers write
+			// the template meta themselves.
+			$postarr['page_template'] = '';
+		}
 		$postarr = wp_slash( $postarr );
 		$result  = empty( $postarr['ID'] ) ? wp_insert_post( $postarr, true ) : wp_update_post( $postarr, true );
 		if ( is_wp_error( $result ) ) {
