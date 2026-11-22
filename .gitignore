@@ -1,0 +1,9 @@
+# Installed by composer install and npm ci
+/vendor/
+node_modules/
+
+# Output of tools/build-zip.ps1
+/dist/
+
+*.log
+.phpunit.result.cache

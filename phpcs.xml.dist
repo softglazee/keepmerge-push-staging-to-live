@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<ruleset name="Keepmerge – Push Staging to Live">
+	<description>WordPress coding standards and PHP 7.4+ compatibility for the plugin's PHP.</description>
+
+	<file>keepmerge-push-staging-to-live</file>
+
+	<!-- Not ours to lint. -->
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/build/*</exclude-pattern>
+
+	<!--
+	  *.asset.php files are generated, never hand-edited. wp-scripts writes
+	  build/*.asset.php; ".asset.php" is WordPress's own name for these, so the
+	  filename sniff cannot pass, and reformatting a generated file only survives
+	  until the next build.
+	-->
+	<exclude-pattern>*.asset.php</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg value="ps"/>
+
+	<rule ref="WordPress"/>
+	<rule ref="WordPress-Docs"/>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="keepmerge-push-staging-to-live"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="softglaze_sp"/>
+				<element value="SOFTGLAZE_SP"/>
+				<element value="SoftGlaze\SafePush"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- The PHP 7.4 floor is checked, not assumed. -->
+	<rule ref="PHPCompatibilityWP"/>
+	<config name="testVersion" value="7.4-"/>
+	<config name="minimum_wp_version" value="6.5"/>
+</ruleset>

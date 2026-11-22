@@ -1,0 +1,34 @@
+{
+	"name": "softglaze/keepmerge-push-staging-to-live",
+	"description": "Development tooling for the Keepmerge WordPress plugin: coding standards and the PHPUnit suite. The plugin itself has no PHP dependencies.",
+	"type": "project",
+	"license": "GPL-2.0-or-later",
+	"require-dev": {
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"phpunit/phpunit": "^9.6",
+		"squizlabs/php_codesniffer": "^3.13",
+		"wp-coding-standards/wpcs": "^3.4",
+		"wp-phpunit/wp-phpunit": "~7.1.0",
+		"yoast/phpunit-polyfills": "^4.0"
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		},
+		"platform": {
+			"php": "7.4.33"
+		},
+		"sort-packages": true
+	},
+	"scripts": {
+		"lint": "find keepmerge-push-staging-to-live tests tools -name '*.php' -not -path '*/node_modules/*' -print0 | sort -z | xargs -0 -n1 php -l",
+		"phpcs": "phpcs",
+		"test": "phpunit"
+	},
+	"scripts-descriptions": {
+		"lint": "Check every PHP file for syntax errors with the current PHP version.",
+		"phpcs": "Run PHP_CodeSniffer with phpcs.xml.dist (WordPress, WordPress-Docs, PHPCompatibilityWP 7.4-).",
+		"test": "Run the PHPUnit suite (needs a MySQL database and WordPress core, see README.md)."
+	}
+}
