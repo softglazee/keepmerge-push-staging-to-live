@@ -691,12 +691,15 @@ final class Applier {
 		if ( is_wp_error( $ctx ) ) {
 			return $ctx;
 		}
-		if ( 'filtered' === $row['review'] ) {
+		if ( 'approve' !== $row['review'] ) {
+			// Only an explicit approval writes markup unfiltered: an item nobody approved gets
+			// WordPress's HTML filter also when a live administrator's session (whose own filters
+			// core removes) finishes the apply.
 			$ctx->data = Review::filter( $kind, $ctx->data );
+		}
+		if ( 'filtered' === $row['review'] && array() !== Markup_Gate::check( $kind, $ctx->data ) ) {
 			// The filter covers content fields only: anything the gate still finds is not written.
-			if ( array() !== Markup_Gate::check( $kind, $ctx->data ) ) {
-				return new WP_Error( 'held_after_filter', 'held_after_filter' );
-			}
+			return new WP_Error( 'held_after_filter', 'held_after_filter' );
 		}
 		$applier = self::applier( $kind );
 		if ( null === $applier ) {
