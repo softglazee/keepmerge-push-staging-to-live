@@ -261,15 +261,18 @@ final class Markup_Gate {
 
 		$url      = rawurldecode( $text );
 		$entities = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-		$variants = array_unique(
-			array(
-				$text,
-				$url,
-				$entities,
-				html_entity_decode( $url, ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
-				rawurldecode( $entities ),
-			)
+		$variants = array(
+			$text,
+			$url,
+			$entities,
+			html_entity_decode( $url, ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
+			rawurldecode( $entities ),
 		);
+		// JSON and JavaScript escapes (i, \x69) inside a tag or attribute name, decoded.
+		foreach ( $variants as $variant ) {
+			$variants[] = self::unescaped( $variant );
+		}
+		$variants = array_unique( $variants );
 
 		$patterns = self::patterns();
 		foreach ( $variants as $variant ) {
@@ -397,17 +400,44 @@ final class Markup_Gate {
 			return;
 		}
 
-		// A JSON document stored as a string (page builders): its own strings are looked at too,
-		// with JSON escapes such as < decoded.
-		if ( $json_depth < self::MAX_JSON_DEPTH ) {
-			$trimmed = ltrim( $value );
-			if ( '' !== $trimmed && ( '{' === $trimmed[0] || '[' === $trimmed[0] ) ) {
-				$decoded = json_decode( $value, false, self::MAX_WALK_DEPTH );
-				if ( is_array( $decoded ) || is_object( $decoded ) ) {
-					self::scan_into( $reasons, $decoded, $path, $depth + 1, $json_depth + 1 );
-				}
-			}
+		// A JSON document or JSON string stored as a string (page builders): its own strings are
+		// looked at too, with JSON escapes such as < decoded. What cannot be looked into (nested
+		// deeper than the decoder reads, or JSON inside JSON past MAX_JSON_DEPTH) is held.
+		$trimmed = ltrim( $value );
+		if ( '' === $trimmed || ! in_array( $trimmed[0], array( '{', '[', '"' ), true ) ) {
+			return;
 		}
+		$decoded = json_decode( $value, false, self::MAX_WALK_DEPTH );
+		if ( JSON_ERROR_DEPTH === json_last_error() ) {
+			$reasons[] = self::reason( $path, 'too_deep', '' );
+			return;
+		}
+		if ( ! is_array( $decoded ) && ! is_object( $decoded ) && ! is_string( $decoded ) ) {
+			return;
+		}
+		if ( $json_depth >= self::MAX_JSON_DEPTH ) {
+			$reasons[] = self::reason( $path, 'too_deep', '' );
+			return;
+		}
+		self::scan_into( $reasons, $decoded, $path, $depth + 1, $json_depth + 1 );
+	}
+
+	/**
+	 * Text with JSON and JavaScript escapes of ASCII characters decoded (i and \x69, also
+	 * escaped again as \\u0069), so an escape inside a tag or attribute name does not hide it.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	private static function unescaped( $text ) {
+		return (string) preg_replace_callback(
+			'/\\\\+(?:u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2}))/',
+			static function ( $m ) {
+				$code = hexdec( isset( $m[2] ) && '' !== $m[2] ? $m[2] : $m[1] );
+				return $code > 0 && $code < 0x80 ? chr( (int) $code ) : $m[0];
+			},
+			(string) $text
+		);
 	}
 
 	/**
