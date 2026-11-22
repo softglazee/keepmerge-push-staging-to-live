@@ -951,12 +951,21 @@ final class Admin_Controller {
 	 * Argument schema for POST settings: types only. Names, ranges and the denylist are checked
 	 * by Settings::validate(), which explains each refusal.
 	 *
+	 * The number fields also take a short string: a number field the admin emptied arrives as '',
+	 * and Settings::validate() answers it with the field's own range message instead of core's
+	 * "Invalid parameter(s)", which names no field.
+	 *
 	 * @return array
 	 */
 	private function settings_args() {
 		$names = array(
 			'type'  => 'array',
 			'items' => array( 'type' => 'string' ),
+		);
+
+		$number = array(
+			'type'      => array( 'integer', 'string' ),
+			'maxLength' => 20,
 		);
 
 		$groups = array();
@@ -974,10 +983,10 @@ final class Admin_Controller {
 				'properties'           => $groups,
 				'additionalProperties' => false,
 			),
-			'item_batch'               => array( 'type' => 'integer' ),
-			'chunk_kb'                 => array( 'type' => 'integer' ),
-			'snapshot_days'            => array( 'type' => 'integer' ),
-			'audit_days'               => array( 'type' => 'integer' ),
+			'item_batch'               => $number,
+			'chunk_kb'                 => $number,
+			'snapshot_days'            => $number,
+			'audit_days'               => $number,
 			'allow_code_report'        => array( 'type' => 'boolean' ),
 			'remove_data_on_uninstall' => array( 'type' => 'boolean' ),
 		);

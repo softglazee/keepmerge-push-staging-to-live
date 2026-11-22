@@ -153,18 +153,27 @@ final class Readiness {
 	/**
 	 * Core Application Passwords are available (they identify the paired site).
 	 *
+	 * Core offers them only over HTTPS (or on a "local" environment type), so on a site without
+	 * HTTPS the reason given is HTTPS, not a security plugin.
+	 *
 	 * @return array
 	 */
 	private static function application_passwords() {
 		$ok = wp_is_application_passwords_available();
 
+		if ( $ok ) {
+			$detail = __( 'Available. The paired site signs in as a dedicated receiver user with one.', 'keepmerge-push-staging-to-live' );
+		} elseif ( ! wp_is_application_passwords_supported() ) {
+			$detail = __( 'WordPress offers them only on sites served over HTTPS, so they become available once the HTTPS check is ready. Pairing needs them; Keepmerge uses one for a receiver user that can do nothing but receive pushes.', 'keepmerge-push-staging-to-live' );
+		} else {
+			$detail = __( 'Turned off on this site, often by a security plugin. Pairing needs them; Keepmerge uses one for a receiver user that can do nothing but receive pushes.', 'keepmerge-push-staging-to-live' );
+		}
+
 		return array(
 			'id'     => 'application_passwords',
 			'label'  => __( 'Application Passwords', 'keepmerge-push-staging-to-live' ),
 			'status' => $ok ? 'ok' : 'error',
-			'detail' => $ok
-				? __( 'Available. The paired site signs in as a dedicated receiver user with one.', 'keepmerge-push-staging-to-live' )
-				: __( 'Turned off on this site, often by a security plugin. Pairing needs them; Keepmerge uses one for a receiver user that can do nothing but receive pushes.', 'keepmerge-push-staging-to-live' ),
+			'detail' => $detail,
 		);
 	}
 
