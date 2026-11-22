@@ -69,6 +69,18 @@ final class Limits {
 	}
 
 	/**
+	 * The end of a step this site runs for the paired source (a batch of items, an apply step):
+	 * half the time budget. The source waits only for what is left of its own step, whose budget
+	 * equals this one on a host alike, so a step using the whole budget could answer after the
+	 * source gave up. The work left goes on with the source's next call.
+	 *
+	 * @return float microtime.
+	 */
+	public static function remote_deadline() {
+		return microtime( true ) + max( 1, (int) floor( self::time_budget() / 2 ) );
+	}
+
+	/**
 	 * Whether this request uses less than the given share of memory_limit; always true without a
 	 * limit.
 	 *

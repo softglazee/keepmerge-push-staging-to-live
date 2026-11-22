@@ -353,7 +353,9 @@ final class Applier {
 		}
 
 		wp_raise_memory_limit( 'admin' );
-		$deadline = Limits::deadline( 2 );
+		// A step the source drives answers within half the budget; an administrator's own step on
+		// this site (continue after review, resume) keeps the whole budget.
+		$deadline = 'remote' === $apply['actor'] ? Limits::remote_deadline() : Limits::deadline( 2 );
 		$cap      = (int) apply_filters( 'softglaze_sp_apply_step_items', self::STEP_ITEMS );
 		$cap      = max( 1, min( self::STEP_ITEMS, $cap ) );
 		$state    = (string) $session['state'];

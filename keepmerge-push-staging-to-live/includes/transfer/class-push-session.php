@@ -313,7 +313,7 @@ final class Push_Session {
 		);
 		$results  = array();
 		$batch    = array_fill_keys( self::STATUSES, 0 );
-		$deadline = Limits::deadline( 3 );
+		$deadline = Limits::remote_deadline();
 		$position = 0;
 		foreach ( array_values( $body['items'] ) as $raw ) {
 			if ( $position++ > 0 && Limits::over( $deadline ) ) {
