@@ -398,8 +398,13 @@ final class Push_Runner {
 	 */
 	public static function run( $push_id, $client = null, $max = 500 ) {
 		$push = self::present( self::find( $push_id ) );
+		// Calling this on a paused push is the resume (the pause message names this command): one
+		// step resumes it; if it pauses again, the loop below stops instead of retrying.
+		$resume = isset( $push['state'] ) && 'paused' === $push['state'];
 		for ( $i = 0; $i < $max; $i++ ) {
-			if ( ! isset( $push['state'] ) || ( ! in_array( $push['state'], self::PHASE_STATES, true ) && 'staged' !== $push['state'] ) || 'awaiting_review' === $push['state'] ) {
+			if ( $resume ) {
+				$resume = false;
+			} elseif ( ! isset( $push['state'] ) || ( ! in_array( $push['state'], self::PHASE_STATES, true ) && 'staged' !== $push['state'] ) || 'awaiting_review' === $push['state'] ) {
 				// Stops at awaiting_review: a live administrator finishes the push on live.
 				break;
 			}
