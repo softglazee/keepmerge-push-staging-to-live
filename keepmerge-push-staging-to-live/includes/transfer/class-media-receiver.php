@@ -95,6 +95,13 @@ final class Media_Receiver {
 	 */
 	const FINAL_REFUSALS = array( 'size_mismatch', 'checksum_mismatch', 'file_type_refused', 'file_type_mismatch', 'image_unreadable' );
 
+	/**
+	 * Hidden attachment meta written by a push: the files of the attachment that are its own (moved
+	 * there by a push for it, or its own before a push wrote it). A file the attachment only took as
+	 * it already was on live is not in it, so a later push never replaces that file in place.
+	 */
+	const OWN_FILES_META = '_softglaze_sp_files';
+
 	// --- limits --------------------------------------------------------------------------------
 
 	/**
@@ -453,7 +460,8 @@ final class Media_Receiver {
 	}
 
 	/**
-	 * Whether live's attachment with this UUID owns this file, so it may be replaced.
+	 * Whether live's attachment with this UUID owns this file, so it may be replaced: one of its own
+	 * files (own_files()) that no other attachment names.
 	 *
 	 * @param array  $pairing Pairing row.
 	 * @param string $uuid    Attachment UUID.
@@ -467,11 +475,68 @@ final class Media_Receiver {
 			$ids[] = (int) $row['object_id'];
 		}
 		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
-			if ( 'attachment' !== get_post_type( $id ) ) {
-				continue;
+			foreach ( self::own_files( $id ) as $own ) {
+				if ( strtolower( $own ) === strtolower( $path ) && ! self::used_by_other( $own, $id ) ) {
+					return true;
+				}
 			}
-			$own = Path_Guard::attachment_paths( (string) get_post_meta( $id, '_wp_attached_file', true ), wp_get_attachment_metadata( $id ) );
-			if ( in_array( strtolower( $path ), array_map( 'strtolower', $own ), true ) ) {
+		}
+		return false;
+	}
+
+	/**
+	 * An attachment's own files: the paths its file and metadata name (file, sizes, original image).
+	 * Once a push wrote the attachment, only the paths of OWN_FILES_META count: metadata a push
+	 * wrote is never itself the proof of ownership.
+	 *
+	 * @param int $id Attachment ID.
+	 * @return string[]
+	 */
+	public static function own_files( $id ) {
+		$id = (int) $id;
+		if ( $id < 1 || 'attachment' !== get_post_type( $id ) ) {
+			return array();
+		}
+		$metadata = wp_get_attachment_metadata( $id );
+		$paths    = Path_Guard::attachment_paths( (string) get_post_meta( $id, '_wp_attached_file', true ), is_array( $metadata ) ? $metadata : array() );
+		if ( ! metadata_exists( 'post', $id, self::OWN_FILES_META ) ) {
+			return $paths;
+		}
+		$listed = get_post_meta( $id, self::OWN_FILES_META, true );
+		$listed = is_array( $listed ) ? array_filter( $listed, 'is_string' ) : array();
+		return array_values( array_intersect( $paths, $listed ) );
+	}
+
+	/**
+	 * Whether a file in the uploads tree belongs to an attachment on live other than $target, as its
+	 * file or as a size in the same folder. Fails closed when there are too many candidates.
+	 *
+	 * @param string $path   Relative path.
+	 * @param int    $target Live attachment allowed to own it (0 for none).
+	 * @return bool
+	 */
+	public static function used_by_other( $path, $target ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- One exact lookup of core's attached-file key while staging or applying an attachment.
+		$owner = $wpdb->get_var( $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value = %s AND post_id <> %d LIMIT 1', $wpdb->postmeta, '_wp_attached_file', $path, $target ) );
+		if ( null !== $owner ) {
+			return true;
+		}
+
+		$dir   = dirname( $path );
+		$dir   = '.' === $dir ? '' : $dir;
+		$limit = 200;
+		// The same LIKE core runs before it deletes a thumb (wp_delete_attachment_files()).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Bounded lookup of a file name in attachment metadata while staging or applying an attachment.
+		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value LIKE %s AND post_id <> %d LIMIT %d', $wpdb->postmeta, '_wp_attachment_metadata', '%' . $wpdb->esc_like( '"' . wp_basename( $path ) . '"' ) . '%', $target, $limit ) );
+		if ( count( $ids ) >= $limit ) {
+			return true;
+		}
+		foreach ( $ids as $id ) {
+			$file  = (string) get_post_meta( (int) $id, '_wp_attached_file', true );
+			$other = dirname( $file );
+			if ( ( '.' === $other ? '' : $other ) === $dir ) {
 				return true;
 			}
 		}

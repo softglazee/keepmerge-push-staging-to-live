@@ -37,6 +37,11 @@ final class Uninstaller {
 
 	const META_KEY = '_softglaze_sp_uuid';
 
+	/**
+	 * Attachment meta of the files a push made an attachment's own (Media_Receiver::OWN_FILES_META).
+	 */
+	const FILES_META_KEY = '_softglaze_sp_files';
+
 	const CRON_HOOK = 'softglaze_sp_daily_prune';
 
 	const UPLOADS_DIR = 'keepmerge-push-staging-to-live';
@@ -298,7 +303,8 @@ final class Uninstaller {
 	}
 
 	/**
-	 * Deletes the UUID meta of posts or terms in batches of BATCH rows.
+	 * Deletes the UUID meta of posts or terms (and the own-files meta of attachments) in batches of
+	 * BATCH rows.
 	 *
 	 * @param string $type post or term.
 	 * @return int Rows deleted.
@@ -310,8 +316,8 @@ final class Uninstaller {
 		$deleted = 0;
 		$rounds  = 0;
 		do {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Uninstall removes the plugin's own meta key in bounded batches; delete_metadata() would load every row first.
-			$n        = (int) $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE meta_key = %s LIMIT %d', $table, self::META_KEY, self::BATCH ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Uninstall removes the plugin's own meta keys in bounded batches; delete_metadata() would load every row first.
+			$n        = (int) $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE meta_key IN (%s, %s) LIMIT %d', $table, self::META_KEY, self::FILES_META_KEY, self::BATCH ) );
 			$deleted += $n;
 			++$rounds;
 		} while ( $n >= self::BATCH && $rounds < 100000 );

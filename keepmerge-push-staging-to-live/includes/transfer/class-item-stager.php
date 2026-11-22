@@ -1333,15 +1333,18 @@ final class Item_Stager {
 	/**
 	 * Checks an attachment against this push's committed (or already present) file rows, matched by
 	 * path, size and SHA-256. A file live already had must not belong to another attachment there:
-	 * deleting either attachment would delete the other's file.
+	 * deleting either attachment would delete the other's file. A file this push replaces in place
+	 * must not be named by another attachment either. Sizes and the original image whose file this
+	 * push does not bring are taken out of the metadata: core deletes every name the metadata lists
+	 * together with the attachment, and a later push would read them as the attachment's own.
 	 *
-	 * @param array $data    Cleaned attachment data.
+	 * @param array $data    Cleaned attachment data (its metadata loses the names without a file).
 	 * @param mixed $map     The envelope's media map as received.
 	 * @param array $problem Problem (out).
 	 * @param int   $target  The live attachment the item updates, 0 for a new one.
 	 * @return array|null The payload's media record, or null with the problem.
 	 */
-	private function media( array $data, $map, array &$problem, $target = 0 ) {
+	private function media( array &$data, $map, array &$problem, $target = 0 ) {
 		$listed = array();
 		foreach ( isset( $data['files'] ) ? $data['files'] : array() as $entry ) {
 			$listed[ $entry['path'] ] = $entry;
@@ -1374,13 +1377,13 @@ final class Item_Stager {
 			}
 		}
 
-		$rows    = null === $this->files || empty( $refs ) ? array() : (array) call_user_func( $this->files, array_values( $refs ) );
-		$files   = array();
-		$missing = 0;
+		$rows  = null === $this->files || empty( $refs ) ? array() : (array) call_user_func( $this->files, array_values( $refs ) );
+		$base  = Media_Receiver::uploads_base();
+		$files = array();
+		$ready = array();
 		foreach ( $listed as $path => $entry ) {
 			if ( $entry['size'] < 0 ) {
 				// A size the source no longer has on disk: live gets the attachment without it.
-				++$missing;
 				continue;
 			}
 			$row = isset( $refs[ $path ], $rows[ $refs[ $path ] ] ) ? $rows[ $refs[ $path ] ] : null;
@@ -1396,19 +1399,25 @@ final class Item_Stager {
 				$problem = array( 'media_missing', 'files' );
 				return null;
 			}
-			if ( 'have' === $row['status'] && self::file_used_by_other( (string) $row['t']['final'], (int) $target ) ) {
+			$final = (string) $row['t']['final'];
+			// A file live has at this path already: taken as it is ("have") or replaced in place.
+			$exists = 'have' === $row['status'] || ( is_string( $base ) && ( file_exists( $base . '/' . $final ) || is_link( $base . '/' . $final ) ) );
+			if ( $exists && Media_Receiver::used_by_other( $final, (int) $target ) ) {
 				$problem = array( 'file_shared', 'files' );
 				return null;
 			}
+			$ready[] = $path;
 			$files[] = array(
 				'path'   => $path,
-				'final'  => (string) $row['t']['final'],
+				'final'  => $final,
 				'ref'    => (int) $row['ref'],
 				'status' => (string) $row['status'],
 			);
 		}
-		if ( $missing > 0 ) {
-			$this->warn( 'size_file_missing', (string) $missing );
+
+		$dropped = self::metadata_without( $data, $ready );
+		if ( $dropped > 0 ) {
+			$this->warn( 'size_file_missing', (string) $dropped );
 		}
 
 		return array(
@@ -1418,39 +1427,39 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Whether a file in the uploads tree belongs to an attachment on live other than $target, as its
-	 * file or as a size in the same folder. Fails closed when there are too many candidates.
+	 * Takes the sizes and the original image whose file is not among $ready out of an attachment's
+	 * metadata (typed data; only plain size entries are read, anything else was refused before).
 	 *
-	 * @param string $path   Relative path.
-	 * @param int    $target Live attachment allowed to own it (0 for none).
-	 * @return bool
+	 * @param array    $data  Cleaned attachment data (changed).
+	 * @param string[] $ready Paths of the files this push brings or live has for it.
+	 * @return int Names taken out.
 	 */
-	private static function file_used_by_other( $path, $target ) {
-		global $wpdb;
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- One exact lookup of core's attached-file key while staging an attachment.
-		$owner = $wpdb->get_var( $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value = %s AND post_id <> %d LIMIT 1', $wpdb->postmeta, '_wp_attached_file', $path, $target ) );
-		if ( null !== $owner ) {
-			return true;
+	private static function metadata_without( array &$data, array $ready ) {
+		if ( ! isset( $data['metadata'] ) || ! is_array( $data['metadata'] ) ) {
+			return 0;
 		}
-
-		$dir   = dirname( $path );
-		$dir   = '.' === $dir ? '' : $dir;
-		$limit = 200;
-		// The same LIKE core runs before it deletes a thumb (wp_delete_attachment_files()).
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Bounded lookup of a file name in attachment metadata while staging an attachment.
-		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value LIKE %s AND post_id <> %d LIMIT %d', $wpdb->postmeta, '_wp_attachment_metadata', '%' . $wpdb->esc_like( '"' . wp_basename( $path ) . '"' ) . '%', $target, $limit ) );
-		if ( count( $ids ) >= $limit ) {
-			return true;
-		}
-		foreach ( $ids as $id ) {
-			$file  = (string) get_post_meta( (int) $id, '_wp_attached_file', true );
-			$other = dirname( $file );
-			if ( ( '.' === $other ? '' : $other ) === $dir ) {
-				return true;
+		$dir     = dirname( (string) $data['file'] );
+		$dir     = '.' === $dir ? '' : $dir . '/';
+		$dropped = 0;
+		if ( isset( $data['metadata']['sizes'] ) && is_array( $data['metadata']['sizes'] ) ) {
+			foreach ( $data['metadata']['sizes'] as $name => $size ) {
+				$file = is_array( $size ) && isset( $size['file'] ) && is_string( $size['file'] ) ? $size['file'] : null;
+				if ( null !== $file && ! in_array( $dir . $file, $ready, true ) ) {
+					unset( $data['metadata']['sizes'][ $name ] );
+					++$dropped;
+				}
 			}
 		}
-		return false;
+		if ( isset( $data['metadata']['original_image'] ) && is_string( $data['metadata']['original_image'] ) && ! in_array( $dir . $data['metadata']['original_image'], $ready, true ) ) {
+			unset( $data['metadata']['original_image'] );
+			++$dropped;
+		}
+		// Core deletes "thumb" with the attachment too; it may only name a file that stays.
+		if ( isset( $data['metadata']['thumb'] ) && is_string( $data['metadata']['thumb'] ) && '' !== $data['metadata']['thumb'] && ! in_array( $dir . $data['metadata']['thumb'], $ready, true ) ) {
+			unset( $data['metadata']['thumb'] );
+			++$dropped;
+		}
+		return $dropped;
 	}
 
 	/**

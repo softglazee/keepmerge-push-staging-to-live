@@ -21,8 +21,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Moves an attachment's committed files from the push's temporary folder into the uploads tree
  * with WP_Filesystem, each target folder checked with realpath() to lie inside the uploads base. A
- * target must be free or a file of this same attachment (snapshotted first); anything else skips
- * the item as path_taken. Moved files are re-checked against their SHA-256.
+ * target must be free or a file of this same attachment that no other attachment names
+ * (snapshotted first); anything else skips the item as path_taken. Moved files are re-checked
+ * against their SHA-256.
  */
 final class Attachment extends Base {
 
@@ -74,7 +75,7 @@ final class Attachment extends Base {
 		if ( is_wp_error( $base ) ) {
 			return $base;
 		}
-		$own   = self::own_files( (int) $row['local_object_id'] );
+		$own   = Media_Receiver::own_files( (int) $row['local_object_id'] );
 		$rows  = Media_Receiver::all_rows( (int) $session['id'] );
 		$bytes = 0;
 		foreach ( self::media_files( $row ) as $file ) {
@@ -121,7 +122,7 @@ final class Attachment extends Base {
 
 		$files    = self::media_files( $ctx->row );
 		$by_path  = array();
-		$own      = 'created' === $ctx->row['action'] ? array() : self::own_files( $ctx->live_id );
+		$own      = 'created' === $ctx->row['action'] ? array() : Media_Receiver::own_files( $ctx->live_id );
 		$rows     = Media_Receiver::all_rows( (int) $ctx->session['id'] );
 		$moves    = array();
 		$warnings = array();
@@ -142,7 +143,7 @@ final class Attachment extends Base {
 			$target   = $base . '/' . $file['final'];
 			$replaced = false;
 			if ( file_exists( $target ) || is_link( $target ) ) {
-				if ( is_link( $target ) || ! in_array( $file['final'], $own, true ) ) {
+				if ( is_link( $target ) || ! in_array( $file['final'], $own, true ) || Media_Receiver::used_by_other( $file['final'], (int) $ctx->live_id ) ) {
 					return new WP_Error( 'path_taken', 'path_taken' );
 				}
 				if ( '' === self::file_column( (int) $rows[ $file['ref'] ]['id'], 'snapshot_file_rel' ) ) {
@@ -187,6 +188,11 @@ final class Attachment extends Base {
 		if ( '' !== Path_Guard::reason( $final ) || '' !== Path_Guard::metadata_reason( $final, $metadata ) ) {
 			return new WP_Error( 'path_refused', 'path_refused' );
 		}
+		// Every file the metadata names must be one this item brings or keeps (checked at staging).
+		$names = Path_Guard::attachment_paths( $final, $metadata );
+		if ( array() !== array_diff( $names, array_values( $by_path ) ) ) {
+			return new WP_Error( 'path_refused', 'path_refused' );
+		}
 
 		$postarr                   = Post::post_fields( $ctx, $data, 'attachment' );
 		$postarr['post_status']    = 'inherit';
@@ -205,6 +211,14 @@ final class Attachment extends Base {
 			update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( $alt ) );
 		}
 		self::replace_meta( 'post', $id, isset( $data['meta'] ) && is_array( $data['meta'] ) ? $data['meta'] : array(), $ctx, array( '_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_image_alt' ) );
+
+		// The attachment's own files from now on: what this push moved there, and what was its own
+		// before and stays. A file it only took as live had it is not among them.
+		$moved = array();
+		foreach ( $moves as $move ) {
+			$moved[] = $move['final'];
+		}
+		update_post_meta( $id, Media_Receiver::OWN_FILES_META, array_values( array_intersect( $names, array_merge( $own, $moved ) ) ) );
 
 		if ( $final !== $file ) {
 			$warnings[] = 'file_renamed';
@@ -235,20 +249,6 @@ final class Attachment extends Base {
 			}
 		}
 		return $out;
-	}
-
-	/**
-	 * The files live's attachment has now (its file, sizes and original image).
-	 *
-	 * @param int $id Attachment ID.
-	 * @return string[]
-	 */
-	private static function own_files( $id ) {
-		if ( $id < 1 || 'attachment' !== get_post_type( $id ) ) {
-			return array();
-		}
-		$metadata = wp_get_attachment_metadata( $id );
-		return Path_Guard::attachment_paths( (string) get_post_meta( $id, '_wp_attached_file', true ), is_array( $metadata ) ? $metadata : array() );
 	}
 
 	/**
