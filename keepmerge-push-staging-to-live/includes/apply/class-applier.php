@@ -1422,8 +1422,14 @@ final class Applier {
 		global $wpdb;
 
 		$session = is_array( $session ) ? $session : array();
+		// Rows finish in apply order, not in row order: results stop before the first row still open,
+		// so the cursor never passes a row whose result is still to come.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the first unfinished row.
+		$open    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT MIN(id) FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') AND status IN ('staged','held','pending_media','applying')", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE ) );
+		$can_end = in_array( (string) $session['state'], array( 'staged', 'awaiting_review', 'snapshotting', 'applying', 'interrupted', 'failed_partial' ), true );
+		$below   = $open > 0 && $can_end ? $open : PHP_INT_MAX;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; item results after a cursor.
-		$rows    = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, object_type, action, status, local_object_id, error FROM %i WHERE push_id = %d AND side = %s AND id > %d AND object_type NOT IN ('file','file_path') AND status IN ('applied','skipped','failed') ORDER BY id ASC LIMIT %d", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE, absint( $after ), self::RESULTS_PAGE ), ARRAY_A );
+		$rows    = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, object_type, action, status, local_object_id, error FROM %i WHERE push_id = %d AND side = %s AND id > %d AND id < %d AND object_type NOT IN ('file','file_path') AND status IN ('applied','skipped','failed') ORDER BY id ASC LIMIT %d", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE, absint( $after ), $below, self::RESULTS_PAGE ), ARRAY_A );
 		$results = array();
 		$next    = (int) $after;
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
