@@ -309,6 +309,13 @@ final class Applier {
 	const PROCESSABLE = "( status = 'staged' OR ( status = 'held' AND review IN ('approve','filtered') ) )";
 
 	/**
+	 * Rows the write order holds: the processable ones, and a row a step that died left "applying".
+	 * A later step that builds the order again (the cursor it claimed may name an earlier pass) must
+	 * not drop that row; the write pass recovers it.
+	 */
+	const IN_WRITE_ORDER = "( status = 'staged' OR ( status = 'held' AND review IN ('approve','filtered') ) OR status = 'applying' )";
+
+	/**
 	 * The rights the approvals of a push need, for the user who continues it.
 	 *
 	 * @param array $session Session.
@@ -1092,9 +1099,10 @@ final class Applier {
 	private static function order( array $session, $pass ) {
 		global $wpdb;
 
-		// A row a dead step left "applying" stays in the write order when a later step builds it
-		// again (the cursor that step claimed may name an earlier pass); the write pass recovers it.
-		$where = 'allocate' === $pass ? "action IN ('create','recreate') AND " . self::PROCESSABLE : "action IN ('create','recreate','created','update','trash') AND ( " . self::PROCESSABLE . " OR status = 'applying' )";
+		$where = "action IN ('create','recreate') AND " . self::PROCESSABLE;
+		if ( 'allocate' !== $pass ) {
+			$where = "action IN ('create','recreate','created','update','trash') AND " . self::IN_WRITE_ORDER;
+		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Own table; the conditions are constants of this class.
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, object_type, refs FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') AND {$where} ORDER BY id ASC", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE ), ARRAY_A );
 		$rows = is_array( $rows ) ? $rows : array();
