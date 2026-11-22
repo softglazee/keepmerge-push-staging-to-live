@@ -352,7 +352,10 @@ final class Normalizer {
 	/**
 	 * Whether received typed JSON carries serialized PHP text in any string, "bin" string, object
 	 * marker or "ser" node. The source's encoder never sends such text, so it is refused: code on
-	 * live that unserializes its own stored strings would read it. Uses core's is_serialized().
+	 * live that unserializes its own stored strings would read it. Core's is_serialized() plus any
+	 * text that starts like a serialized array, object, custom object or enum whatever follows (PHP
+	 * reads such text with bytes after the value, and is_serialized() does not know "C:"). Nesting
+	 * is walked as decode() walks it; past MAX_DEPTH the answer is yes.
 	 *
 	 * @param mixed $typed Typed value as received.
 	 * @param int   $depth Nesting depth.
@@ -360,11 +363,10 @@ final class Normalizer {
 	 */
 	public static function holds_serialized_text( $typed, $depth = 0 ) {
 		if ( $depth > self::MAX_DEPTH ) {
-			// decode() refuses this depth anyway.
-			return false;
+			return true;
 		}
 		if ( is_string( $typed ) ) {
-			return is_serialized( $typed );
+			return self::serialized_text( $typed );
 		}
 		if ( ! is_array( $typed ) ) {
 			return false;
@@ -372,13 +374,18 @@ final class Normalizer {
 		if ( array_key_exists( self::MARK, $typed ) ) {
 			$mark = $typed[ self::MARK ];
 			if ( 'bin' === $mark && isset( $typed['hex'] ) && is_string( $typed['hex'] ) && 1 === preg_match( '/\A(?:[0-9a-f]{2})*\z/', $typed['hex'] ) ) {
-				return is_serialized( (string) hex2bin( $typed['hex'] ) );
+				return self::serialized_text( (string) hex2bin( $typed['hex'] ) );
 			}
 			if ( 'ser' === $mark && array_key_exists( 'v', $typed ) ) {
 				return self::holds_serialized_text( $typed['v'], $depth + 1 );
 			}
 			if ( 'object' === $mark && isset( $typed['props'] ) && is_array( $typed['props'] ) ) {
-				return self::holds_serialized_text( $typed['props'], $depth + 1 );
+				// decode() reads an object's properties one level below the marker.
+				foreach ( $typed['props'] as $item ) {
+					if ( self::holds_serialized_text( $item, $depth + 1 ) ) {
+						return true;
+					}
+				}
 			}
 			return false;
 		}
@@ -388,6 +395,16 @@ final class Normalizer {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether one string is, or starts like, serialized PHP that can create an object.
+	 *
+	 * @param string $text Text.
+	 * @return bool
+	 */
+	private static function serialized_text( $text ) {
+		return is_serialized( $text ) || 1 === preg_match( '/\A\s*[aOCE]:[0-9]+:/', $text );
 	}
 
 	/**
