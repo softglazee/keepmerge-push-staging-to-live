@@ -81,6 +81,17 @@ final class Limits {
 	}
 
 	/**
+	 * Seconds a source step needs left before it asks live for one more step: live's remote step
+	 * (remote_deadline(), on a host alike) plus WordPress's start-up and the network. With less,
+	 * the step ends and the next one asks.
+	 *
+	 * @return int
+	 */
+	public static function remote_wait() {
+		return (int) floor( self::time_budget() / 2 ) + 3;
+	}
+
+	/**
 	 * Whether this request uses less than the given share of memory_limit; always true without a
 	 * limit.
 	 *

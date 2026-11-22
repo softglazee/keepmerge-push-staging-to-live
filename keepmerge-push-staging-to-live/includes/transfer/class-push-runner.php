@@ -763,6 +763,11 @@ final class Push_Runner {
 		}
 
 		for ( $round = 0; $round < 20; $round++ ) {
+			if ( $round > 0 && $deadline - microtime( true ) < Limits::remote_wait() ) {
+				// Too little time left to wait for live's step: the next step asks (the first call of
+				// a step always goes out, so a short budget never stops the push).
+				break;
+			}
 			$answer = $client->post(
 				self::ROUTE . '/' . $row['push_uuid'] . '/apply',
 				array( 'after' => isset( $p['apply_after'] ) ? (int) $p['apply_after'] : 0 ),
