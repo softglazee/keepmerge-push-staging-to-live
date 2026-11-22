@@ -266,10 +266,15 @@ final class Installer {
 	/**
 	 * The home URL in a stable form: lowercase scheme and host, no trailing slash.
 	 *
+	 * Read from the stored home option (WP_HOME included), not home_url(): home_url() switches to
+	 * https whenever is_ssl() is true and passes through per-request filters, so a site whose home
+	 * is http:// behind a TLS-terminating proxy would get another hash on HTTPS requests than in
+	 * cron or WP-CLI, and clone detection would reset its pairings.
+	 *
 	 * @return string
 	 */
 	public static function normalised_home() {
-		$url   = untrailingslashit( home_url() );
+		$url   = untrailingslashit( (string) get_option( 'home' ) );
 		$parts = wp_parse_url( $url );
 
 		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {

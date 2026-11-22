@@ -75,7 +75,18 @@ final class Markup_Gate {
 	);
 
 	/**
+	 * Setting keys whose string value a theme or plugin prints as code or markup (a theme's custom
+	 * JavaScript or tracking code, header and footer scripts, custom CSS, raw HTML). Such a value
+	 * carries no pattern the gate knows (plain JavaScript has no tag), so options and the widgets
+	 * unit hold it for a live administrator by its name (security review 2026-11-22, KM-05).
+	 */
+	const CODE_KEY = '/(?:\A|[_.-])(?:js|javascript|scripts?|css|codes?|html)(?:\z|[_.-])/i';
+
+	/**
 	 * Hold reasons for one item.
+	 *
+	 * Core's kses does not filter meta, options or widgets, so the gate holds anything that looks like
+	 * active markup or code there for a live administrator (threat model §7.4, RR2).
 	 *
 	 * @param string $kind Item kind (post, product, attachment, pattern, navigation, template,
 	 *                     template_part, global_styles, term, menu, option, widgets).
@@ -135,11 +146,17 @@ final class Markup_Gate {
 			case 'option':
 				if ( array_key_exists( 'value', $data ) ) {
 					self::scan_into( $reasons, $data['value'], 'value' );
+					$name = isset( $data['name'] ) && is_string( $data['name'] ) ? $data['name'] : '';
+					if ( '' !== $name && 1 === preg_match( self::CODE_KEY, $name ) && self::code_value( $data['value'] ) ) {
+						$reasons[] = self::reason( 'value', 'code_setting', self::excerpt( (string) $data['value'], 0 ) );
+					}
+					self::code_keys_into( $reasons, $data['value'], 'value' );
 				}
 				break;
 
 			case 'widgets':
 				self::scan_into( $reasons, $data, 'widgets' );
+				self::code_keys_into( $reasons, $data, 'widgets' );
 				break;
 
 			default:
@@ -411,6 +428,49 @@ final class Markup_Gate {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Hold reasons for strings stored under code-like setting keys (CODE_KEY), at any depth.
+	 *
+	 * @param array[] $reasons Reasons (appended).
+	 * @param mixed   $value   Value.
+	 * @param string  $path    Field path.
+	 * @param int     $depth   Nesting depth.
+	 * @return void
+	 */
+	private static function code_keys_into( array &$reasons, $value, $path, $depth = 0 ) {
+		if ( $depth > self::MAX_WALK_DEPTH ) {
+			return;
+		}
+		if ( is_object( $value ) ) {
+			$value = get_object_vars( $value );
+		}
+		if ( ! is_array( $value ) ) {
+			return;
+		}
+		foreach ( $value as $key => $item ) {
+			if ( is_string( $key ) && 1 === preg_match( self::CODE_KEY, $key ) && self::code_value( $item ) ) {
+				$reasons[] = self::reason( $path . '.' . $key, 'code_setting', self::excerpt( (string) $item, 0 ) );
+				continue;
+			}
+			self::code_keys_into( $reasons, $item, $path . '.' . $key, $depth + 1 );
+		}
+	}
+
+	/**
+	 * Whether a value under a code-like key is something a theme could print: a string that is not
+	 * empty, a number or an on/off word.
+	 *
+	 * @param mixed $value Value.
+	 * @return bool
+	 */
+	private static function code_value( $value ) {
+		if ( ! is_string( $value ) ) {
+			return false;
+		}
+		$text = strtolower( trim( $value ) );
+		return '' !== $text && ! is_numeric( $text ) && ! in_array( $text, array( 'true', 'false', 'yes', 'no', 'on', 'off' ), true );
 	}
 
 	/**

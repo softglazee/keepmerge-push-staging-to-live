@@ -9,7 +9,9 @@ namespace SoftGlaze\SafePush\Apply;
 
 use SoftGlaze\SafePush\Installer;
 use SoftGlaze\SafePush\Sync\Export_Context;
+use SoftGlaze\SafePush\Sync\Identity;
 use SoftGlaze\SafePush\Sync\Items;
+use SoftGlaze\SafePush\Sync\Scope;
 use SoftGlaze\SafePush\Sync\Sync_State;
 use SoftGlaze\SafePush\Tables;
 use SoftGlaze\SafePush\Transfer\Media_Receiver;
@@ -40,6 +42,9 @@ final class Snapshot_Store {
 	/**
 	 * Takes the snapshot of one item row: live's current state of the object the row is about.
 	 *
+	 * The snapshot is written to the plugin's own table before the item is touched (blueprint §10.3);
+	 * prepared through $wpdb->update(), table name from Tables::table_name().
+	 *
 	 * @param array $session Session.
 	 * @param array $row     Item row (id, uuid, object_type, action, local_object_id, payload).
 	 * @return array{pre_hash:string,bytes:int}|WP_Error
@@ -62,6 +67,11 @@ final class Snapshot_Store {
 			if ( in_array( $kind, array( 'option', 'widgets' ), true ) ) {
 				// An option may appear on live between staging and apply: record what is there.
 				$image['raw'] = self::raw( $kind, $ref, $row );
+			} elseif ( '' !== Scope::space( $kind ) ) {
+				// Objects that already carry the item's UUID (outside live's scope, so staging did not
+				// see them: trashed, or of a type live excludes now). The allocate pass never takes one
+				// of them for the placeholder it makes (security review 2026-11-22, KM-03).
+				$image['uuid_owners'] = Identity::find( Scope::space( $kind ), (string) $row['uuid'] );
 			}
 		} else {
 			$item = Items::export( $kind, $ref, Export_Context::destination() );
@@ -213,6 +223,9 @@ final class Snapshot_Store {
 	 * An option as stored: whether it exists, its stored text (serialized as WordPress stored it)
 	 * and its autoload flag.
 	 *
+	 * Reads the option row as stored, through a prepared query, so a rollback can put the exact stored
+	 * text back without unserializing it.
+	 *
 	 * @param string $name Option name.
 	 * @return array{exists:bool,value:mixed,autoload:string}
 	 */
@@ -237,6 +250,9 @@ final class Snapshot_Store {
 
 	/**
 	 * Copies a file the push is about to replace into the push's snapshot folder (blueprint §11.2).
+	 *
+	 * Copies a file the push is about to replace into the push's random snapshot folder under uploads,
+	 * through WP_Filesystem, so a rollback can restore it byte for byte.
 	 *
 	 * @param array  $session Session.
 	 * @param string $full    Absolute path of the file on live.
@@ -270,6 +286,9 @@ final class Snapshot_Store {
 	/**
 	 * The push's snapshot folder: uploads/keepmerge-push-staging-to-live/snapshots/<32 hex>, with
 	 * index.php and the deny rule, resolving inside the uploads base.
+	 *
+	 * The snapshot folder has a random 32-hex name from random_bytes() under uploads, is created
+	 * through WP_Filesystem and gets index.php and a deny rule.
 	 *
 	 * @param array $session Session.
 	 * @param bool  $create  Create it (and name it) when missing.
@@ -319,6 +338,9 @@ final class Snapshot_Store {
 	 * Copies a replaced file back from the push's snapshot folder (blueprint §11.3 file_replaced)
 	 * and checks the result against the SHA-256 the snapshot recorded.
 	 *
+	 * Copies the snapshot back through WP_Filesystem and compares the SHA-256 with hash_equals(), so a
+	 * rollback never leaves a file that differs from the one it replaced.
+	 *
 	 * @param array  $session Session.
 	 * @param string $rel     Snapshot path relative to the plugin's uploads folder (snapshots/<hex>/<ref>.bin).
 	 * @param string $file_rel Path of the file relative to the uploads base.
@@ -358,6 +380,9 @@ final class Snapshot_Store {
 	/**
 	 * Deletes a push's snapshot folder (retention, blueprint §11.4).
 	 *
+	 * Deletes only a push's own snapshot folder under uploads, through WP_Filesystem, after its path
+	 * resolved inside the uploads base.
+	 *
 	 * @param array $session Session.
 	 * @return bool Whether a folder was deleted.
 	 */
@@ -373,6 +398,9 @@ final class Snapshot_Store {
 	/**
 	 * Deletes snapshot folders that no push names any more (their push was pruned or is gone),
 	 * at most 20 per run.
+	 *
+	 * Deletes only snapshot folders no push names any more; the names in use come from a prepared
+	 * query on the plugin's own table.
 	 *
 	 * @return int Folders deleted.
 	 */
@@ -418,6 +446,10 @@ final class Snapshot_Store {
 
 	/**
 	 * Size of a push's snapshots: the pre-images in its rows and the files in its folder.
+	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
 	 *
 	 * @param array $session Session.
 	 * @return int Bytes.

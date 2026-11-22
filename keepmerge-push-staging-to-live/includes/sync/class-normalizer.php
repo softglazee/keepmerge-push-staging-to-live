@@ -361,6 +361,50 @@ final class Normalizer {
 	}
 
 	/**
+	 * Whether received typed JSON carries serialized PHP text anywhere a plain string can be: a
+	 * string, a "bin" string, inside an object marker or inside a "ser" node. A source's encoder
+	 * turns every serialized value it can read into a "ser" node of plain data and refuses objects,
+	 * so such a string only arrives from a source that skipped the encoder; it is refused because
+	 * code on live that unserializes its own stored strings would read it (security review
+	 * 2026-11-22, KM-02). Core's own is_serialized() decides, the same test WordPress uses before it unserializes.
+	 *
+	 * @param mixed $typed Typed value as received.
+	 * @param int   $depth Nesting depth.
+	 * @return bool
+	 */
+	public static function holds_serialized_text( $typed, $depth = 0 ) {
+		if ( $depth > self::MAX_DEPTH ) {
+			// decode() refuses this depth anyway.
+			return false;
+		}
+		if ( is_string( $typed ) ) {
+			return is_serialized( $typed );
+		}
+		if ( ! is_array( $typed ) ) {
+			return false;
+		}
+		if ( array_key_exists( self::MARK, $typed ) ) {
+			$mark = $typed[ self::MARK ];
+			if ( 'bin' === $mark && isset( $typed['hex'] ) && is_string( $typed['hex'] ) && 1 === preg_match( '/\A(?:[0-9a-f]{2})*\z/', $typed['hex'] ) ) {
+				return is_serialized( (string) hex2bin( $typed['hex'] ) );
+			}
+			if ( 'ser' === $mark && array_key_exists( 'v', $typed ) ) {
+				return self::holds_serialized_text( $typed['v'], $depth + 1 );
+			}
+			if ( 'object' === $mark && isset( $typed['props'] ) && is_array( $typed['props'] ) ) {
+				return self::holds_serialized_text( $typed['props'], $depth + 1 );
+			}
+			return false;
+		}
+		foreach ( $typed as $item ) {
+			if ( self::holds_serialized_text( $item, $depth + 1 ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * The text of a serialized value with every string run through $leaf and its length
 	 * recomputed. A small reader of PHP's serialize format: it copies class names and custom
 	 * payloads verbatim and never creates a PHP value, so it is safe on any input. Returns null

@@ -432,6 +432,9 @@ final class Rollback_Runner {
 	/**
 	 * Rolls back one item row.
 	 *
+	 * A row is restored only when live still holds what the push wrote (hash_equals()), so a later
+	 * edit on live is never rolled over unless the administrator ticked it.
+	 *
 	 * @param array    $session Session.
 	 * @param array    $row     Row (decoded).
 	 * @param string[] $ticked_uuids Ticked conflicts.
@@ -491,6 +494,9 @@ final class Rollback_Runner {
 
 	/**
 	 * Rolls back one file row (blueprint §11.3 file_replaced; files the push added).
+	 *
+	 * Restores or deletes only files the push itself replaced or added, inside the uploads base,
+	 * through WP_Filesystem; hashes compared with hash_equals().
 	 *
 	 * @param array    $session Session.
 	 * @param array    $file    File row (decoded).
@@ -554,6 +560,9 @@ final class Rollback_Runner {
 
 	/**
 	 * Finish (blueprint §11.3): payloads reduced in batches, then temporary folder, lock, audit.
+	 *
+	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
+	 * from Tables::table_name(): core has no API for plugin tables.
 	 *
 	 * @param array $session Session.
 	 * @param array $rb      Cursor (changed).
@@ -643,6 +652,10 @@ final class Rollback_Runner {
 	/**
 	 * A row by ID with its JSON columns decoded (for Recovery).
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param int $id Row ID.
 	 * @return array|null
 	 */
@@ -679,6 +692,10 @@ final class Rollback_Runner {
 	 * Item rows a rollback handles: rows the apply wrote or started to write (they have a
 	 * snapshot), and every placeholder the push created.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param array $session Session.
 	 * @return array[] Light rows (no pre-image).
 	 */
@@ -701,6 +718,10 @@ final class Rollback_Runner {
 
 	/**
 	 * File rows a rollback handles: files the push replaced or added.
+	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
 	 *
 	 * @param array $session Session.
 	 * @return array[]
@@ -794,6 +815,9 @@ final class Rollback_Runner {
 	/**
 	 * Why a row is a conflict ('' when it is not): an applied item live changed after the push.
 	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
+	 *
 	 * @param array $row Row.
 	 * @return string
 	 */
@@ -819,6 +843,9 @@ final class Rollback_Runner {
 	/**
 	 * Why a file row is a conflict: the file on live is no longer the one the push wrote.
 	 *
+	 * The hash_file() call reads only a file inside the uploads base that the push wrote; compared with
+	 * hash_equals().
+	 *
 	 * @param array $file File row.
 	 * @return string
 	 */
@@ -840,6 +867,9 @@ final class Rollback_Runner {
 
 	/**
 	 * Whether live still holds an item exactly as its snapshot recorded it.
+	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
 	 *
 	 * @param array $row Row.
 	 * @return bool
@@ -916,6 +946,9 @@ final class Rollback_Runner {
 	/**
 	 * Whether a file (relative to the uploads base) is still used by an attachment on live.
 	 *
+	 * Prepared queries on core's postmeta decide whether a file is still used before a rollback
+	 * deletes it; a file another attachment uses is kept.
+	 *
 	 * @param string $rel Relative path.
 	 * @return bool
 	 */
@@ -964,6 +997,9 @@ final class Rollback_Runner {
 
 	/**
 	 * Records a row's rollback state (and restored_gmt once something was put back).
+	 *
+	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
+	 * from Tables::table_name(): core has no API for plugin tables.
 	 *
 	 * @param array  $row      Row.
 	 * @param string $state    State.
@@ -1040,6 +1076,9 @@ final class Rollback_Runner {
 	 * The destination lock for the rollback: taken when nobody holds it; another push's lock stops
 	 * the rollback (release it first if it is stale).
 	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
+	 *
 	 * @param array $session Session.
 	 * @return true|WP_Error
 	 */
@@ -1057,6 +1096,10 @@ final class Rollback_Runner {
 
 	/**
 	 * Whether the pairing still exists and is not revoked (its sync_state rows are restored).
+	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
 	 *
 	 * @param int $pairing_id Pairing row ID.
 	 * @return bool

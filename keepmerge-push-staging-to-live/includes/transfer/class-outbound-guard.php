@@ -263,6 +263,10 @@ final class Outbound_Guard {
 	/**
 	 * Hook: http_api_curl. Pins one of the plugin's own requests to the address the guard checked.
 	 *
+	 * CURLOPT_RESOLVE on core's own cURL handle, inside core's http_api_curl hook, is the only way to
+	 * connect to the address the guard checked while the certificate is still verified for the host
+	 * name (DNS rebinding, threat model §7.3); requests the plugin did not arm are untouched.
+	 *
 	 * Acts only when the request carries X-SGSP-Version and the nonce Remote_Client armed for it,
 	 * and only for the armed host on port 443; every other request is left exactly as it is.
 	 *

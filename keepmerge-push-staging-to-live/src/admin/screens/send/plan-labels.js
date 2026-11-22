@@ -408,6 +408,11 @@ export function warningDetail( warning ) {
 			'styles WordPress would remove',
 			'keepmerge-push-staging-to-live'
 		);
+	} else if ( 'code_setting' === rule ) {
+		words = __(
+			'a code-like setting (script, CSS or HTML)',
+			'keepmerge-push-staging-to-live'
+		);
 	} else if ( 0 === rule.indexOf( 'pattern:' ) ) {
 		words = sprintf(
 			/* translators: %s: rule name such as tag or event_attribute. */

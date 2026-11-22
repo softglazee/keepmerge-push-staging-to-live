@@ -83,7 +83,7 @@ final class Applier {
 	/**
 	 * Skip reasons (an item skipped is not a failure: the push goes on).
 	 */
-	const SKIPS = array( 'changed_during_push', 'review_skipped', 'dependency_skipped', 'reference_missing', 'reference_mismatch', 'theme_missing', 'option_not_allowed', 'type_not_included', 'path_taken', 'woocommerce_inactive', 'attribute_missing' );
+	const SKIPS = array( 'changed_during_push', 'review_skipped', 'dependency_skipped', 'reference_missing', 'reference_mismatch', 'theme_missing', 'option_not_allowed', 'type_not_included', 'path_taken', 'woocommerce_inactive', 'attribute_missing', 'target_exists' );
 
 	/**
 	 * Most items processed in one step; the softglaze_sp_apply_step_items filter may only lower it.
@@ -266,6 +266,9 @@ final class Applier {
 
 	/**
 	 * Starts the passes: review-skipped rows are marked, the snapshot pass begins.
+	 *
+	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
+	 * from Tables::table_name(): core has no API for plugin tables.
 	 *
 	 * @param array  $session Session.
 	 * @param string $actor   'remote' or 'user'.
@@ -580,6 +583,9 @@ final class Applier {
 	 * Whether live's item differs from live's hash when the plan was made (the envelope's
 	 * live_hash): checked against the snapshot just taken.
 	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
+	 *
 	 * @param array $row Row (before the snapshot).
 	 * @return string The skip reason, or ''.
 	 */
@@ -605,6 +611,13 @@ final class Applier {
 	private static function allocate_row( array $session, array $row ) {
 		$space = Scope::space( (string) $row['object_type'] );
 		$found = Identity::find( $space, (string) $row['uuid'] );
+		$image = is_array( $row['pre_image'] ) ? $row['pre_image'] : json_decode( (string) $row['pre_image'], true );
+		$had   = is_array( $image ) && isset( $image['uuid_owners'] ) && is_array( $image['uuid_owners'] ) ? array_map( 'intval', $image['uuid_owners'] ) : array();
+		if ( array() !== array_intersect( $found, $had ) ) {
+			// The object had the UUID before this push wrote anything (its snapshot saw it): it is
+			// live's own object outside the scope, not a placeholder of this push, and is left alone.
+			return new WP_Error( 'target_exists', 'target_exists' );
+		}
 		if ( 1 === count( $found ) ) {
 			// A step that died after creating this placeholder and before recording it: the object
 			// with the item's UUID is that placeholder (a new item's UUID was unknown on live when it
@@ -644,6 +657,9 @@ final class Applier {
 
 	/**
 	 * Write pass for one item.
+	 *
+	 * The item is written only while live still equals its snapshot (hash_equals() on the pre-image
+	 * hash), so an edit made on live during the push is never overwritten (blueprint §10.3).
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row.
@@ -715,6 +731,9 @@ final class Applier {
 	/**
 	 * Adopt pass for one item: UUID and base of a matched, unchanged item.
 	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
+	 *
 	 * @param array $session Session.
 	 * @param array $row     Row.
 	 * @return true|WP_Error
@@ -741,6 +760,9 @@ final class Applier {
 	 * intended post-apply hash (the staging hash in post_hash) → the write finished, it is recorded
 	 * as applied without writing again; it equals the snapshot's pre_hash (or the row is a
 	 * placeholder) → processed again; anything else → a decision for the live administrator.
+	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row (light or full).
@@ -856,6 +878,9 @@ final class Applier {
 
 	/**
 	 * Finish (blueprint §10.3 step 5): payloads reduced in batches, then the end.
+	 *
+	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
+	 * from Tables::table_name(): core has no API for plugin tables.
 	 *
 	 * @param array $session Session.
 	 * @param array $apply   Cursor (changed).
@@ -1076,6 +1101,10 @@ final class Applier {
 	 * Row IDs of the allocate or write pass in dependency order (blueprint §10.3 step 3): by kind
 	 * rank, then parents before children (references to the parent inside this push), then by row.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param array  $session Session.
 	 * @param string $pass    allocate or write.
 	 * @return int[]
@@ -1226,6 +1255,10 @@ final class Applier {
 	/**
 	 * Rows of the push by UUID: id, kind, action, status, local_object_id.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param array $session Session.
 	 * @return array
 	 */
@@ -1255,6 +1288,10 @@ final class Applier {
 	/**
 	 * One item row with payload, refs and pre-image decoded.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param int $id Row ID.
 	 * @return array|null
 	 */
@@ -1269,6 +1306,9 @@ final class Applier {
 	/**
 	 * The next row of a session after a row ID matching a condition of this class.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(); the condition is a class
+	 * constant, never input, and the table name comes from Tables::table_name().
+	 *
 	 * @param array  $session   Session.
 	 * @param int    $after     Row ID.
 	 * @param string $condition SQL condition (a constant of this class).
@@ -1277,13 +1317,16 @@ final class Applier {
 	private static function next_row( array $session, $after, $condition ) {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Own table; the condition is built from constants of this class.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Own table; the condition is built from constants of this class.
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM %i WHERE push_id = %d AND side = %s AND id > %d AND object_type NOT IN ('file','file_path') AND {$condition} ORDER BY id ASC LIMIT 1", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE, absint( $after ) ), ARRAY_A );
 		return is_array( $row ) ? self::decode_row( $row ) : null;
 	}
 
 	/**
 	 * Rows of a session matching a condition of this class.
+	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(); the condition is a class
+	 * constant, never input, and the table name comes from Tables::table_name().
 	 *
 	 * @param array  $session   Session.
 	 * @param string $condition SQL condition (a constant of this class).
@@ -1292,7 +1335,7 @@ final class Applier {
 	private static function count_where( array $session, $condition ) {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Own table; the condition is built from constants of this class.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Own table; the condition is built from constants of this class.
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') AND {$condition}", Tables::table_name( 'push_items' ), absint( $session['id'] ), self::SIDE ) );
 	}
 
@@ -1312,6 +1355,9 @@ final class Applier {
 
 	/**
 	 * Updates columns of a row.
+	 *
+	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
+	 * from Tables::table_name(): core has no API for plugin tables.
 	 *
 	 * @param int   $id     Row ID.
 	 * @param array $fields Columns.
@@ -1380,6 +1426,9 @@ final class Applier {
 	 * The destination lock must be this session's (it is taken again when nothing holds it, for
 	 * example after a deactivation); another push's lock stops the step.
 	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
+	 *
 	 * @param array $session Session.
 	 * @return true|WP_Error
 	 */
@@ -1396,6 +1445,10 @@ final class Applier {
 	/**
 	 * The answer of an apply step: state, progress, counts and a page of item results after a row
 	 * ID (so the source can record live's IDs).
+	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
 	 *
 	 * @param array $session Session.
 	 * @param int   $after   Row ID cursor of the results.

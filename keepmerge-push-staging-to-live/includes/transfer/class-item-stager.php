@@ -468,6 +468,13 @@ final class Item_Stager {
 			return $this->refuse( $out, 'invalid_refs', 'refs' );
 		}
 
+		// Serialized PHP text travels only as "ser" nodes, which live rebuilds from plain data; a
+		// string that is serialized text would be stored as it is and could name any class to code
+		// on live that unserializes it (security review 2026-11-22, KM-02).
+		if ( Normalizer::holds_serialized_text( $data ) ) {
+			return $this->refuse( $out, 'invalid_value', 'serialized_string' );
+		}
+
 		$decoded = Normalizer::decode( $data, $this->origins );
 		if ( is_wp_error( $decoded ) || ! is_array( $decoded ) ) {
 			$reason = is_wp_error( $decoded ) ? (array) $decoded->get_error_data() : array();
@@ -487,7 +494,7 @@ final class Item_Stager {
 		$media = null;
 		if ( 'attachment' === $id['kind'] ) {
 			$problem = array();
-			$media   = $this->media( $data, isset( $raw['media'] ) ? $raw['media'] : null, $problem );
+			$media   = $this->media( $data, isset( $raw['media'] ) ? $raw['media'] : null, $problem, (int) $out['target'] );
 			if ( null === $media ) {
 				return $this->refuse( $out, $problem[0], $problem[1] );
 			}
@@ -1170,11 +1177,19 @@ final class Item_Stager {
 		if ( null === $clean ) {
 			return null;
 		}
+		$dropped = 0;
 		foreach ( array_keys( $clean['widgets'] ) as $name ) {
 			if ( ! is_string( $name ) || 1 !== preg_match( '/\Awidget_[a-z0-9_-]{1,100}\z/', $name ) || '' !== Option_Policy::option_denial_reason( $name ) ) {
 				$problem = array( 'option_denied', 'widgets' );
 				return null;
 			}
+			if ( ! Scope::widget_registered( $name ) ) {
+				unset( $clean['widgets'][ $name ] );
+				++$dropped;
+			}
+		}
+		if ( $dropped > 0 ) {
+			$this->warn( 'widget_not_registered', (string) $dropped );
 		}
 		return $clean;
 	}
@@ -1340,12 +1355,16 @@ final class Item_Stager {
 	 * listed file needs a file row of this push, named in the envelope's "media" map (path → ref),
 	 * with the same path, size and SHA-256, that live already had or that was committed.
 	 *
+	 * A file live already had (status have) must not belong to another attachment on live: the new
+	 * owner would share it, and deleting either attachment deletes the other's file.
+	 *
 	 * @param array $data    Cleaned attachment data.
 	 * @param mixed $map     The envelope's media map as received.
 	 * @param array $problem Problem (out).
+	 * @param int   $target  The live attachment the item updates, 0 for a new one.
 	 * @return array|null The payload's media record, or null with the problem.
 	 */
-	private function media( array $data, $map, array &$problem ) {
+	private function media( array $data, $map, array &$problem, $target = 0 ) {
 		$listed = array();
 		foreach ( isset( $data['files'] ) ? $data['files'] : array() as $entry ) {
 			$listed[ $entry['path'] ] = $entry;
@@ -1400,6 +1419,10 @@ final class Item_Stager {
 				$problem = array( 'media_missing', 'files' );
 				return null;
 			}
+			if ( 'have' === $row['status'] && self::file_used_by_other( (string) $row['t']['final'], (int) $target ) ) {
+				$problem = array( 'file_shared', 'files' );
+				return null;
+			}
 			$files[] = array(
 				'path'   => $path,
 				'final'  => (string) $row['t']['final'],
@@ -1415,6 +1438,44 @@ final class Item_Stager {
 			'state' => 'ready',
 			'files' => $files,
 		);
+	}
+
+	/**
+	 * Whether a file in the uploads tree belongs to an attachment on live other than $target: as its
+	 * attached file, or as a size or original image in the same folder (core keeps those as plain
+	 * names in the metadata, so the same name in another folder is another file). Fails closed
+	 * when there are too many candidates to check.
+	 *
+	 * @param string $path   Relative path.
+	 * @param int    $target Live attachment allowed to own it (0 for none).
+	 * @return bool
+	 */
+	private static function file_used_by_other( $path, $target ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- One exact lookup of core's attached-file key while staging an attachment.
+		$owner = $wpdb->get_var( $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value = %s AND post_id <> %d LIMIT 1', $wpdb->postmeta, '_wp_attached_file', $path, $target ) );
+		if ( null !== $owner ) {
+			return true;
+		}
+
+		$dir   = dirname( $path );
+		$dir   = '.' === $dir ? '' : $dir;
+		$limit = 200;
+		// The same LIKE core runs before it deletes a thumb (wp_delete_attachment_files()).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Bounded lookup of a file name in attachment metadata while staging an attachment.
+		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value LIKE %s AND post_id <> %d LIMIT %d', $wpdb->postmeta, '_wp_attachment_metadata', '%' . $wpdb->esc_like( '"' . wp_basename( $path ) . '"' ) . '%', $target, $limit ) );
+		if ( count( $ids ) >= $limit ) {
+			return true;
+		}
+		foreach ( $ids as $id ) {
+			$file  = (string) get_post_meta( (int) $id, '_wp_attached_file', true );
+			$other = dirname( $file );
+			if ( ( '.' === $other ? '' : $other ) === $dir ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

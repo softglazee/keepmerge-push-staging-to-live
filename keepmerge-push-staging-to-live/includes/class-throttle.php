@@ -141,7 +141,26 @@ final class Throttle {
 	}
 
 	/**
-	 * Throttle bucket for an address: "ip:" plus the address in its canonical text form.
+	 * An address in its canonical text form (lower case, IPv6 compressed), or '' when it is not a
+	 * valid address. The IP pin compares exact addresses with this; the throttle uses bucket().
+	 *
+	 * @param string $ip Address.
+	 * @return string
+	 */
+	public static function canonical( $ip ) {
+		$valid = is_string( $ip ) ? filter_var( $ip, FILTER_VALIDATE_IP ) : false;
+		if ( ! is_string( $valid ) ) {
+			return '';
+		}
+		$packed = inet_pton( $valid );
+		return strtolower( false === $packed ? $valid : (string) inet_ntop( $packed ) );
+	}
+
+	/**
+	 * Throttle bucket for an address: "ip:" plus an IPv4 address, or an IPv6 address's /64 network
+	 * in canonical text form with "/64". One IPv6 host usually holds a whole /64, so a bucket per
+	 * address would let it rotate past the block and add a row per address (security review
+	 * 2026-11-22, KM-04). An IPv4-mapped IPv6 address is its IPv4 address.
 	 *
 	 * @param string $ip Address.
 	 * @return string '' when the address is not valid.
@@ -153,8 +172,16 @@ final class Throttle {
 		}
 
 		$packed = inet_pton( $valid );
-		$text   = false === $packed ? $valid : inet_ntop( $packed );
+		if ( false === $packed ) {
+			return 'ip:' . strtolower( $valid );
+		}
+		if ( 4 === strlen( $packed ) ) {
+			return 'ip:' . inet_ntop( $packed );
+		}
+		if ( str_repeat( "\0", 10 ) . "\xff\xff" === substr( $packed, 0, 12 ) ) {
+			return 'ip:' . inet_ntop( substr( $packed, 12 ) );
+		}
 
-		return 'ip:' . strtolower( (string) $text );
+		return 'ip:' . strtolower( (string) inet_ntop( substr( $packed, 0, 8 ) . str_repeat( "\0", 8 ) ) ) . '/64';
 	}
 }

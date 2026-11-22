@@ -13,7 +13,10 @@ export function useTick( active ) {
 		if ( ! active ) {
 			return undefined;
 		}
-		const id = window.setInterval( () => setTick( ( tick ) => tick + 1 ), 1000 );
+		const id = window.setInterval(
+			() => setTick( ( tick ) => tick + 1 ),
+			1000
+		);
 		return () => window.clearInterval( id );
 	}, [ active ] );
 }
@@ -68,8 +71,11 @@ export function ago( timestamp, now ) {
 		return __( 'Just now', 'keepmerge-push-staging-to-live' );
 	}
 	if ( minutes < 60 ) {
-		/* translators: %d: minutes. */
-		return sprintf( __( '%d min ago', 'keepmerge-push-staging-to-live' ), minutes );
+		return sprintf(
+			/* translators: %d: minutes. */
+			__( '%d min ago', 'keepmerge-push-staging-to-live' ),
+			minutes
+		);
 	}
 	return dateTime( timestamp );
 }

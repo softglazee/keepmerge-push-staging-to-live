@@ -242,6 +242,9 @@ final class Code_Report {
 	 * followed and files that resolve outside the component are left out. A component with more
 	 * than MAX_FILES files, or one that cannot be listed before the deadline, is "truncated".
 	 *
+	 * Lists only files inside live's own active theme and plugin folders, chosen by live; links that
+	 * resolve outside a component are left out (realpath()), and nothing is ever written.
+	 *
 	 * @param array      $info     Component.
 	 * @param float|null $deadline Stop listing at this time (microtime).
 	 * @return array{root:string,paths:string[],truncated:bool}
@@ -306,6 +309,9 @@ final class Code_Report {
 
 	/**
 	 * One file as the report carries it: path, size and SHA-1 (null over 5 MB). Never content.
+	 *
+	 * The sha1_file() call gives a hash for comparison only; the report carries path, size and hash, never file
+	 * content (threat model §7.6).
 	 *
 	 * @param string $root     Component root.
 	 * @param string $relative Relative path.
@@ -450,6 +456,9 @@ final class Code_Report {
 
 	/**
 	 * Requests and compares one page of the current component.
+	 *
+	 * Hashes are compared with hash_equals(), the constant-time comparison used for every hash and
+	 * signature in the plugin.
 	 *
 	 * @param array $record Record (changed).
 	 * @param mixed $client Client.

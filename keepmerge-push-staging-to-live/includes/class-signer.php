@@ -49,6 +49,9 @@ final class Signer {
 	/**
 	 * A fresh one-time nonce: 32 lowercase hex characters from 16 random bytes.
 	 *
+	 * PHP's CSPRNG random_bytes(): the nonce makes each request unique for the replay guard (threat
+	 * model §7.2).
+	 *
 	 * @return string
 	 */
 	public static function new_nonce() {
@@ -57,6 +60,9 @@ final class Signer {
 
 	/**
 	 * A fresh pairing secret: 64 lowercase hex characters from 32 random bytes.
+	 *
+	 * PHP's CSPRNG random_bytes(): the secret is the HMAC key of every request and response of the
+	 * pairing.
 	 *
 	 * @return string
 	 */
@@ -142,6 +148,9 @@ final class Signer {
 	/**
 	 * Signs a canonical string.
 	 *
+	 * HMAC-SHA256 through PHP's own hash_hmac(), the integrity and replay protection of the protocol
+	 * (blueprint §5.4); no custom cryptography.
+	 *
 	 * @param string $canonical  Canonical string.
 	 * @param string $secret_hex Pairing secret, 64 hex.
 	 * @return string 64 lowercase hex, or '' when the secret is malformed.
@@ -156,6 +165,9 @@ final class Signer {
 
 	/**
 	 * Verifies a signature over a canonical string in constant time.
+	 *
+	 * The hash_equals() call keeps the comparison time independent of how many characters of a forged signature
+	 * were right.
 	 *
 	 * @param string $canonical  Canonical string.
 	 * @param string $secret_hex Pairing secret, 64 hex.

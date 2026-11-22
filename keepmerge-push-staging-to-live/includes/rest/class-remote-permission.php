@@ -276,6 +276,9 @@ final class Remote_Permission {
 	/**
 	 * Steps 1 to 11.
 	 *
+	 * Every received value checked against a secret-derived one goes through hash_equals(), so how
+	 * long a refusal takes says nothing about how much of it matched (threat model T17).
+	 *
 	 * @param WP_REST_Request $request  Request.
 	 * @param string          $route_id Route.
 	 * @return true|WP_Error
@@ -283,15 +286,20 @@ final class Remote_Permission {
 	private static function run_chain( WP_REST_Request $request, $route_id ) {
 		$ip = Throttle::client_ip();
 
+		// Steps 1 and 2 need no secret to refuse, so they do not count toward the address block
+		// (threat model §6: steps 4 to 9 count). Counting them let anyone who shares the source's
+		// address, behind a proxy for example, lock it out with header-less requests (security
+		// review 2026-11-22, KM-04). They are still audited, collapsed per address.
+
 		// 1. HTTPS.
 		if ( ! is_ssl() ) {
-			return self::fail( 'https_required', 403, $ip, null, $route_id );
+			return self::fail( 'https_required', 403, '', null, $route_id );
 		}
 
 		// 2. Required headers, well formed.
 		$headers = self::headers( $request );
 		if ( null === $headers ) {
-			return self::fail( 'bad_headers', 400, $ip, null, $route_id );
+			return self::fail( 'bad_headers', 400, '', null, $route_id );
 		}
 
 		// 3. Address not blocked; checked before any signature work.
@@ -381,7 +389,8 @@ final class Remote_Permission {
 			if ( ! hash_equals( (string) $pairing['source_site_id'], $headers['site'] ) ) {
 				return self::fail( 'source_mismatch', 403, $ip, $pairing, $route_id, 'site_id' );
 			}
-			if ( '' !== (string) $pairing['pinned_ip'] && Throttle::bucket( $ip ) !== Throttle::bucket( (string) $pairing['pinned_ip'] ) ) {
+			// The pin is one exact address, never the throttle's IPv6 /64 bucket.
+			if ( '' !== (string) $pairing['pinned_ip'] && Throttle::canonical( $ip ) !== Throttle::canonical( (string) $pairing['pinned_ip'] ) ) {
 				return self::fail( 'source_mismatch', 403, $ip, $pairing, $route_id, 'ip_pin' );
 			}
 		}
@@ -424,6 +433,9 @@ final class Remote_Permission {
 
 	/**
 	 * Which credential set a pairing in its current state accepts on a route, or the refusal.
+	 *
+	 * The pairing is bound to the hash of this site's stored home URL, compared with hash_equals(), so
+	 * a copied database cannot answer for the original site (threat model T21).
 	 *
 	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phases 3 to 6):
 	 *

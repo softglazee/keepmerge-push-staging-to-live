@@ -49,6 +49,10 @@ export function gateRuleLabel( rule ) {
 			'an encoded active HTML tag',
 			'keepmerge-push-staging-to-live'
 		),
+		code_setting: __(
+			'a setting a theme or plugin may print as code (script, CSS or HTML)',
+			'keepmerge-push-staging-to-live'
+		),
 	};
 	if ( labels[ rule ] ) {
 		return labels[ rule ];

@@ -97,7 +97,10 @@ final class Option extends Base {
 			}
 		}
 		foreach ( $widgets as $name => $value ) {
-			update_option( (string) $name, $value );
+			// A widget plugin switched off on live since staging: its store is left alone.
+			if ( Scope::widget_registered( (string) $name ) ) {
+				update_option( (string) $name, $value );
+			}
 		}
 		if ( isset( $ctx->data['sidebars_widgets'] ) && is_array( $ctx->data['sidebars_widgets'] ) ) {
 			update_option( 'sidebars_widgets', $ctx->data['sidebars_widgets'] );

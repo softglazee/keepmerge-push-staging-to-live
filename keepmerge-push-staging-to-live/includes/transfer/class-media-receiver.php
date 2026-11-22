@@ -223,6 +223,9 @@ final class Media_Receiver {
 	/**
 	 * POST /remote/push/{id}/files: which files live needs (blueprint §9 step 3).
 	 *
+	 * A file already on live is hashed only when it is a regular file inside the uploads base;
+	 * announced hashes are compared with hash_equals().
+	 *
 	 * Body: chunk_size and files [{ref, path, size, sha256, attachment}], each read by name. One
 	 * refused path or oversize file refuses the whole call. Existing files are hashed within the
 	 * time budget; files not reached are answered as "later" and not stored.
@@ -449,6 +452,9 @@ final class Media_Receiver {
 	 * inside the uploads base is read; a link, a folder or a path that resolves elsewhere is
 	 * "other" and never opened.
 	 *
+	 * The hash_file() call runs only on a regular file that resolves inside the uploads base, so a received
+	 * path can never make live read a file elsewhere.
+	 *
 	 * @param string $base  Uploads base.
 	 * @param array  $entry Entry.
 	 * @return string absent, same or other.
@@ -531,6 +537,9 @@ final class Media_Receiver {
 	/**
 	 * Reserves a final path for one file of a push (the unique key makes it atomic).
 	 *
+	 * INSERT IGNORE on the plugin's own table's unique key reserves a final file name atomically, so
+	 * two files of one push never get the same name; prepared, table name from Tables::table_name().
+	 *
 	 * @param int    $push_id Session row ID.
 	 * @param string $path    Final relative path.
 	 * @param int    $ref     File ref.
@@ -553,6 +562,9 @@ final class Media_Receiver {
 
 	/**
 	 * Stores a new file row.
+	 *
+	 * INSERT IGNORE on the plugin's own table keeps the first row of a file ref, so a repeated
+	 * announcement never creates a second row; prepared, table name from Tables::table_name().
 	 *
 	 * @param int   $push_id  Session row ID.
 	 * @param array $entry    Entry.
@@ -604,6 +616,8 @@ final class Media_Receiver {
 
 	/**
 	 * Starts a file's chunks again at another size (the source halved it after a 413).
+	 *
+	 * Deletes only part files inside this push's random temporary folder, through WP_Filesystem.
 	 *
 	 * @param array $session Session.
 	 * @param array $row     Row.
@@ -658,6 +672,10 @@ final class Media_Receiver {
 
 	/**
 	 * PUT /remote/push/{id}/files/{ref}/chunks/{n}: stores one chunk (blueprint §9 step 4).
+	 *
+	 * Writes a chunk only inside this push's random temporary folder under uploads, through
+	 * WP_Filesystem, after its SHA-256 matched (hash_equals()); file names come from live, never from
+	 * the request.
 	 *
 	 * @param array  $session Session (this pairing's).
 	 * @param array  $pairing Pairing row.
@@ -755,6 +773,10 @@ final class Media_Receiver {
 	/**
 	 * POST /remote/push/{id}/files/{ref}/commit: one file from its parts, checked (blueprint §9
 	 * step 5). The file stays in the push's temporary folder until apply.
+	 *
+	 * Appends parts into one temporary file inside the push's random folder (WP_Filesystem has no
+	 * append, hence the reasoned file_put_contents()), then checks size, SHA-256 and real file type
+	 * before the file may be used.
 	 *
 	 * @param array  $session Session (this pairing's).
 	 * @param array  $pairing Pairing row.
@@ -944,6 +966,8 @@ final class Media_Receiver {
 	 * Ends the files phase when the first item batch arrives: parts of files that were never
 	 * committed are deleted (their attachments are refused when staged).
 	 *
+	 * Deletes only part files inside this push's random temporary folder, through WP_Filesystem.
+	 *
 	 * @param array $session Session.
 	 * @return void
 	 */
@@ -972,6 +996,9 @@ final class Media_Receiver {
 	/**
 	 * Deletes a session's temporary folder (finish, abort, expiry, failed final pass).
 	 *
+	 * Deletes only this push's random temporary folder under uploads, through WP_Filesystem, after its
+	 * path resolved inside the uploads base.
+	 *
 	 * @param array $session Session.
 	 * @return bool Whether it is gone.
 	 */
@@ -993,6 +1020,9 @@ final class Media_Receiver {
 	/**
 	 * The daily prune (blueprint §9.8, §14.5): temporary folders older than 24 hours that no
 	 * session still receiving or waiting for apply uses.
+	 *
+	 * Deletes only temporary folders under uploads/keepmerge-push-staging-to-live/tmp/ that no running
+	 * push uses; the list of folders in use is a prepared query on the plugin's own table.
 	 *
 	 * @param int $max_age Seconds.
 	 * @return int Folders deleted.
@@ -1069,6 +1099,9 @@ final class Media_Receiver {
 	/**
 	 * WP_Filesystem with the direct method only, for the apply (moves and snapshot copies).
 	 *
+	 * Only WP_Filesystem's direct method: a remote request cannot stop to ask for FTP credentials, and
+	 * every path is checked with realpath() against the uploads base.
+	 *
 	 * @return \WP_Filesystem_Base|WP_Error
 	 */
 	public static function direct_filesystem() {
@@ -1100,6 +1133,10 @@ final class Media_Receiver {
 	/**
 	 * Every file row of a session (for the apply), keyed by ref.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param int $push_id Session row ID.
 	 * @return array<int,array>
 	 */
@@ -1120,6 +1157,10 @@ final class Media_Receiver {
 
 	/**
 	 * File rows of a session by ref (for the item stager).
+	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
 	 *
 	 * @param int   $push_id Session row ID.
 	 * @param int[] $refs    Refs.
@@ -1167,6 +1208,10 @@ final class Media_Receiver {
 	/**
 	 * Counts of a session's file rows: have, need, renamed, committed, refused, total.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param int $push_id Session row ID.
 	 * @return array<string,int>
 	 */
@@ -1200,6 +1245,10 @@ final class Media_Receiver {
 	 * The URL rewrite list of a push: each renamed file's path on the source and its new path on
 	 * live (blueprint §9 step 3). Phase 7 rewrites the pushed content with it.
 	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
+	 *
 	 * @param int $push_id Session row ID.
 	 * @return array<string,string> path => final path.
 	 */
@@ -1218,6 +1267,10 @@ final class Media_Receiver {
 
 	/**
 	 * File rows of a session.
+	 *
+	 * Direct query on the plugin's own table through $wpdb->prepare(), table name from
+	 * Tables::table_name(): core has no API for plugin tables, and a cached answer could be stale
+	 * during a push.
 	 *
 	 * @param int $push_id Session row ID.
 	 * @return int
@@ -1262,6 +1315,9 @@ final class Media_Receiver {
 
 	/**
 	 * Updates a file row.
+	 *
+	 * Direct write to the plugin's own table through $wpdb->insert()/update()/prepare(), table name
+	 * from Tables::table_name(): core has no API for plugin tables.
 	 *
 	 * @param int   $id     Row ID.
 	 * @param array $fields status, error, transfer (array).
@@ -1328,6 +1384,8 @@ final class Media_Receiver {
 	/**
 	 * Deletes the parts of one file.
 	 *
+	 * Deletes only part files inside this push's random temporary folder, through WP_Filesystem.
+	 *
 	 * @param \WP_Filesystem_Base $fs     Filesystem.
 	 * @param string              $dir    Push folder.
 	 * @param int                 $ref    Ref.
@@ -1374,6 +1432,10 @@ final class Media_Receiver {
 	 * The session's temporary folder: uploads/keepmerge-push-staging-to-live/tmp/<32 hex>, each
 	 * level with index.php and an .htaccess deny rule, written with the direct method only and
 	 * resolving inside the uploads base.
+	 *
+	 * The temporary folder has a random 32-hex name from random_bytes() under uploads, is created
+	 * through WP_Filesystem and gets index.php and a deny rule, so received bytes are never reachable
+	 * by a guessable URL.
 	 *
 	 * @param array $session Session.
 	 * @param bool  $create  Create it (and name it) when missing.
@@ -1429,6 +1491,9 @@ final class Media_Receiver {
 	 * Writes index.php and an .htaccess deny rule into a folder (blueprint §9.10). On nginx the
 	 * rule is ignored: the folder name is random and file names carry no meaning.
 	 *
+	 * Writes only the fixed index.php and .htaccess deny rule into the plugin's own folders under
+	 * uploads, through WP_Filesystem.
+	 *
 	 * @param \WP_Filesystem_Base $fs     Filesystem.
 	 * @param string              $folder Folder.
 	 * @return bool
@@ -1475,6 +1540,9 @@ final class Media_Receiver {
 
 	/**
 	 * Whether a path resolves inside the uploads base.
+	 *
+	 * A realpath() call on each side resolves links and dot segments, so a path is accepted only when it
+	 * really lies inside the uploads base.
 	 *
 	 * @param string $path Path.
 	 * @param string $base Uploads base.

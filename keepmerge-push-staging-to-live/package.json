@@ -7,6 +7,7 @@
 	"author": "SoftGlaze",
 	"scripts": {
 		"build": "wp-scripts build",
+		"lint:js": "wp-scripts lint-js src",
 		"start": "wp-scripts start"
 	},
 	"devDependencies": {

@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstall routine.
+ * Uninstall routine (blueprint §18.3; SoftGlaze\SafePush\Uninstaller says what goes and when).
  *
  * @package SoftGlaze\SafePush
  */
@@ -9,4 +9,8 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
-// TODO(Phase 9): remove receiver users, role and credentials always; data only when the toggle is on.
+// The plugin is inactive during uninstall, so its autoloader is not registered.
+require_once __DIR__ . '/includes/class-tables.php';
+require_once __DIR__ . '/includes/class-uninstaller.php';
+
+SoftGlaze\SafePush\Uninstaller::run();

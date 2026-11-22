@@ -42,6 +42,9 @@ final class Crypto {
 	/**
 	 * Encrypts a string.
 	 *
+	 * Authenticated encryption (sodium secretbox, a fresh random nonce per value) keeps pairing
+	 * secrets unreadable in a database dump or backup (threat model §7.1).
+	 *
 	 * @param string $plaintext Value to protect.
 	 * @return string "v1:" + hex, or '' when sodium is unavailable (readiness reports that).
 	 */
@@ -58,6 +61,9 @@ final class Crypto {
 
 	/**
 	 * Decrypts a value written by encrypt().
+	 *
+	 * A value that does not decrypt fails closed with no fallback key, so a copied database with other
+	 * salts never yields usable secrets.
 	 *
 	 * A changed key (new salts, a changed constant) and a tampered value both fail the same way;
 	 * callers mark the pairing "Re-pair needed" and never fall back to another key.
@@ -94,6 +100,9 @@ final class Crypto {
 	/**
 	 * Whether the secretbox functions exist (native extension or core's sodium_compat).
 	 *
+	 * The secretbox comes from the PHP extension or from the sodium_compat library WordPress bundles;
+	 * the plugin ships no cryptography of its own.
+	 *
 	 * @return bool
 	 */
 	public static function available() {
@@ -102,6 +111,9 @@ final class Crypto {
 
 	/**
 	 * Which implementation provides sodium: the PHP extension or WordPress's sodium_compat.
+	 *
+	 * Reported on the Overview tab so an administrator can see which sodium implementation protects
+	 * the stored secrets.
 	 *
 	 * @return string 'ext-sodium', 'sodium_compat' or 'none'.
 	 */
@@ -184,6 +196,9 @@ final class Crypto {
 
 	/**
 	 * The 32-byte secretbox key.
+	 *
+	 * A hash_hmac() call derives a separate 32-byte key from SOFTGLAZE_SP_KEY or wp_salt( 'secure_auth' ), so
+	 * the salt itself is never the encryption key.
 	 *
 	 * @return string Binary key.
 	 */

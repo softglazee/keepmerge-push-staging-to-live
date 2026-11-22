@@ -188,6 +188,10 @@ export function reasonLabel( code, field = '' ) {
 			'The live site refused one of its files (its content does not match its type).',
 			'keepmerge-push-staging-to-live'
 		),
+		file_shared: __(
+			'One of its files already belongs to another item on the live site, which a push never shares.',
+			'keepmerge-push-staging-to-live'
+		),
 		changed_during_push: __(
 			'Changed on the live site after the plan was made, so live kept its own version.',
 			'keepmerge-push-staging-to-live'

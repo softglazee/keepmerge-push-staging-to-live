@@ -456,8 +456,7 @@ final class Pairing_Service {
 				if ( ! is_string( $valid ) ) {
 					return new WP_Error( 'invalid_ip', __( 'Enter a single IPv4 or IPv6 address, or leave the field empty.', 'keepmerge-push-staging-to-live' ), array( 'status' => 400 ) );
 				}
-				$pinned_ip = Throttle::bucket( $valid );
-				$pinned_ip = substr( $pinned_ip, 3 );
+				$pinned_ip = Throttle::canonical( $valid );
 			}
 			$data['pinned_ip'] = $pinned_ip;
 		}

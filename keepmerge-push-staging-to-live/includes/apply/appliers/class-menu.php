@@ -111,13 +111,17 @@ final class Menu extends Base {
 
 			$type    = self::str( $item, 'type' );
 			$classes = isset( $item['classes'] ) && is_array( $item['classes'] ) ? array_values( array_map( 'strval', $item['classes'] ) ) : array();
+			// The same sanitizers core's wp_update_nav_menu_item() applies, so a theme's walker that
+			// prints these fields gets what core would have stored (security review 2026-11-22, KM-07).
+			$classes = array_map( 'sanitize_html_class', $classes );
+			$xfn     = implode( ' ', array_map( 'sanitize_html_class', explode( ' ', self::str( $item, 'xfn' ) ) ) );
 			update_post_meta( $item_id, '_menu_item_type', wp_slash( $type ) );
 			update_post_meta( $item_id, '_menu_item_object', wp_slash( self::str( $item, 'object' ) ) );
 			update_post_meta( $item_id, '_menu_item_object_id', (string) self::int( $item, 'object_id' ) );
-			update_post_meta( $item_id, '_menu_item_url', wp_slash( self::str( $item, 'url' ) ) );
+			update_post_meta( $item_id, '_menu_item_url', wp_slash( sanitize_url( self::str( $item, 'url' ) ) ) );
 			update_post_meta( $item_id, '_menu_item_classes', self::slash( $classes ) );
-			update_post_meta( $item_id, '_menu_item_target', wp_slash( self::str( $item, 'target' ) ) );
-			update_post_meta( $item_id, '_menu_item_xfn', wp_slash( self::str( $item, 'xfn' ) ) );
+			update_post_meta( $item_id, '_menu_item_target', wp_slash( sanitize_key( self::str( $item, 'target' ) ) ) );
+			update_post_meta( $item_id, '_menu_item_xfn', wp_slash( $xfn ) );
 
 			self::replace_meta( 'post', $item_id, isset( $item['meta'] ) && is_array( $item['meta'] ) ? $item['meta'] : array(), $ctx, Menus::ITEM_FIELDS );
 		}

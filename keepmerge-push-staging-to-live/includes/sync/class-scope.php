@@ -308,6 +308,28 @@ final class Scope {
 	}
 
 	/**
+	 * Whether a widget_* option is the instance store of a widget registered on this site. The
+	 * widgets unit writes only those: any other widget_ name could be a plugin's own setting that
+	 * the plugin evaluates (security review 2026-11-22, KM-05).
+	 *
+	 * @param string $name Option name.
+	 * @return bool
+	 */
+	public static function widget_registered( $name ) {
+		global $wp_widget_factory;
+
+		if ( ! is_string( $name ) || 0 !== strpos( $name, 'widget_' ) || ! is_object( $wp_widget_factory ) || ! isset( $wp_widget_factory->widgets ) || ! is_array( $wp_widget_factory->widgets ) ) {
+			return false;
+		}
+		foreach ( $wp_widget_factory->widgets as $widget ) {
+			if ( is_object( $widget ) && isset( $widget->option_name ) && $name === $widget->option_name ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Allowlisted option names that exist on this site, minus the denylist and the widget
 	 * options (those travel as the widgets unit). Group entries and custom entries ending in "*"
 	 * are expanded against the options table.

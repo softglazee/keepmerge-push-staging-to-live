@@ -49,6 +49,9 @@ final class Path_Guard {
 	/**
 	 * Why a relative upload path is refused, or '' when it is accepted.
 	 *
+	 * Every relative path a push names passes here before anything is stored or written, so a received
+	 * path can never leave the uploads tree or reach a protected folder (threat model §7.5).
+	 *
 	 * @param mixed $path Relative path (uploads base excluded), as received.
 	 * @return string '' or a reason code.
 	 */
@@ -113,12 +116,16 @@ final class Path_Guard {
 	/**
 	 * Why an attachment's metadata names a file it may not have, or '' (threat model §7.5, S-49).
 	 * The metadata's own "file" must pass the guard; every "sizes" entry and "original_image" must
-	 * be a plain name that passes the guard inside the folder of the attachment's file.
+	 * be a plain name that passes the guard inside the folder of the attachment's file; a "thumb"
+	 * (written by WordPress before 2.9) must be one of those files.
+	 *
+	 * Core deletes every file named in attachment metadata together with the attachment, so a name a
+	 * push stores there must be the attachment's own file (S-49, security review KM-01).
 	 *
 	 * @param string $attached The attachment's relative path (already accepted).
 	 * @param mixed  $metadata Attachment metadata as received.
 	 * @return string '' or the field that was refused: metadata.file, metadata.sizes,
-	 *                metadata.original_image.
+	 *                metadata.original_image, metadata.thumb.
 	 */
 	public static function metadata_reason( $attached, $metadata ) {
 		if ( ! is_array( $metadata ) ) {
@@ -140,7 +147,33 @@ final class Path_Guard {
 		if ( isset( $metadata['original_image'] ) && '' !== self::sibling_reason( $attached, $metadata['original_image'] ) ) {
 			return 'metadata.original_image';
 		}
+		// Core deletes "thumb" with the attachment, checked only against the attachment's folder,
+		// which is the whole uploads base for a file in the root: it may only name one of the
+		// attachment's own files (security review 2026-11-22, KM-01).
+		if ( isset( $metadata['thumb'] ) && '' !== $metadata['thumb'] && ! self::is_own_file( $attached, $metadata, $metadata['thumb'] ) ) {
+			return 'metadata.thumb';
+		}
 		return '';
+	}
+
+	/**
+	 * Whether a plain file name is the attachment's own file, one of its sizes or its original image.
+	 *
+	 * @param string $attached The attachment's relative path.
+	 * @param array  $metadata Attachment metadata.
+	 * @param mixed  $name     File name.
+	 * @return bool
+	 */
+	private static function is_own_file( $attached, array $metadata, $name ) {
+		if ( ! is_string( $name ) || '' !== self::sibling_reason( $attached, $name ) ) {
+			return false;
+		}
+		$dir = dirname( (string) $attached );
+		$own = array();
+		foreach ( self::attachment_paths( $attached, $metadata ) as $path ) {
+			$own[] = '.' === $dir ? $path : substr( $path, strlen( $dir ) + 1 );
+		}
+		return in_array( $name, $own, true );
 	}
 
 	/**

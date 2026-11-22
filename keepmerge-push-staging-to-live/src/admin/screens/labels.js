@@ -49,7 +49,10 @@ export function resultLabel( result ) {
 export function actorLabel( row ) {
 	switch ( row.actor_type ) {
 		case 'user':
-			return row.actor || __( 'Deleted user', 'keepmerge-push-staging-to-live' );
+			return (
+				row.actor ||
+				__( 'Deleted user', 'keepmerge-push-staging-to-live' )
+			);
 		case 'cli':
 			return row.actor
 				? `${ row.actor } (WP-CLI)`

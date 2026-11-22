@@ -1,3 +1,5 @@
+// createElement is the classic JSX pragma (babel.config.js); ESLint cannot see that use.
+// eslint-disable-next-line no-unused-vars
 import { createElement, createRoot } from '@wordpress/element';
 import App from './App';
 import './admin.css';

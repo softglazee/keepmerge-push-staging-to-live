@@ -63,7 +63,9 @@ final class Receiver_User {
 	public static function register_hooks() {
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'refuse_interactive_login' ), 10, 2 );
 		add_filter( 'authenticate', array( __CLASS__, 'refuse_xmlrpc' ), 30, 3 );
-		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'limit_rest_scope' ), 10, 3 );
+		// Last on the filter, so a response another plugin returns for the same request cannot
+		// replace the receiver's 403.
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'limit_rest_scope' ), PHP_INT_MAX, 3 );
 		add_filter( 'editable_roles', array( __CLASS__, 'hide_role' ) );
 	}
 
@@ -250,8 +252,9 @@ final class Receiver_User {
 	}
 
 	/**
-	 * Hook: rest_pre_dispatch. A receiver may reach our remote routes only; everything else,
-	 * including /batch/v1 and any odd spelling of our own routes, gets 403.
+	 * Hook: rest_pre_dispatch at PHP_INT_MAX. A receiver may reach our remote routes only;
+	 * everything else, including /batch/v1 and any odd spelling of our own routes, gets 403,
+	 * whatever an earlier filter returned for it.
 	 *
 	 * @param mixed           $result  Result so far.
 	 * @param mixed           $server  Server.

@@ -109,6 +109,9 @@ final class Option_Policy {
 		'_oembed_*',
 		'_softglaze_sp_*',
 		'_thumbnail_id',
+		// Edited-image backups: their files never travel, and core deletes every name listed here
+		// together with the attachment (security review 2026-11-22, KM-01).
+		'_wp_attachment_backup_sizes',
 		'_stock',
 		'_stock_status',
 		'total_sales',
