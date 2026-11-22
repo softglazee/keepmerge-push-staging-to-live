@@ -16,6 +16,7 @@ use SoftGlaze\SafePush\Apply\Appliers\Term;
 use SoftGlaze\SafePush\Apply\Appliers\Woo_Product;
 use SoftGlaze\SafePush\Audit_Log;
 use SoftGlaze\SafePush\Limits;
+use SoftGlaze\SafePush\Receive_Window;
 use SoftGlaze\SafePush\Sync\Export_Context;
 use SoftGlaze\SafePush\Sync\Identity;
 use SoftGlaze\SafePush\Sync\Items;
@@ -112,6 +113,11 @@ final class Applier {
 			$apply = self::cursor( $session );
 			if ( 'remote' !== $apply['actor'] ) {
 				// A live administrator decides how this push goes on (resume or roll back on live).
+				return self::answer( $session, $after );
+			}
+			if ( ! Receive_Window::state()['open'] ) {
+				// A request that passed routing before the window was closed must not undo the
+				// interruption the close made; after the window is opened again the source may resume.
 				return self::answer( $session, $after );
 			}
 			// The source drove this apply, so it may resume it.
