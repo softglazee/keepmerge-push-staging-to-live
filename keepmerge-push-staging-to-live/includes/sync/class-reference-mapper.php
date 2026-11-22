@@ -880,7 +880,28 @@ final class Reference_Mapper {
 		}
 
 		$text = $this->chunk( $path . '/html', $value );
-		return null === $this->canon_fn ? $value : $text;
+		return null === $this->canon_fn ? $value : self::hash_html( $text );
+	}
+
+	/**
+	 * A piece of HTML as hashed: written the one way core's kses writes it when live's receiver
+	 * saves content (the space before "/>", entities and a bare "&" normalised, no space after ";"
+	 * in a style attribute). These rewrites change how markup is written, not what it is (the
+	 * Markup Gate compares the same way), and the same content must hash alike on both sites.
+	 *
+	 * @param string $html HTML.
+	 * @return string
+	 */
+	private static function hash_html( $html ) {
+		$html = wp_kses_normalize_entities( (string) $html );
+		$html = (string) preg_replace( '#\s*/>#', '/>', $html );
+		return (string) preg_replace_callback(
+			'#(\sstyle\s*=\s*")([^"]*)(")#i',
+			static function ( $m ) {
+				return $m[1] . preg_replace( '/;\s+/', ';', $m[2] ) . $m[3];
+			},
+			$html
+		);
 	}
 
 	/**
@@ -924,7 +945,8 @@ final class Reference_Mapper {
 			$content = array();
 			$pieces  = isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ? $block['innerContent'] : array();
 			foreach ( $pieces as $i => $piece ) {
-				$content[] = is_string( $piece ) ? $this->chunk( $path . '/' . $at . '/html/' . $i, $piece ) : null;
+				// The tree is the hash form only (rewrite mode builds its own), so pieces are canonical.
+				$content[] = is_string( $piece ) ? self::hash_html( $this->chunk( $path . '/' . $at . '/html/' . $i, $piece ) ) : null;
 			}
 
 			$tree[] = array(
