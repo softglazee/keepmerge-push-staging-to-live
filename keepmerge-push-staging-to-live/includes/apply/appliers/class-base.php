@@ -154,6 +154,10 @@ abstract class Base {
 				'post_status' => 'attachment' === $post_type ? 'inherit' : 'draft',
 				'post_title'  => (string) $title,
 				'post_author' => $ctx->author_id( isset( $ctx->data['author'] ) ? $ctx->data['author'] : array() ),
+				// The UUID goes in with the row, before core runs any save hook: a step that dies
+				// after the insert leaves a placeholder the next step finds by it (allocate_row()),
+				// not an unmarked draft and a second placeholder.
+				'meta_input'  => array( Identity::META_KEY => strtolower( (string) $ctx->row['uuid'] ) ),
 			)
 		);
 		if ( is_wp_error( $id ) ) {
