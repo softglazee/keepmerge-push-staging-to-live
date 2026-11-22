@@ -6,9 +6,10 @@ import Badge from '../../components/Badge';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { abortPush, errorMessage, stepPush } from '../../api';
 import { number } from './plan-labels';
-import { clock, logLine, pushStateInfo, reasonLabel } from './push-labels';
+import { clock, logLine, pushStateInfo, reasonLabel, size } from './push-labels';
 
-const ACTIVE = [ 'sending_items', 'paused' ];
+const ACTIVE = [ 'sending_files', 'sending_items', 'paused' ];
+const SENDING = [ 'sending_files', 'sending_items' ];
 
 /**
  * A push on its way to live: progress, what live answered per batch, and the per-step log
@@ -55,7 +56,7 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 			setRunning( true );
 			setError( '' );
 			const loop = ( p ) => {
-				if ( ! alive.current || 'sending_items' !== p.state ) {
+				if ( ! alive.current || ! SENDING.includes( p.state ) ) {
 					return Promise.resolve( p );
 				}
 				const go = () => stepPush( p.id, p.steps ).then( update ).then( loop );
@@ -112,8 +113,18 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 	const info = pushStateInfo( push.state );
 	const percent = push.total ? Math.min( 100, Math.round( ( 100 * push.sent ) / push.total ) ) : 0;
 	const active = ACTIVE.includes( push.state );
+	const sending = SENDING.includes( push.state );
 	const stopped = active && ! running && ! push.busy;
 	const held = push.counts.held || 0;
+	const files = push.files || { total: 0, bytes: 0, sent_bytes: 0 };
+	const settled = ( files.have || 0 ) + ( files.committed || 0 ) + ( files.refused || 0 );
+	const filePercent = files.bytes ? Math.min( 100, Math.round( ( 100 * files.sent_bytes ) / files.bytes ) ) : 0;
+	const fileStats = [
+		{ key: 'have', value: files.have || 0, label: __( 'Already on live (not sent)', 'keepmerge-push-staging-to-live' ), tone: 'neutral' },
+		{ key: 'committed', value: files.committed || 0, label: __( 'Sent and checked by live', 'keepmerge-push-staging-to-live' ), tone: 'success' },
+		{ key: 'renamed', value: files.renamed || 0, label: __( 'Get a new name on live', 'keepmerge-push-staging-to-live' ), tone: files.renamed > 0 ? 'info' : 'neutral' },
+		{ key: 'refused', value: files.refused || 0, label: __( 'Refused by live', 'keepmerge-push-staging-to-live' ), tone: files.refused > 0 ? 'warning' : 'neutral' },
+	];
 	const stats = [
 		{ key: 'staged', value: ( push.counts.staged || 0 ) + ( push.counts.pending_media || 0 ), label: __( 'Staged on live', 'keepmerge-push-staging-to-live' ), tone: 'success' },
 		{ key: 'held', value: held, label: __( 'Will need review on live', 'keepmerge-push-staging-to-live' ), tone: held > 0 ? 'warning' : 'neutral' },
@@ -130,10 +141,8 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 						{ __( 'Sending', 'keepmerge-push-staging-to-live' ) }
 					</Badge>
 				) }
-				{ ! running && 'sending_items' === push.state && stopped && (
-					<Badge tone="warning">{ __( 'Not running', 'keepmerge-push-staging-to-live' ) }</Badge>
-				) }
-				{ ! running && ! ( 'sending_items' === push.state && stopped ) && <Badge tone={ info.tone }>{ info.label }</Badge> }
+				{ ! running && sending && stopped && <Badge tone="warning">{ __( 'Not running', 'keepmerge-push-staging-to-live' ) }</Badge> }
+				{ ! running && ! ( sending && stopped ) && <Badge tone={ info.tone }>{ info.label }</Badge> }
 				<span className="sgsp-push__to">
 					{ sprintf(
 						/* translators: %s: live site host. */
@@ -142,6 +151,50 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 					) }
 				</span>
 			</div>
+
+			{ files.total > 0 && (
+				<div className="sgsp-push__files">
+					<div className="sgsp-progress" role="status" aria-live="polite">
+						<div className="sgsp-progress__label">
+							{ sprintf(
+								/* translators: 1: files done, 2: files in the push, 3: size sent, 4: size of the files. */
+								__( 'Files: %1$s of %2$s done (%3$s of %4$s)', 'keepmerge-push-staging-to-live' ),
+								number( settled ),
+								number( files.total ),
+								size( files.sent_bytes ),
+								size( files.bytes )
+							) }
+						</div>
+						<div className="sgsp-progress__track" aria-hidden="true">
+							<div className="sgsp-progress__bar sgsp-progress__bar--files" style={ { width: `${ filePercent }%` } } />
+						</div>
+						{ 'files' === push.phase && files.current && (
+							<p className="sgsp-progress__note">
+								{ sprintf(
+									/* translators: 1: file name, 2: part sent, 3: parts of the file. */
+									__( 'Sending %1$s: part %2$s of %3$s', 'keepmerge-push-staging-to-live' ),
+									files.current.name,
+									number( Math.min( files.current.chunks, files.current.next + 1 ) ),
+									number( files.current.chunks )
+								) }
+							</p>
+						) }
+					</div>
+					<ul className="sgsp-stats sgsp-stats--compact" aria-label={ __( 'Files of this push', 'keepmerge-push-staging-to-live' ) }>
+						{ fileStats.map( ( stat ) => (
+							<li key={ stat.key } className={ `sgsp-stat sgsp-stat--${ stat.tone }` }>
+								<span className="sgsp-stat__value">{ number( stat.value ) }</span>
+								<span className="sgsp-stat__label">{ stat.label }</span>
+							</li>
+						) ) }
+					</ul>
+					{ 'files' === push.phase && active && (
+						<p className="sgsp-field__hint sgsp-m-0">
+							{ __( 'Files go first: live checks each image and document against what it received before it stages the items that use them. Items follow when every file is done.', 'keepmerge-push-staging-to-live' ) }
+						</p>
+					) }
+				</div>
+			) }
 
 			<div className="sgsp-progress" role="status" aria-live="polite">
 				<div className="sgsp-progress__label">
@@ -178,10 +231,10 @@ export default function PushProgress( { initial, autoRun, notify, onChange, onPl
 				</Alert>
 			) }
 
-			{ 'sending_items' === push.state && stopped && ! error && (
+			{ sending && stopped && ! error && (
 				<Alert tone="info" title={ __( 'Not running', 'keepmerge-push-staging-to-live' ) }>
 					<p className="sgsp-m-0">
-						{ __( 'This push stopped when its page was closed. Resume sends the rest; a batch live already has is not stored twice.', 'keepmerge-push-staging-to-live' ) }
+						{ __( 'This push stopped when its page was closed. Resume sends the rest: a file continues at the next part live is missing, and a batch live already has is not stored twice.', 'keepmerge-push-staging-to-live' ) }
 					</p>
 				</Alert>
 			) }

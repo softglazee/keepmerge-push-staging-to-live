@@ -28,10 +28,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * The source half of blueprint §10.1–§10.2 and §12: a planned plan becomes a push. Its row in
  * pushes (side "source") moves through these states:
  *
- * - Planned, then sending_items, then staged (sending_files comes before items in Phase 6;
- *   applying and done in Phase 7).
- * - Paused from sending_items (network, 5xx after retries, window closed, rate, clock); Resume
- *   goes back to sending_items.
+ * - Planned, then sending_files (only when the push carries media; Media_Sender), then
+ *   sending_items, then staged (applying and done in Phase 7).
+ * - Paused from sending_files or sending_items (network, 5xx after retries, window closed, rate,
+ *   clock, live's storage); Resume goes back to the phase it paused in (cursor "phase").
  * - Failed: the session is gone or closed on live, or the pairing cannot be used.
  * - Aborted: the admin aborted it before apply; live purged the staged rows.
  *
@@ -47,12 +47,20 @@ final class Push_Runner {
 	/**
 	 * States of a push on the source (after planned).
 	 */
-	const STATES = array( 'sending_items', 'paused', 'staged', 'failed', 'aborted' );
+	const STATES = array( 'sending_files', 'sending_items', 'paused', 'staged', 'failed', 'aborted' );
 
 	/**
 	 * States in which steps run.
 	 */
-	const ACTIVE = array( 'sending_items', 'paused' );
+	const ACTIVE = array( 'sending_files', 'sending_items', 'paused' );
+
+	/**
+	 * The state of each sending phase.
+	 */
+	const PHASE_STATES = array(
+		'files' => 'sending_files',
+		'items' => 'sending_items',
+	);
 
 	const ROUTE = '/keepmerge/v1/remote/push';
 
@@ -128,9 +136,10 @@ final class Push_Runner {
 			return new WP_Error( 'push_in_progress', __( 'A push to this live site is still in progress. Resume or abort it first.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
 		}
 
-		$list     = array();
-		$lines    = array();
-		$declared = array_fill_keys( Push_Session::ACTIONS, 0 );
+		$list        = array();
+		$lines       = array();
+		$attachments = array();
+		$declared    = array_fill_keys( Push_Session::ACTIONS, 0 );
 		foreach ( Plan_Store::all_items( (int) $plan['id'] ) as $row ) {
 			$action = Planner::push_action( $row );
 			if ( '' === $action ) {
@@ -139,6 +148,9 @@ final class Push_Runner {
 			$list[]  = array( (string) $row['uuid'], $action );
 			$lines[] = $row['uuid'] . ':' . $action . ':' . ( isset( $row['payload']['s'] ) ? (string) $row['payload']['s'] : '' );
 			++$declared[ Item_Stager::PLAN_ACTIONS[ $action ] ];
+			if ( 'attachment' === $row['object_type'] && in_array( $action, Media_Sender::SEND_ACTIONS, true ) && (int) $row['local_object_id'] > 0 ) {
+				$attachments[] = array( (string) $row['uuid'], (int) $row['local_object_id'] );
+			}
 		}
 		if ( empty( $list ) ) {
 			return new WP_Error( 'nothing_to_push', __( 'Nothing to push: live already has every change you chose.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
@@ -154,6 +166,13 @@ final class Push_Runner {
 		$plan_hash = Planner::plan_hash( $lines );
 		if ( ! hash_equals( (string) $plan['plan_hash'], $plan_hash ) ) {
 			return new WP_Error( 'plan_changed', __( 'The plan changed since its summary was made. Plan again.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
+		}
+
+		// The media, by size only, before anything is sent: live refuses a push it has no room
+		// for at open (blueprint §9.9).
+		$media = Media_Sender::plan( $attachments );
+		if ( is_wp_error( $media ) ) {
+			return $media;
 		}
 
 		$row = null;
@@ -173,8 +192,8 @@ final class Push_Runner {
 				'plan_hash'  => $plan_hash,
 				'counts'     => $declared,
 				'items'      => count( $list ),
-				'files'      => 0,
-				'file_bytes' => 0,
+				'files'      => (int) $media['files'],
+				'file_bytes' => (int) $media['bytes'],
 			),
 			array( 'retries' => 3 )
 		);
@@ -189,15 +208,19 @@ final class Push_Runner {
 		$limit = isset( $live['limits']['item_batch'] ) && is_int( $live['limits']['item_batch'] ) ? $live['limits']['item_batch'] : Push_Session::MAX_BATCH;
 		$own   = (int) Settings::get()['item_batch'];
 
+		$phase          = $media['files'] > 0 ? 'files' : 'items';
 		$cursor         = $plan['cursor_json'];
 		$cursor['push'] = array(
 			'list'        => $list,
 			'total'       => count( $list ),
 			'declared'    => $declared,
+			'phase'       => $phase,
+			'media'       => $media['media'],
+			'files'       => Media_Sender::cursor( $media, Media_Sender::chunk_from( isset( $live['limits'] ) ? $live['limits'] : null ) ),
 			'pos'         => 0,
 			'seq'         => 0,
 			'pending'     => null,
-			'stubs'       => array(),
+			'stubs'       => $media['stubs'],
 			'batch_size'  => max( 1, min( Push_Session::MAX_BATCH, $limit, $own ) ),
 			'batch_bytes' => self::MAX_BATCH_BYTES,
 			'counts'      => array_fill_keys( Push_Session::STATUSES, 0 ),
@@ -213,12 +236,20 @@ final class Push_Runner {
 			'finished'    => 0,
 			'live_state'  => isset( $live['state'] ) ? sanitize_key( (string) $live['state'] ) : 'open',
 		);
-		self::log( $cursor, 'open', array( 'items' => count( $list ) ) );
+		self::log(
+			$cursor,
+			'open',
+			array(
+				'items' => count( $list ),
+				'files' => (int) $media['files'],
+				'bytes' => (int) $media['bytes'],
+			)
+		);
 
 		Plan_Store::update(
 			(int) $plan['id'],
 			array(
-				'state'       => 'sending_items',
+				'state'       => self::PHASE_STATES[ $phase ],
 				'cursor_json' => $cursor,
 				'error_code'  => '',
 			)
@@ -231,7 +262,13 @@ final class Push_Runner {
 				'pairing_id'  => (int) $pairing['id'],
 				'object_type' => 'push',
 				'object_ref'  => (string) $plan['push_uuid'],
-				'details'     => array_merge( $declared, array( 'items' => count( $list ) ) ),
+				'details'     => array_merge(
+					$declared,
+					array(
+						'items' => count( $list ),
+						'files' => (int) $media['files'],
+					)
+				),
 			)
 		);
 
@@ -273,7 +310,9 @@ final class Push_Runner {
 			return self::present( $row );
 		}
 
-		// Claim the step: only the request whose compare-and-swap succeeds sends.
+		// Claim the step: only the request whose compare-and-swap succeeds sends. A paused push
+		// goes back to the phase it paused in.
+		$phase                        = isset( $p['phase'], self::PHASE_STATES[ $p['phase'] ] ) ? (string) $p['phase'] : 'items';
 		$budget                       = Limits::time_budget();
 		$cursor['push']['busy_until'] = $now + $budget + 15;
 		$cursor['push']['steps']      = (int) $p['steps'] + 1;
@@ -282,7 +321,7 @@ final class Push_Runner {
 		if ( $resumed ) {
 			self::log( $cursor, 'resume', array() );
 		}
-		if ( ! self::claim( (int) $row['id'], $raw, $cursor ) ) {
+		if ( ! self::claim( (int) $row['id'], $raw, $cursor, self::PHASE_STATES[ $phase ] ) ) {
 			return new WP_Error( 'push_moved', __( 'The push moved on in another window or tab. The screen now shows where it is.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
 		}
 
@@ -297,22 +336,32 @@ final class Push_Runner {
 		}
 
 		$deadline = microtime( true ) + max( 3, $budget - 3 );
-		$state    = 'sending_items';
+		$state    = self::PHASE_STATES[ $phase ];
 		$error    = null;
 		$ctx      = Export_Context::source( (int) $row['pairing_id'] );
-		$links    = array(
-			'post' => Sync_State::linked_map( (int) $row['pairing_id'], 'post' ),
-			'term' => Sync_State::linked_map( (int) $row['pairing_id'], 'term' ),
-		);
 
-		for ( $round = 0; $round < 12; $round++ ) {
-			$outcome = self::batch( $row, $cursor, $client, $ctx, $links, $deadline );
-			if ( 'retry' === $outcome['next'] && microtime( true ) < $deadline - 2 ) {
-				continue;
+		if ( 'files' === $phase ) {
+			// Every file first (blueprint §12.1): live checks attachments against them.
+			$outcome = Media_Sender::step( $row, $cursor, $client, $ctx, $deadline );
+			$state   = $outcome['state'];
+			$error   = $outcome['error'];
+			if ( 'sending_items' === $state ) {
+				$cursor['push']['phase'] = 'items';
 			}
-			$state = $outcome['state'];
-			$error = $outcome['error'];
-			break;
+		} else {
+			$links = array(
+				'post' => Sync_State::linked_map( (int) $row['pairing_id'], 'post' ),
+				'term' => Sync_State::linked_map( (int) $row['pairing_id'], 'term' ),
+			);
+			for ( $round = 0; $round < 12; $round++ ) {
+				$outcome = self::batch( $row, $cursor, $client, $ctx, $links, $deadline );
+				if ( 'retry' === $outcome['next'] && microtime( true ) < $deadline - 2 ) {
+					continue;
+				}
+				$state = $outcome['state'];
+				$error = $outcome['error'];
+				break;
+			}
 		}
 
 		if ( null !== $pairing_row ) {
@@ -333,6 +382,7 @@ final class Push_Runner {
 			$fields['cursor_json']      = $cursor;
 			$fields['finished_gmt']     = gmdate( 'Y-m-d H:i:s' );
 			self::audit_end( $row, $cursor, $state );
+			Media_Sender::forget( (int) $row['id'] );
 		}
 		Plan_Store::update( (int) $row['id'], $fields );
 
@@ -351,7 +401,7 @@ final class Push_Runner {
 	public static function run( $push_id, $client = null, $max = 500 ) {
 		$push = self::present( self::find( $push_id ) );
 		for ( $i = 0; $i < $max; $i++ ) {
-			if ( ! isset( $push['state'] ) || 'sending_items' !== $push['state'] ) {
+			if ( ! isset( $push['state'] ) || ! in_array( $push['state'], self::PHASE_STATES, true ) ) {
 				break;
 			}
 			if ( $push['wait'] > 0 ) {
@@ -416,6 +466,7 @@ final class Push_Runner {
 				'error_code'   => '',
 			)
 		);
+		Media_Sender::forget( (int) $row['id'] );
 		Audit_Log::write(
 			'push_aborted',
 			array(
@@ -457,7 +508,7 @@ final class Push_Runner {
 		global $wpdb;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM %i WHERE pairing_id = %d AND side = %s AND state IN ('sending_items','paused','staged','failed','aborted') ORDER BY id DESC LIMIT 1", Tables::table_name( 'pushes' ), absint( $pairing_id ), Plan_Store::SIDE ) );
+		$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM %i WHERE pairing_id = %d AND side = %s AND state IN ('sending_files','sending_items','paused','staged','failed','aborted') ORDER BY id DESC LIMIT 1", Tables::table_name( 'pushes' ), absint( $pairing_id ), Plan_Store::SIDE ) );
 		return $id > 0 ? self::find( $id ) : null;
 	}
 
@@ -471,7 +522,7 @@ final class Push_Runner {
 		global $wpdb;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM %i WHERE side = %s AND state IN ('sending_items','paused','staged','failed','aborted') ORDER BY id DESC LIMIT %d", Tables::table_name( 'pushes' ), Plan_Store::SIDE, max( 1, min( 200, absint( $limit ) ) ) ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM %i WHERE side = %s AND state IN ('sending_files','sending_items','paused','staged','failed','aborted') ORDER BY id DESC LIMIT %d", Tables::table_name( 'pushes' ), Plan_Store::SIDE, max( 1, min( 200, absint( $limit ) ) ) ) );
 		$out = array();
 		foreach ( is_array( $ids ) ? $ids : array() as $id ) {
 			$push = self::find( (int) $id );
@@ -498,12 +549,32 @@ final class Push_Runner {
 		$pairing = Source_Pairing::find( isset( $row['cursor_json']['pairing'] ) ? (string) $row['cursor_json']['pairing'] : '' );
 		$admin   = is_array( $pairing ) ? Planner::live_admin( $pairing ) : '';
 		$now     = time();
+		$files   = isset( $p['files'] ) && is_array( $p['files'] ) ? $p['files'] : Media_Sender::cursor(
+			array(
+				'files' => 0,
+				'bytes' => 0,
+			),
+			0
+		);
 
 		return array(
 			'id'          => (int) $row['id'],
 			'push'        => (string) $row['push_uuid'],
 			'pairing'     => isset( $row['cursor_json']['pairing'] ) ? (string) $row['cursor_json']['pairing'] : '',
 			'state'       => (string) $row['state'],
+			'phase'       => isset( $p['phase'] ) ? (string) $p['phase'] : 'items',
+			'files'       => array(
+				'total'      => (int) $files['total'],
+				'bytes'      => (int) $files['bytes'],
+				'sent_bytes' => (int) min( (int) $files['bytes'], (int) $files['sent_bytes'] ),
+				'have'       => (int) $files['have'],
+				'need'       => (int) $files['need'],
+				'renamed'    => (int) $files['renamed'],
+				'committed'  => (int) $files['committed'],
+				'refused'    => (int) $files['refused'],
+				'chunk'      => (int) $files['chunk'],
+				'current'    => is_array( $files['current'] ) ? $files['current'] : null,
+			),
 			'host'        => (string) $p['host'],
 			'total'       => (int) $p['total'],
 			'sent'        => (int) $p['pos'],
@@ -852,6 +923,11 @@ final class Push_Runner {
 		$envelope['data'] = $item['data'];
 		$envelope['refs'] = $refs;
 
+		if ( 'attachment' === $kind ) {
+			// Which file rows of this push hold the attachment's files (sent before the items).
+			$envelope['media'] = Media_Sender::media_map( (int) $plan_row['push_id'], isset( $item['data']['files'] ) ? $item['data']['files'] : array() );
+		}
+
 		if ( 'product' === $kind && isset( $p['groups'] ) && is_array( $p['groups'] ) ) {
 			$groups = array();
 			foreach ( Item_Stager::GROUP_NAMES as $name ) {
@@ -891,13 +967,15 @@ final class Push_Runner {
 	 * @param int    $id     Push ID.
 	 * @param string $raw    Cursor as read.
 	 * @param array  $cursor Claimed cursor.
+	 * @param string $state  State of the phase the step runs (sending_files or sending_items).
 	 * @return bool
 	 */
-	private static function claim( $id, $raw, array $cursor ) {
+	private static function claim( $id, $raw, array $cursor, $state ) {
 		global $wpdb;
 
+		$state = in_array( $state, self::PHASE_STATES, true ) ? $state : 'sending_items';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; compare-and-swap on the cursor so one step runs at a time.
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE %i SET cursor_json = %s, state = 'sending_items' WHERE id = %d AND side = %s AND cursor_json = %s", Tables::table_name( 'pushes' ), (string) wp_json_encode( $cursor ), absint( $id ), Plan_Store::SIDE, (string) $raw ) );
+		$updated = $wpdb->query( $wpdb->prepare( 'UPDATE %i SET cursor_json = %s, state = %s WHERE id = %d AND side = %s AND cursor_json = %s', Tables::table_name( 'pushes' ), (string) wp_json_encode( $cursor ), $state, absint( $id ), Plan_Store::SIDE, (string) $raw ) );
 		return 1 === (int) $updated;
 	}
 

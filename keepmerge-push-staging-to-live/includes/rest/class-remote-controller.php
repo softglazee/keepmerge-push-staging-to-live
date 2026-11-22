@@ -20,6 +20,7 @@ use SoftGlaze\SafePush\Sync\Baseline_Matcher;
 use SoftGlaze\SafePush\Sync\Code_Report;
 use SoftGlaze\SafePush\Sync\Manifest;
 use SoftGlaze\SafePush\Throttle;
+use SoftGlaze\SafePush\Transfer\Media_Receiver;
 use SoftGlaze\SafePush\Transfer\Push_Session;
 use WP_Error;
 use WP_HTTP_Response;
@@ -35,11 +36,13 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Routes under keepmerge/v1/remote/ that the paired source calls (threat model §5.1). This
  * version has status, pair/confirm and pair/finalize; the four read-only routes of an active
  * pairing: baseline, manifest, items/fetch and code-manifest (the last only while live's
- * "Allow code report requests" is on); and the push session routes push, push/{id},
+ * "Allow code report requests" is on); the push session routes push, push/{id},
  * push/{id}/items and push/{id}/abort, which stage items in Keepmerge's own tables and never
- * write live's content, options or sync state (Phase 5). The read-only routes write only what
- * the chain writes for every request (the nonce, the last-used time) and one audit row with
- * counts.
+ * write live's content, options or sync state (Phase 5); and the media routes push/{id}/files,
+ * push/{id}/files/{ref}/chunks/{n} and push/{id}/files/{ref}/commit, which write only into the
+ * push's own temporary folder under uploads/keepmerge-push-staging-to-live/tmp/ (Phase 6). The
+ * read-only routes write only what the chain writes for every request (the nonce, the last-used
+ * time) and one audit row with counts.
  *
  * The routes are registered only while the receive window is open, so a site with the window
  * closed has no remote route at all. Every route's permission_callback is the full chain in
@@ -229,6 +232,61 @@ final class Remote_Controller {
 				'args'                => $args,
 			)
 		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push/' . $id . '/files',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'push_files' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push_files' ),
+				'args'                => $args,
+			)
+		);
+
+		// A file is named by an integer ref and a chunk by an integer n, never by a path. The route
+		// takes a sign so that a negative number reaches the handler and is refused there with 400
+		// after the chain (threat model R11).
+		$int       = '-?[0-9]{1,9}';
+		$file_args = array_merge(
+			$args,
+			array(
+				'ref' => array(
+					'type'    => 'string',
+					'pattern' => '^' . $int . '$',
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push/' . $id . '/files/(?P<ref>' . $int . ')/chunks/(?P<n>' . $int . ')',
+			array(
+				'methods'             => 'PUT',
+				'callback'            => array( $this, 'push_chunk' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push_chunk' ),
+				'args'                => array_merge(
+					$file_args,
+					array(
+						'n' => array(
+							'type'    => 'string',
+							'pattern' => '^' . $int . '$',
+						),
+					)
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			self::PREFIX . '/push/' . $id . '/files/(?P<ref>' . $int . ')/commit',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'push_commit' ),
+				'permission_callback' => array( Remote_Permission::class, 'check_push_commit' ),
+				'args'                => $file_args,
+			)
+		);
 	}
 
 	/**
@@ -273,14 +331,17 @@ final class Remote_Controller {
 					'protocol'  => (int) Signer::PROTOCOL_VERSION,
 				),
 				'server_time'               => time(),
-				'limits'                    => array(
-					'post_max_size'      => Limits::post_max_size_bytes(),
-					'max_execution_time' => Limits::max_execution_time(),
-					'memory_limit'       => Limits::memory_limit_bytes(),
-					'time_budget'        => Limits::time_budget(),
-					'chunk_bytes'        => (int) $settings['chunk_kb'] * 1024,
-					'item_batch'         => (int) $settings['item_batch'],
-					'requests_per_min'   => Nonce_Store::RATE_LIMIT,
+				'limits'                    => array_merge(
+					array(
+						'post_max_size'      => Limits::post_max_size_bytes(),
+						'max_execution_time' => Limits::max_execution_time(),
+						'memory_limit'       => Limits::memory_limit_bytes(),
+						'time_budget'        => Limits::time_budget(),
+						'item_batch'         => (int) $settings['item_batch'],
+						'requests_per_min'   => Nonce_Store::RATE_LIMIT,
+					),
+					// Chunk size (≤ half of post_max_size), per-file and per-push caps.
+					Media_Receiver::limits()
 				),
 				'pairing'                   => array(
 					'uuid'       => $pairing['pairing_uuid'],
@@ -610,6 +671,89 @@ final class Remote_Controller {
 		}
 
 		$result = Push_Session::abort( $session, $context['pairing'] );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * POST /remote/push/{id}/files (R10): the need list (have, need, renamed) for at most 2,000
+	 * files; every path passes Path_Guard (blueprint §9 steps 2 and 3).
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function push_files( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, Media_Receiver::FILES_MAX_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
+		if ( is_wp_error( $session ) ) {
+			return $session;
+		}
+
+		$result = Media_Receiver::announce( $session, $context['pairing'], $body );
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * PUT /remote/push/{id}/files/{ref}/chunks/{n} (R11): one chunk as a raw octet-stream body,
+	 * checked against X-SGSP-Chunk-SHA256 and written into the push's temporary folder.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function push_chunk( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
+		if ( is_wp_error( $session ) ) {
+			return $session;
+		}
+
+		$result = Media_Receiver::put_chunk(
+			$session,
+			$context['pairing'],
+			(string) $request->get_param( 'ref' ),
+			(string) $request->get_param( 'n' ),
+			(string) $request->get_body(),
+			$request->get_header( 'X-SGSP-Chunk-SHA256' )
+		);
+		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * POST /remote/push/{id}/files/{ref}/commit (R12): the parts become one file, checked by
+	 * size, SHA-256, its real type and (for images) a readable image.
+	 *
+	 * @param WP_REST_Request $request Request (passed the chain).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function push_commit( WP_REST_Request $request ) {
+		$context = Remote_Permission::context( $request );
+		if ( null === $context ) {
+			return new WP_Error( 'pairing_invalid', 'pairing_invalid', array( 'status' => 401 ) );
+		}
+
+		$body = self::decode_body( $request, Media_Receiver::COMMIT_MAX_BYTES );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		$session = Push_Session::for_pairing( (string) $request->get_param( 'id' ), $context['pairing'] );
+		if ( is_wp_error( $session ) ) {
+			return $session;
+		}
+
+		$result = Media_Receiver::commit( $session, $context['pairing'], (string) $request->get_param( 'ref' ) );
 		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result, 200 );
 	}
 

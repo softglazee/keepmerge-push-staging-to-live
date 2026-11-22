@@ -58,8 +58,9 @@ final class Cron {
 		Throttle::prune();
 		Sync\Plan_Store::prune( 0 );
 		Transfer\Push_Session::expire_old( 50 );
+		Transfer\Media_Receiver::prune_temp();
 
-		// TODO(Phase 8): temp directories older than 24 h, push_items rows and snapshot files past
-		// retention (never the newest push's snapshot).
+		// TODO(Phase 8): push_items rows and snapshot files past retention (never the newest
+		// push's snapshot).
 	}
 }

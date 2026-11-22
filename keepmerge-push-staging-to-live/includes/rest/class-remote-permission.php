@@ -56,12 +56,18 @@ final class Remote_Permission {
 
 	const ROUTE_PUSH_ABORT = 'push_abort';
 
+	const ROUTE_PUSH_FILES = 'push_files';
+
+	const ROUTE_PUSH_CHUNK = 'push_chunk';
+
+	const ROUTE_PUSH_COMMIT = 'push_commit';
+
 	/**
 	 * Routes an active pairing answers with its long-term credentials (threat model §5.1: R1,
-	 * the read-only routes R4 to R7 and the push routes R8, R9, R13, R15). The pairing routes R2
-	 * and R3 end with approval.
+	 * the read-only routes R4 to R7, the push routes R8, R9, R13, R15 and the media routes R10 to
+	 * R12). The pairing routes R2 and R3 end with approval.
 	 */
-	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST, self::ROUTE_PUSH, self::ROUTE_PUSH_GET, self::ROUTE_PUSH_ITEMS, self::ROUTE_PUSH_ABORT );
+	const ACTIVE_ROUTES = array( self::ROUTE_STATUS, self::ROUTE_BASELINE, self::ROUTE_MANIFEST, self::ROUTE_FETCH, self::ROUTE_CODE_MANIFEST, self::ROUTE_PUSH, self::ROUTE_PUSH_GET, self::ROUTE_PUSH_ITEMS, self::ROUTE_PUSH_ABORT, self::ROUTE_PUSH_FILES, self::ROUTE_PUSH_CHUNK, self::ROUTE_PUSH_COMMIT );
 
 	const SET_BOOTSTRAP = 'bootstrap';
 
@@ -203,6 +209,37 @@ final class Remote_Permission {
 	 */
 	public static function check_push_abort( WP_REST_Request $request ) {
 		return self::check( $request, self::ROUTE_PUSH_ABORT );
+	}
+
+	/**
+	 * Chain for POST /remote/push/{id}/files (R10).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push_files( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH_FILES );
+	}
+
+	/**
+	 * Chain for PUT /remote/push/{id}/files/{ref}/chunks/{n} (R11): the raw chunk is the body that
+	 * the content hash and the signature cover.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push_chunk( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH_CHUNK );
+	}
+
+	/**
+	 * Chain for POST /remote/push/{id}/files/{ref}/commit (R12).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function check_push_commit( WP_REST_Request $request ) {
+		return self::check( $request, self::ROUTE_PUSH_COMMIT );
 	}
 
 	/**
@@ -376,10 +413,11 @@ final class Remote_Permission {
 	/**
 	 * Which credential set a pairing in its current state accepts on a route, or the refusal.
 	 *
-	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phases 3, 4, 5):
+	 * The state × route table (threat model §5.1; Phase 2A plan, extended in Phases 3 to 6):
 	 *
 	 *   state              status      confirm     finalize    baseline / manifest / fetch / code_manifest /
-	 *                                                          push / push_get / push_items / push_abort
+	 *                                                          push / push_get / push_items / push_abort /
+	 *                                                          push_files / push_chunk / push_commit
 	 *   pending            bootstrap   bootstrap   long-term*  401 pairing_invalid
 	 *   awaiting_approval  long-term   403 pairing_not_approved (every route but status)
 	 *   active             long-term   401         401         long-term

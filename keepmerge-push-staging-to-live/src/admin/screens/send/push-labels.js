@@ -16,6 +16,10 @@ export function pushStateInfo( state, interrupted = false ) {
 		};
 	}
 	const map = {
+		sending_files: [
+			__( 'Sending files', 'keepmerge-push-staging-to-live' ),
+			'info',
+		],
 		sending_items: [
 			__( 'Sending', 'keepmerge-push-staging-to-live' ),
 			'info',
@@ -133,6 +137,18 @@ export function reasonLabel( code, field = '' ) {
 			'Its theme is not installed on the live site.',
 			'keepmerge-push-staging-to-live'
 		),
+		file_missing: __(
+			'Its file is missing on this site, so it was not sent.',
+			'keepmerge-push-staging-to-live'
+		),
+		media_missing: __(
+			'The live site did not receive all of its files.',
+			'keepmerge-push-staging-to-live'
+		),
+		file_refused: __(
+			'The live site refused one of its files (its content does not match its type).',
+			'keepmerge-push-staging-to-live'
+		),
 	};
 	if ( labels[ code ] ) {
 		return labels[ code ];
@@ -175,6 +191,18 @@ export function reasonLabel( code, field = '' ) {
 export function logLine( entry ) {
 	switch ( entry.event ) {
 		case 'open':
+			if ( entry.files ) {
+				return sprintf(
+					/* translators: 1: number of items, 2: number of files, 3: their size. */
+					__(
+						'Push opened on live for %1$s items and %2$s files (%3$s).',
+						'keepmerge-push-staging-to-live'
+					),
+					number( entry.items ),
+					number( entry.files ),
+					size( entry.bytes )
+				);
+			}
 			return sprintf(
 				/* translators: %s: number of items. */
 				__(
@@ -182,6 +210,70 @@ export function logLine( entry ) {
 					'keepmerge-push-staging-to-live'
 				),
 				number( entry.items )
+			);
+		case 'files':
+			return sprintf(
+				/* translators: 1: files live already has, 2: files to send, 3: files to send under a new name. */
+				__(
+					'Live answered for its files: %1$s already there, %2$s to send, %3$s to send under a new name.',
+					'keepmerge-push-staging-to-live'
+				),
+				number( entry.have ),
+				number( entry.need ),
+				number( entry.renamed )
+			);
+		case 'file_done':
+			return entry.renamed
+				? sprintf(
+						/* translators: %s: file name. */
+						__(
+							'%s sent and checked by live (it gets a new name there).',
+							'keepmerge-push-staging-to-live'
+						),
+						entry.name
+					)
+				: sprintf(
+						/* translators: %s: file name. */
+						__(
+							'%s sent and checked by live.',
+							'keepmerge-push-staging-to-live'
+						),
+						entry.name
+					);
+		case 'file_refused':
+			return sprintf(
+				/* translators: 1: file name, 2: reason code. */
+				__(
+					'%1$s was refused (%2$s); the item that uses it will be refused on live.',
+					'keepmerge-push-staging-to-live'
+				),
+				entry.name,
+				entry.code
+			);
+		case 'chunk_halved':
+			return sprintf(
+				/* translators: %s: size of a file part. */
+				__(
+					'The live server refused the request size; files now go in parts of %s.',
+					'keepmerge-push-staging-to-live'
+				),
+				size( entry.chunk )
+			);
+		case 'chunk_retry':
+			return __(
+				'A part of a file arrived damaged on live; it was sent again.',
+				'keepmerge-push-staging-to-live'
+			);
+		case 'files_done':
+			return sprintf(
+				/* translators: 1: files sent, 2: files live already had, 3: files refused. */
+				__(
+					'Files done: %1$s sent, %2$s already on live, %3$s refused. Sending items.',
+					'keepmerge-push-staging-to-live'
+				),
+				number( entry.committed ),
+				number( entry.have ),
+				number( entry.refused )
 			);
 		case 'batch': {
 			const counts = [
@@ -268,6 +360,50 @@ export function logLine( entry ) {
 			);
 		default:
 			return entry.event;
+	}
+}
+
+/**
+ * A size in bytes in words (KB, MB, GB; 1 KB = 1,024 bytes).
+ *
+ * @param {number} bytes Bytes.
+ * @return {string} Size.
+ */
+export function size( bytes ) {
+	let amount = Number( bytes ) || 0;
+	let unit = 0;
+	while ( amount >= 1024 && unit < 3 ) {
+		amount /= 1024;
+		unit++;
+	}
+	const text = new Intl.NumberFormat( undefined, {
+		maximumFractionDigits: unit > 1 ? 1 : 0,
+	} ).format( amount );
+	switch ( unit ) {
+		case 0:
+			return sprintf(
+				/* translators: %s: a size in bytes. */
+				__( '%s bytes', 'keepmerge-push-staging-to-live' ),
+				text
+			);
+		case 1:
+			return sprintf(
+				/* translators: %s: a size in kilobytes. */
+				__( '%s KB', 'keepmerge-push-staging-to-live' ),
+				text
+			);
+		case 2:
+			return sprintf(
+				/* translators: %s: a size in megabytes. */
+				__( '%s MB', 'keepmerge-push-staging-to-live' ),
+				text
+			);
+		default:
+			return sprintf(
+				/* translators: %s: a size in gigabytes. */
+				__( '%s GB', 'keepmerge-push-staging-to-live' ),
+				text
+			);
 	}
 }
 

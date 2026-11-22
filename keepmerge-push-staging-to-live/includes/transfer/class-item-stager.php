@@ -30,8 +30,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * unknown keys are dropped. Live decides with its own settings: the post type or taxonomy must be
  * included here and never denied, an option must be on this site's own allowlist and pass
  * Option_Policy (the source's allowlist cannot widen it), meta keys excluded here are dropped, a
- * page template must exist in this site's theme, attachment paths must pass Path_Guard, and every
- * reference must name an item of this push or an object this site includes. Values are decoded
+ * page template must exist in this site's theme, attachment paths must pass Path_Guard and an
+ * attachment's files must be among this push's committed files (or files live already has), and
+ * every reference must name an item of this push or an object this site includes. Values are decoded
  * with Normalizer::decode(), which builds arrays, scalars and stdClass only: nothing received is
  * ever unserialized. The markup gate (Phase 4, unchanged) then holds items for a live
  * administrator.
@@ -322,15 +323,24 @@ final class Item_Stager {
 	private $warnings = array();
 
 	/**
+	 * Reads the push's file rows by ref (Media_Receiver::rows()), or null when the push has none.
+	 *
+	 * @var callable|null
+	 */
+	private $files;
+
+	/**
 	 * Creates a stager for one batch of a push.
 	 *
-	 * @param array $pairing Pairing row.
-	 * @param array $known   uuid => array( kind, status ) of the rows the push already has.
+	 * @param array         $pairing Pairing row.
+	 * @param array         $known   uuid => array( kind, status ) of the rows the push already has.
+	 * @param callable|null $files   Returns the push's file rows for a list of refs.
 	 */
-	public function __construct( array $pairing, array $known ) {
+	public function __construct( array $pairing, array $known, $files = null ) {
 		$this->pairing = $pairing;
 		$this->known   = $known;
 		$this->origins = Normalizer::local_origins();
+		$this->files   = is_callable( $files ) ? $files : null;
 	}
 
 	/**
@@ -414,7 +424,7 @@ final class Item_Stager {
 	 *
 	 * @param array $id  Identity from identity().
 	 * @param array $raw The envelope.
-	 * @return array{status:string,reason:string,field:string,warnings:array,gate:array,target:int,data:array|null,groups:array,refs:array,media:bool}
+	 * @return array{status:string,reason:string,field:string,warnings:array,gate:array,target:int,data:array|null,groups:array,refs:array,media:array|null}
 	 */
 	public function stage( array $id, array $raw ) {
 		$this->warnings = array();
@@ -472,6 +482,17 @@ final class Item_Stager {
 			}
 		}
 
+		// The files of an attachment arrived first (blueprint §12.1) and were checked at commit:
+		// the item names them, live finds them among this push's file rows.
+		$media = null;
+		if ( 'attachment' === $id['kind'] ) {
+			$problem = array();
+			$media   = $this->media( $data, isset( $raw['media'] ) ? $raw['media'] : null, $problem );
+			if ( null === $media ) {
+				return $this->refuse( $out, $problem[0], $problem[1] );
+			}
+		}
+
 		$out['refs'] = $this->resolve_refs( $id, $refs );
 		$this->structural( $id['kind'], $data, $out['refs'] );
 
@@ -480,15 +501,8 @@ final class Item_Stager {
 		$out['data']   = $data;
 		$out['groups'] = $groups;
 		$out['gate']   = array_slice( $gate, 0, self::MAX_GATE_REASONS );
-		$out['media']  = 'attachment' === $id['kind'];
-		if ( ! empty( $gate ) ) {
-			$out['status'] = 'held';
-		} elseif ( $out['media'] ) {
-			// TODO(Phase 6): the files arrive and are checked; the row then becomes staged.
-			$out['status'] = 'pending_media';
-		} else {
-			$out['status'] = 'staged';
-		}
+		$out['media']  = $media;
+		$out['status'] = empty( $gate ) ? 'staged' : 'held';
 
 		$this->remember( $id, $out['status'] );
 		return $this->finish( $out );
@@ -564,7 +578,7 @@ final class Item_Stager {
 			'data'     => null,
 			'groups'   => array(),
 			'refs'     => array(),
-			'media'    => false,
+			'media'    => null,
 			'identity' => $id,
 		);
 	}
@@ -584,6 +598,7 @@ final class Item_Stager {
 		$out['data']   = null;
 		$out['refs']   = array();
 		$out['gate']   = array();
+		$out['media']  = null;
 		$this->remember( $out['identity'], 'refused' );
 		return $this->finish( $out );
 	}
@@ -1295,22 +1310,9 @@ final class Item_Stager {
 			return 'file';
 		}
 		if ( isset( $clean['metadata'] ) ) {
-			$meta = $clean['metadata'];
-			if ( isset( $meta['file'] ) && ( ! is_string( $meta['file'] ) || '' !== Path_Guard::reason( $meta['file'] ) ) ) {
-				return 'metadata.file';
-			}
-			if ( isset( $meta['sizes'] ) ) {
-				if ( ! is_array( $meta['sizes'] ) ) {
-					return 'metadata.sizes';
-				}
-				foreach ( $meta['sizes'] as $size ) {
-					if ( ! is_array( $size ) || ( isset( $size['file'] ) && '' !== Path_Guard::sibling_reason( $file, $size['file'] ) ) ) {
-						return 'metadata.sizes';
-					}
-				}
-			}
-			if ( isset( $meta['original_image'] ) && '' !== Path_Guard::sibling_reason( $file, $meta['original_image'] ) ) {
-				return 'metadata.original_image';
+			$field = Path_Guard::metadata_reason( $file, $clean['metadata'] );
+			if ( '' !== $field ) {
+				return $field;
 			}
 		}
 		foreach ( isset( $clean['files'] ) ? $clean['files'] : array() as $entry ) {
@@ -1319,6 +1321,89 @@ final class Item_Stager {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Checks an attachment against the files of this push (blueprint §9, Phase 6): its file list
+	 * may name only the files its own file and metadata imply; the main file must be there; every
+	 * listed file needs a file row of this push, named in the envelope's "media" map (path → ref),
+	 * with the same path, size and SHA-256, that live already had or that was committed.
+	 *
+	 * @param array $data    Cleaned attachment data.
+	 * @param mixed $map     The envelope's media map as received.
+	 * @param array $problem Problem (out).
+	 * @return array|null The payload's media record, or null with the problem.
+	 */
+	private function media( array $data, $map, array &$problem ) {
+		$listed = array();
+		foreach ( isset( $data['files'] ) ? $data['files'] : array() as $entry ) {
+			$listed[ $entry['path'] ] = $entry;
+		}
+		$expected = Path_Guard::attachment_paths( $data['file'], isset( $data['metadata'] ) ? $data['metadata'] : array() );
+		foreach ( array_keys( $listed ) as $path ) {
+			if ( ! in_array( $path, $expected, true ) ) {
+				$problem = array( 'invalid_field', 'files' );
+				return null;
+			}
+		}
+		if ( ! isset( $listed[ $data['file'] ] ) || $listed[ $data['file'] ]['size'] < 0 ) {
+			$problem = array( 'file_missing', 'file' );
+			return null;
+		}
+
+		// The map, read by name: a list of {path, ref}.
+		$refs = array();
+		if ( null !== $map ) {
+			if ( ! is_array( $map ) || ( array() !== $map && ! wp_is_numeric_array( $map ) ) || count( $map ) > self::MAX_FILES ) {
+				$problem = array( 'invalid_field', 'media' );
+				return null;
+			}
+			foreach ( $map as $pair ) {
+				if ( ! is_array( $pair ) || ! isset( $pair['path'], $pair['ref'] ) || ! is_string( $pair['path'] ) || strlen( $pair['path'] ) > Path_Guard::MAX_BYTES || ! is_int( $pair['ref'] ) || $pair['ref'] < 1 ) {
+					$problem = array( 'invalid_field', 'media' );
+					return null;
+				}
+				$refs[ $pair['path'] ] = $pair['ref'];
+			}
+		}
+
+		$rows    = null === $this->files || empty( $refs ) ? array() : (array) call_user_func( $this->files, array_values( $refs ) );
+		$files   = array();
+		$missing = 0;
+		foreach ( $listed as $path => $entry ) {
+			if ( $entry['size'] < 0 ) {
+				// A size the source no longer has on disk: live gets the attachment without it.
+				++$missing;
+				continue;
+			}
+			$row = isset( $refs[ $path ], $rows[ $refs[ $path ] ] ) ? $rows[ $refs[ $path ] ] : null;
+			if ( null === $row || $row['t']['path'] !== $path || (int) $row['t']['size'] !== $entry['size'] || ! hash_equals( (string) $row['t']['sha256'], (string) $entry['sha256'] ) ) {
+				$problem = array( 'media_missing', 'files' );
+				return null;
+			}
+			if ( 'refused' === $row['status'] ) {
+				$problem = array( 'file_refused', 'files' );
+				return null;
+			}
+			if ( ! in_array( $row['status'], array( 'have', 'committed' ), true ) ) {
+				$problem = array( 'media_missing', 'files' );
+				return null;
+			}
+			$files[] = array(
+				'path'   => $path,
+				'final'  => (string) $row['t']['final'],
+				'ref'    => (int) $row['ref'],
+				'status' => (string) $row['status'],
+			);
+		}
+		if ( $missing > 0 ) {
+			$this->warn( 'size_file_missing', (string) $missing );
+		}
+
+		return array(
+			'state' => 'ready',
+			'files' => $files,
+		);
 	}
 
 	// --- references --------------------------------------------------------------------------

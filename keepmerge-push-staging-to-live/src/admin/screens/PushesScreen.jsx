@@ -28,6 +28,41 @@ function hostOf( url ) {
 }
 
 /**
+ * Files of a push: done of total, and how many get a new name on live.
+ *
+ * @param {number} done    Files committed or already on live.
+ * @param {number} total   Files of the push.
+ * @param {number} renamed Files with a new name on live.
+ * @return {Element|string} Cell.
+ */
+function fileCell( done, total, renamed ) {
+	if ( ! total ) {
+		return '–';
+	}
+	return (
+		<span className="sgsp-pushcell">
+			<span>
+				{ sprintf(
+					/* translators: 1: files done, 2: files in the push. */
+					__( '%1$s of %2$s', 'keepmerge-push-staging-to-live' ),
+					number( done ),
+					number( total )
+				) }
+			</span>
+			{ renamed > 0 && (
+				<span className="sgsp-pushcell__note">
+					{ sprintf(
+						/* translators: %s: number of files. */
+						_n( '%s with a new name', '%s with new names', renamed, 'keepmerge-push-staging-to-live' ),
+						number( renamed )
+					) }
+				</span>
+			) }
+		</span>
+	);
+}
+
+/**
  * Pushes tab: sessions received on this site (live) and pushes sent from it (staging).
  *
  * On live each session shows its state (an interrupted one has had no heartbeat for 5
@@ -155,6 +190,12 @@ export default function PushesScreen() {
 				),
 		},
 		{
+			key: 'files',
+			label: __( 'Files', 'keepmerge-push-staging-to-live' ),
+			className: 'sgsp-num',
+			render: ( row ) => fileCell( row.files ? row.files.committed + row.files.have : 0, row.files ? row.files.declared : 0, row.files ? row.files.renamed : 0 ),
+		},
+		{
 			key: 'staged',
 			label: __( 'Staged', 'keepmerge-push-staging-to-live' ),
 			className: 'sgsp-num',
@@ -203,6 +244,12 @@ export default function PushesScreen() {
 					number( row.sent ),
 					number( row.total )
 				),
+		},
+		{
+			key: 'files',
+			label: __( 'Files', 'keepmerge-push-staging-to-live' ),
+			className: 'sgsp-num',
+			render: ( row ) => fileCell( row.files ? row.files.committed + row.files.have : 0, row.files ? row.files.total : 0, row.files ? row.files.renamed : 0 ),
 		},
 		{
 			key: 'staged',

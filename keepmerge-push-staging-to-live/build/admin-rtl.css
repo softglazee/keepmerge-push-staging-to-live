@@ -2560,6 +2560,39 @@
 	margin: 0;
 }
 
+.sgsp-push__files {
+	display: grid;
+	gap: var(--sgsp-space-3);
+	padding: var(--sgsp-space-4);
+	border: 1px solid var(--sgsp-slate-200);
+	border-radius: var(--sgsp-radius-control);
+	background: var(--sgsp-slate-50);
+}
+
+.sgsp-progress__bar--files {
+	background: var(--sgsp-gold);
+}
+
+.sgsp-progress__note {
+	margin: var(--sgsp-space-2) 0 0;
+	font-size: 13px;
+	overflow-wrap: anywhere;
+	color: var(--sgsp-slate-600);
+}
+
+.sgsp-stats--compact {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+	gap: var(--sgsp-space-2);
+}
+
+.sgsp-stats--compact .sgsp-stat {
+	padding: var(--sgsp-space-2) var(--sgsp-space-3);
+}
+
+.sgsp-stats--compact .sgsp-stat__value {
+	font-size: 20px;
+}
+
 .sgsp-push__actions {
 	align-items: center;
 }

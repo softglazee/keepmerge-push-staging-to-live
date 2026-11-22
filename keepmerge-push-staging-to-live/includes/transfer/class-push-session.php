@@ -104,6 +104,23 @@ final class Push_Session {
 			return self::error( 'push_exists', 409 );
 		}
 
+		// The media must fit before anything is taken (S-64): the per-push cap and 80% of the free
+		// disk space when the host reports it.
+		$storage = Media_Receiver::storage_reason( $fields['file_bytes'] );
+		if ( '' !== $storage ) {
+			self::audit(
+				'push_opened',
+				$pairing,
+				$fields['push'],
+				array(
+					'reason' => 'storage_full',
+					'cause'  => $storage,
+				),
+				'denied'
+			);
+			return self::error( 'storage_full', 400 );
+		}
+
 		$lock = Push_Lock::get();
 		if ( null !== $lock ) {
 			$holder = self::find( $lock['push_uuid'] );
@@ -268,7 +285,17 @@ final class Push_Session {
 			return self::error( 'item_count_exceeded', 409 );
 		}
 
-		$stager  = new Item_Stager( $pairing, self::known( (int) $session['id'] ) );
+		// Files come before items (blueprint §12.1): the first batch ends the files phase.
+		Media_Receiver::close_files( $session );
+
+		$push_id = (int) $session['id'];
+		$stager  = new Item_Stager(
+			$pairing,
+			self::known( $push_id ),
+			static function ( array $refs ) use ( $push_id ) {
+				return Media_Receiver::rows( $push_id, $refs );
+			}
+		);
 		$results = array();
 		$batch   = array_fill_keys( self::STATUSES, 0 );
 		foreach ( array_values( $body['items'] ) as $raw ) {
@@ -363,6 +390,7 @@ final class Push_Session {
 			return self::error( 'push_applying', 409 );
 		}
 
+		Media_Receiver::delete_temp( $session );
 		$purged = self::purge( (int) $session['id'] );
 		self::update(
 			(int) $session['id'],
@@ -387,10 +415,10 @@ final class Push_Session {
 	}
 
 	/**
-	 * Expires sessions older than 24 hours that were not applied: staged rows purged, lock
-	 * released (daily prune; blueprint §14.5).
+	 * Expires sessions older than 24 hours that were not applied: staged rows purged, temporary
+	 * folder deleted, lock released (daily prune; blueprint §14.5).
 	 *
-	 * TODO(Phase 8): temp directories of expired sessions; retention of applied pushes.
+	 * TODO(Phase 8): retention of applied pushes.
 	 *
 	 * @param int $limit Most sessions per call.
 	 * @return int Sessions expired.
@@ -444,21 +472,49 @@ final class Push_Session {
 			'error'         => (string) $session['error_code'],
 			'limits'        => self::limits(),
 			'pending_files' => (int) $session['counts']['files'],
+			'files'         => array_merge(
+				Media_Receiver::summary( (int) $session['id'] ),
+				array(
+					'declared'       => (int) $session['counts']['files'],
+					'declared_bytes' => (int) $session['counts']['file_bytes'],
+					'closed'         => ! empty( $cursor['files_closed'] ) || (int) $cursor['last_seq'] > 0,
+				)
+			),
 		);
 	}
 
 	/**
-	 * Limits the source must keep to.
+	 * Limits the source must keep to: item batches and media (blueprint §13).
 	 *
-	 * @return array{item_batch:int,max_bytes:int,max_items:int}
+	 * @return array
 	 */
 	public static function limits() {
 		$settings = Settings::get();
-		return array(
-			'item_batch' => max( 1, min( self::MAX_BATCH, (int) $settings['item_batch'] ) ),
-			'max_bytes'  => self::MAX_BATCH_BYTES,
-			'max_items'  => self::MAX_ITEMS,
+		return array_merge(
+			array(
+				'item_batch' => max( 1, min( self::MAX_BATCH, (int) $settings['item_batch'] ) ),
+				'max_bytes'  => self::MAX_BATCH_BYTES,
+				'max_items'  => self::MAX_ITEMS,
+			),
+			Media_Receiver::limits()
 		);
+	}
+
+	/**
+	 * Merges values into a session's cursor (read fresh, so concurrent keys are kept).
+	 *
+	 * @param int   $id     Session row ID.
+	 * @param array $values Keys to set.
+	 * @return void
+	 */
+	public static function cursor_set( $id, array $values ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; the cursor as stored now.
+		$raw    = $wpdb->get_var( $wpdb->prepare( 'SELECT cursor_json FROM %i WHERE id = %d AND side = %s', Tables::table_name( 'pushes' ), absint( $id ), self::SIDE ) );
+		$cursor = json_decode( (string) $raw, true );
+		$cursor = is_array( $cursor ) ? $cursor : self::empty_cursor();
+		self::update( $id, array( 'cursor_json' => array_merge( $cursor, $values ) ) );
 	}
 
 	/**
@@ -522,8 +578,8 @@ final class Push_Session {
 		global $wpdb;
 
 		$out = array_fill_keys( self::STATUSES, 0 );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT status, COUNT(*) AS n FROM %i WHERE push_id = %d AND side = %s GROUP BY status', Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; item rows only (files are counted by Media_Receiver).
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT status, COUNT(*) AS n FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') GROUP BY status", Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE ), ARRAY_A );
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			if ( isset( $out[ $row['status'] ] ) ) {
 				$out[ $row['status'] ] = (int) $row['n'];
@@ -547,6 +603,7 @@ final class Push_Session {
 			return false;
 		}
 
+		Media_Receiver::delete_temp( $session );
 		$purged = self::purge( (int) $session['id'] );
 		self::update(
 			(int) $session['id'],
@@ -585,8 +642,8 @@ final class Push_Session {
 		global $wpdb;
 
 		$table = Tables::table_name( 'push_items' );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; every row of the session for the final pass.
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, uuid, object_type, action, decision, status, refs, post_hash FROM %i WHERE push_id = %d AND side = %s ORDER BY id ASC', $table, (int) $session['id'], self::SIDE ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; every item row of the session (file rows are not items) for the final pass.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, uuid, object_type, action, decision, status, refs, post_hash FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path') ORDER BY id ASC", $table, (int) $session['id'], self::SIDE ), ARRAY_A );
 		$rows = is_array( $rows ) ? $rows : array();
 
 		$map = array();
@@ -655,6 +712,7 @@ final class Push_Session {
 		}
 		self::update( (int) $session['id'], $fields );
 		if ( 'failed' === $fields['state'] ) {
+			Media_Receiver::delete_temp( $session );
 			Push_Lock::release( $session['push_uuid'] );
 		}
 
@@ -779,8 +837,9 @@ final class Push_Session {
 			if ( ! empty( $staged['gate'] ) ) {
 				$payload['gate'] = $staged['gate'];
 			}
-			if ( $staged['media'] ) {
-				$payload['media'] = 'pending';
+			if ( is_array( $staged['media'] ) ) {
+				// The attachment's files on live: final paths and refs of the committed files.
+				$payload['media'] = $staged['media'];
 			}
 		}
 
@@ -839,8 +898,8 @@ final class Push_Session {
 	private static function known( $push_id ) {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT uuid, object_type, status FROM %i WHERE push_id = %d AND side = %s', Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; item rows only.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT uuid, object_type, status FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path')", Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE ), ARRAY_A );
 		$out  = array();
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$out[ $row['uuid'] ] = array( (string) $row['object_type'], (string) $row['status'] );
@@ -857,8 +916,8 @@ final class Push_Session {
 	private static function received( $push_id ) {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE push_id = %d AND side = %s', Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; item rows only.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM %i WHERE push_id = %d AND side = %s AND object_type NOT IN ('file','file_path')", Tables::table_name( 'push_items' ), absint( $push_id ), self::SIDE ) );
 	}
 
 	/**
@@ -931,7 +990,7 @@ final class Push_Session {
 		}
 		$files = isset( $body['files'] ) ? $body['files'] : 0;
 		$bytes = isset( $body['file_bytes'] ) ? $body['file_bytes'] : 0;
-		if ( ! is_int( $files ) || $files < 0 || $files > 100000 || ! is_int( $bytes ) || $bytes < 0 ) {
+		if ( ! is_int( $files ) || $files < 0 || $files > Media_Receiver::MAX_DECLARED_FILES || ! is_int( $bytes ) || $bytes < 0 ) {
 			return self::error( 'invalid_body', 400 );
 		}
 

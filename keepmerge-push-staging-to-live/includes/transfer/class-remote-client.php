@@ -201,6 +201,21 @@ final class Remote_Client {
 	}
 
 	/**
+	 * PUT of one media chunk: the raw bytes as an application/octet-stream body (covered by the
+	 * content hash and the signature like any body) with X-SGSP-Chunk-SHA256 (blueprint §9.4).
+	 *
+	 * @param string $route Route under /keepmerge/v1/remote/.
+	 * @param string $bytes Chunk.
+	 * @param array  $opts  See request().
+	 * @return array|WP_Error
+	 */
+	public function put_chunk( $route, $bytes, array $opts = array() ) {
+		$opts['raw']          = (string) $bytes;
+		$opts['chunk_sha256'] = hash( 'sha256', (string) $bytes );
+		return $this->request( 'PUT', $route, array(), null, $opts );
+	}
+
+	/**
 	 * One signed request, retried for network errors and 5xx inside the time budget.
 	 *
 	 * @param string     $method HTTP method.
@@ -213,8 +228,10 @@ final class Remote_Client {
 	 *     @type int   $retries Retries (default 2, at most 5).
 	 *     @type int   $budget  Seconds the whole call may take (default Limits::time_budget()).
 	 *     @type int   $timeout Seconds per attempt (default 15, at most 30).
-	 *     @type int[] $backoff Seconds before each retry (default 1, 2, 4, 8, 16).
-	 *     @type int   $depth   JSON nesting accepted in a 2xx answer (default 16, at most 128).
+	 *     @type int[]  $backoff      Seconds before each retry (default 1, 2, 4, 8, 16).
+	 *     @type int    $depth        JSON nesting accepted in a 2xx answer (default 16, at most 128).
+	 *     @type string $raw          A raw application/octet-stream body instead of JSON (chunks).
+	 *     @type string $chunk_sha256 X-SGSP-Chunk-SHA256 of a raw body.
 	 * }
 	 * @return array{status:int,data:array}|WP_Error
 	 */
@@ -339,7 +356,10 @@ final class Remote_Client {
 		}
 
 		$raw_body = '';
-		if ( null !== $body ) {
+		$raw_mode = isset( $opts['raw'] ) && is_string( $opts['raw'] );
+		if ( $raw_mode ) {
+			$raw_body = $opts['raw'];
+		} elseif ( null !== $body ) {
 			$raw_body = (string) wp_json_encode( empty( $body ) ? new \stdClass() : $body );
 		}
 
@@ -363,7 +383,12 @@ final class Remote_Client {
 			'X-SGSP-Content-SHA256' => $hash,
 			'X-SGSP-Signature'      => $signature,
 		);
-		if ( null !== $body ) {
+		if ( $raw_mode ) {
+			$headers['Content-Type'] = 'application/octet-stream';
+			if ( isset( $opts['chunk_sha256'] ) && is_string( $opts['chunk_sha256'] ) && 1 === preg_match( '/\A[0-9a-f]{64}\z/', $opts['chunk_sha256'] ) ) {
+				$headers['X-SGSP-Chunk-SHA256'] = $opts['chunk_sha256'];
+			}
+		} elseif ( null !== $body ) {
 			$headers['Content-Type'] = 'application/json';
 		}
 
@@ -377,7 +402,7 @@ final class Remote_Client {
 			array(
 				'method'              => $method,
 				'headers'             => $headers,
-				'body'                => null === $body ? null : $raw_body,
+				'body'                => $raw_mode || null !== $body ? $raw_body : null,
 				'timeout'             => $timeout,
 				'redirection'         => 0,
 				'sslverify'           => true,
@@ -450,6 +475,11 @@ final class Remote_Client {
 		}
 
 		if ( $status >= 500 ) {
+			// A signed answer that live cannot write its temporary files is not a passing server
+			// fault: it keeps its code and is not retried (the admin fixes the folder on live).
+			if ( $signed && 'storage_unwritable' === $remote ) {
+				return $this->failure( $remote, $status, $remote, true );
+			}
 			return $this->failure( 'server_error', $status, $remote, $signed, true );
 		}
 
@@ -608,10 +638,29 @@ final class Remote_Client {
 			case 'count_mismatch':
 				return __( 'The items the live site received do not match the plan, so live set this push aside and changes nothing. Create a new plan and push again.', 'keepmerge-push-staging-to-live' );
 			case 'storage_full':
+				return __( 'The live site does not have room for the media of this push: its free disk space is too low, or the media are above the per-push limit (2 GB). Free space on live, or plan again with fewer media, then push again.', 'keepmerge-push-staging-to-live' );
 			case 'storage_unwritable':
-				return __( 'The live site cannot store the files of this push (disk full or uploads folder not writable). Free space or fix the permissions on live.', 'keepmerge-push-staging-to-live' );
+				return __( 'The live site cannot write the temporary files of this push: WordPress cannot write directly into its uploads folder (wrong permissions, or a setup that asks for FTP credentials). Fix the permissions of the uploads folder on live, then resume.', 'keepmerge-push-staging-to-live' );
+			case 'media_too_large':
+				return __( 'The media of this push are above the limit of 2 GB per push. Plan again with "Only some kinds" or fewer media, and push in parts.', 'keepmerge-push-staging-to-live' );
 			case 'path_refused':
 				return __( 'The live site refused a file path in this push.', 'keepmerge-push-staging-to-live' );
+			case 'file_too_large':
+				return __( 'A file of this push is larger than the live site accepts (512 MB per file).', 'keepmerge-push-staging-to-live' );
+			case 'files_closed':
+			case 'file_not_found':
+			case 'file_mismatch':
+			case 'file_count_exceeded':
+			case 'file_bytes_exceeded':
+			case 'path_conflict':
+			case 'too_many_files':
+			case 'invalid_chunk_size':
+			case 'ref_out_of_range':
+			case 'chunk_out_of_range':
+			case 'chunk_size_mismatch':
+				return __( 'The live site refused the files of this push because they do not fit the push it has on record. Abort this push, then plan and push again.', 'keepmerge-push-staging-to-live' );
+			case 'chunk_hash_mismatch':
+				return __( 'A part of a file arrived on live damaged several times in a row. Check the network between the two sites, then resume.', 'keepmerge-push-staging-to-live' );
 			case 'code_report_disabled':
 				return __( 'The live site does not allow code report requests. Switch on "Allow code report requests" in the live site\'s Settings tab to see the report.', 'keepmerge-push-staging-to-live' );
 			case 'transport_unpinned':

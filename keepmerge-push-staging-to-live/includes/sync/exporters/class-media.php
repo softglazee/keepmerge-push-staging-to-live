@@ -77,9 +77,11 @@ final class Media extends Exporter {
 	 *
 	 * @param string $file     _wp_attached_file.
 	 * @param array  $metadata Attachment metadata.
+	 * @param bool   $hash     Whether to read each file for its SHA-256 ('' when false: a push
+	 *                         counts sizes first and hashes while it sends).
 	 * @return array[]
 	 */
-	public static function files( $file, array $metadata ) {
+	public static function files( $file, array $metadata, $hash = true ) {
 		$paths = array();
 		if ( self::safe_path( $file ) ) {
 			$paths[] = $file;
@@ -108,7 +110,7 @@ final class Media extends Exporter {
 			$out[] = array(
 				'path'   => $path,
 				'size'   => $size,
-				'sha256' => $size >= 0 ? (string) hash_file( 'sha256', $full ) : '',
+				'sha256' => $size >= 0 && $hash ? (string) hash_file( 'sha256', $full ) : '',
 			);
 		}
 		usort(

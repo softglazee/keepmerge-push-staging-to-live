@@ -33,10 +33,12 @@ final class Path_Guard {
 	const MAX_SEGMENTS = 4;
 
 	/**
-	 * First segments that are never written by a push: Keepmerge's own folder and the folders of
-	 * WooCommerce logs and downloads, and the Font Library's folder.
+	 * First segments that are never written by a push: Keepmerge's own folder, WooCommerce's logs
+	 * (its downloads folder comes from Woo\Guard), the Font Library's folder, the uploads of other
+	 * sites of a multisite network (sites/<id>/), and the protected upload folders of common
+	 * download and form plugins. The filter softglaze_sp_protected_upload_dirs may add names.
 	 */
-	const PROTECTED_DIRS = array( 'keepmerge-push-staging-to-live', 'wc-logs', 'fonts' );
+	const PROTECTED_DIRS = array( 'keepmerge-push-staging-to-live', 'wc-logs', 'fonts', 'sites', 'edd', 'wpforms', 'gravity_forms' );
 
 	/**
 	 * Extensions refused anywhere in a basename, whatever the upload settings allow. Entries ending
@@ -79,11 +81,102 @@ final class Path_Guard {
 		}
 
 		$first = strtolower( $segments[0] );
-		if ( count( $segments ) > 1 && ( in_array( $first, self::PROTECTED_DIRS, true ) || Guard::is_protected_upload( $path ) ) ) {
+		if ( count( $segments ) > 1 && ( in_array( $first, self::protected_dirs(), true ) || Guard::is_protected_upload( $path ) ) ) {
 			return 'protected_dir';
 		}
 
 		return self::basename_reason( (string) end( $segments ) );
+	}
+
+	/**
+	 * The protected first segments: the built-in list plus what the filter adds. The filter can
+	 * only add (filters narrow what is pushed); built-in names always stay.
+	 *
+	 * @return string[]
+	 */
+	public static function protected_dirs() {
+		/**
+		 * Adds upload folders (first path segment) a push never writes into.
+		 *
+		 * @param string[] $dirs Extra folder names (lower case).
+		 */
+		$extra = apply_filters( 'softglaze_sp_protected_upload_dirs', array() );
+		$out   = self::PROTECTED_DIRS;
+		foreach ( is_array( $extra ) ? $extra : array() as $dir ) {
+			if ( is_string( $dir ) && 1 === preg_match( '/\A[a-z0-9._-]{1,100}\z/i', $dir ) ) {
+				$out[] = strtolower( $dir );
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Why an attachment's metadata names a file it may not have, or '' (threat model §7.5, S-49).
+	 * The metadata's own "file" must pass the guard; every "sizes" entry and "original_image" must
+	 * be a plain name that passes the guard inside the folder of the attachment's file.
+	 *
+	 * @param string $attached The attachment's relative path (already accepted).
+	 * @param mixed  $metadata Attachment metadata as received.
+	 * @return string '' or the field that was refused: metadata.file, metadata.sizes,
+	 *                metadata.original_image.
+	 */
+	public static function metadata_reason( $attached, $metadata ) {
+		if ( ! is_array( $metadata ) ) {
+			return '';
+		}
+		if ( isset( $metadata['file'] ) && ( ! is_string( $metadata['file'] ) || '' !== self::reason( $metadata['file'] ) ) ) {
+			return 'metadata.file';
+		}
+		if ( isset( $metadata['sizes'] ) ) {
+			if ( ! is_array( $metadata['sizes'] ) ) {
+				return 'metadata.sizes';
+			}
+			foreach ( $metadata['sizes'] as $size ) {
+				if ( ! is_array( $size ) || ( isset( $size['file'] ) && '' !== self::sibling_reason( $attached, $size['file'] ) ) ) {
+					return 'metadata.sizes';
+				}
+			}
+		}
+		if ( isset( $metadata['original_image'] ) && '' !== self::sibling_reason( $attached, $metadata['original_image'] ) ) {
+			return 'metadata.original_image';
+		}
+		return '';
+	}
+
+	/**
+	 * The relative paths of every file an attachment has: its own file, each size and the
+	 * original image of a scaled image (the same set the source's exporter lists). Only names
+	 * that pass the guard are returned.
+	 *
+	 * @param string $attached The attachment's relative path.
+	 * @param mixed  $metadata Attachment metadata.
+	 * @return string[]
+	 */
+	public static function attachment_paths( $attached, $metadata ) {
+		$attached = (string) $attached;
+		$paths    = array();
+		if ( '' === self::reason( $attached ) ) {
+			$paths[] = $attached;
+		}
+		$dir   = dirname( $attached );
+		$dir   = '.' === $dir ? '' : $dir . '/';
+		$names = array();
+		if ( is_array( $metadata ) && isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
+			foreach ( $metadata['sizes'] as $size ) {
+				if ( is_array( $size ) && isset( $size['file'] ) && is_string( $size['file'] ) ) {
+					$names[] = $size['file'];
+				}
+			}
+		}
+		if ( is_array( $metadata ) && isset( $metadata['original_image'] ) && is_string( $metadata['original_image'] ) ) {
+			$names[] = $metadata['original_image'];
+		}
+		foreach ( $names as $name ) {
+			if ( '' === self::sibling_reason( $attached, $name ) ) {
+				$paths[] = $dir . $name;
+			}
+		}
+		return array_values( array_unique( $paths ) );
 	}
 
 	/**

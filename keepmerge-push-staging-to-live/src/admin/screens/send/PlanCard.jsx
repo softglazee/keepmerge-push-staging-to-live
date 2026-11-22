@@ -17,7 +17,7 @@ import { number, scopeList, stageLabel, tabList } from './plan-labels';
 
 const LIST_TABS = [ 'content', 'woocommerce', 'media', 'menus', 'site_editor', 'options' ];
 
-const PUSH_ACTIVE = [ 'sending_items', 'paused' ];
+const PUSH_ACTIVE = [ 'sending_files', 'sending_items', 'paused' ];
 
 /**
  * Sub-tabs of the diff: the WAI-ARIA tabs pattern (arrow keys move and select), each with its
