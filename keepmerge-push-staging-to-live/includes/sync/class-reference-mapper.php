@@ -867,7 +867,10 @@ final class Reference_Mapper {
 
 		if ( false !== strpos( $value, '<!-- wp:' ) ) {
 			$tree = $this->blocks( $path . '/blocks', parse_blocks( $value ) );
-			if ( $this->hits === $before || null === $this->canon_fn ) {
+			// Hashed as parsed blocks even without references: core's kses re-encodes block
+			// attributes when live's receiver saves the content ("{}" becomes "[]"), and the same
+			// blocks must hash alike on both sites.
+			if ( null === $this->canon_fn ) {
 				return $value;
 			}
 			return array(
