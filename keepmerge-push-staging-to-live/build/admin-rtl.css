@@ -684,7 +684,7 @@
 
 .sgsp-facts {
 	display: grid;
-	grid-template-columns: max-content minmax(0, 1fr);
+	grid-template-columns: fit-content(50%) minmax(0, 1fr);
 	gap: var(--sgsp-space-2) var(--sgsp-space-4);
 	margin: 0;
 	font-size: 13px;
@@ -705,6 +705,18 @@
 	min-width: 0;
 	overflow-wrap: anywhere;
 	color: var(--sgsp-slate-800);
+}
+
+/* Narrow screens: each label above its value, so long labels never squeeze the value. */
+@media screen and (max-width: 600px) {
+	.sgsp-facts {
+		grid-template-columns: minmax(0, 1fr);
+		row-gap: 2px;
+	}
+
+	.sgsp-facts dd {
+		margin-bottom: var(--sgsp-space-2);
+	}
 }
 
 .sgsp-code {
@@ -953,6 +965,7 @@
 }
 
 .sgsp-wrap .sgsp-input:focus,
+.sgsp-wrap .sgsp-input:focus-within,
 .sgsp-wrap .sgsp-select:focus {
 	border-color: var(--sgsp-navy);
 	outline: none;
@@ -2341,7 +2354,7 @@
 	font-family: var(--sgsp-font-mono);
 	font-size: 11px;
 	font-weight: 400;
-	color: var(--sgsp-slate-500);
+	color: var(--sgsp-slate-600);
 	overflow-wrap: anywhere;
 }
 
@@ -2401,6 +2414,13 @@
 	font-family: var(--sgsp-font-mono);
 	font-size: 12px;
 	line-height: 1.5;
+}
+
+.sgsp-diff__lines:focus-visible,
+.sgsp-diff__pre:focus-visible,
+.sgsp-decided:focus-visible {
+	outline: 2px solid var(--sgsp-navy);
+	outline-offset: 2px;
 }
 
 .sgsp-diff__line {

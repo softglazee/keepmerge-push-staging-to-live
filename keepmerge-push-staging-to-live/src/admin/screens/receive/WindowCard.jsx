@@ -87,8 +87,10 @@ export default function WindowCard( { window: win, now, busy, disabled, onOpen, 
 								<label
 									key={ choice }
 									className={ `sgsp-segmented__option${ choice === hours ? ' is-selected' : '' }` }
+									htmlFor={ `sgsp-window-hours-${ choice }` }
 								>
 									<input
+										id={ `sgsp-window-hours-${ choice }` }
 										type="radio"
 										name="sgsp-window-hours"
 										value={ choice }

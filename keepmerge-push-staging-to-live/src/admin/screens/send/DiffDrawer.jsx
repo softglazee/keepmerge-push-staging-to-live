@@ -23,7 +23,7 @@ function Side( { label, value, origin } ) {
 			{ null === value ? (
 				<p className="sgsp-diff__absent">{ __( 'Not on this side', 'keepmerge-push-staging-to-live' ) }</p>
 			) : (
-				<pre className="sgsp-diff__pre">{ '' === value ? __( '(empty)', 'keepmerge-push-staging-to-live' ) : detokenize( value, origin ) }</pre>
+				<pre className="sgsp-diff__pre" tabIndex={ 0 }>{ '' === value ? __( '(empty)', 'keepmerge-push-staging-to-live' ) : detokenize( value, origin ) }</pre>
 			) }
 		</div>
 	);
@@ -47,7 +47,8 @@ function Lines( { field, origins } ) {
 		);
 	}
 	return (
-		<ol className="sgsp-diff__lines" aria-label={ __( 'Line by line: minus is live, plus is this site', 'keepmerge-push-staging-to-live' ) }>
+		// tabIndex: the list scrolls, so keyboard users must be able to focus it to scroll it.
+		<ol className="sgsp-diff__lines" tabIndex={ 0 } aria-label={ __( 'Line by line: minus is live, plus is this site', 'keepmerge-push-staging-to-live' ) }>
 			{ collapse( lines ).map( ( line, index ) => {
 				if ( 'skip' === line.type ) {
 					return (

@@ -282,9 +282,11 @@ export default function SettingsScreen( { notify } ) {
 										.filter( ( choice ) => choice.group === group )
 										.map( ( choice ) => {
 											const included = ! draft[ key ].includes( choice.name );
+											const inputId = `sgsp-type-${ choice.kind }-${ choice.name }`;
 											return (
-												<label className="sgsp-checkbox" key={ `${ choice.kind }-${ choice.name }` }>
+												<label className="sgsp-checkbox" key={ `${ choice.kind }-${ choice.name }` } htmlFor={ inputId }>
 													<input
+														id={ inputId }
 														type="checkbox"
 														checked={ included }
 														onChange={ ( event ) =>

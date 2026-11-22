@@ -257,7 +257,7 @@ export default function PushDetail( { id, onBack, notify } ) {
 					<div className="sgsp-field">
 						<label className="sgsp-field__label" htmlFor="sgsp-continue-domain">
 							{ sprintf(
-								/* translators: %s: this site's host. */
+								/* translators: %s: domain of the live site. */
 								__( 'Type %s to confirm', 'keepmerge-push-staging-to-live' ),
 								push.host
 							) }

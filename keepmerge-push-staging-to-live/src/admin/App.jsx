@@ -83,7 +83,7 @@ function tabFromHash() {
 function hostOf( url ) {
 	try {
 		return new window.URL( url ).host;
-	} catch ( e ) {
+	} catch {
 		return url;
 	}
 }

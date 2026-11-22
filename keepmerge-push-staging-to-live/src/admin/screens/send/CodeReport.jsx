@@ -58,6 +58,39 @@ function Section( { title, rows, columns, empty } ) {
 const typeLabel = ( type ) => ( 'theme' === type ? __( 'Theme', 'keepmerge-push-staging-to-live' ) : __( 'Plugin', 'keepmerge-push-staging-to-live' ) );
 
 /**
+ * The status badge of one compared component.
+ *
+ * @param {Object} file    Component row.
+ * @param {number} changed Files that differ, only on live or only here.
+ * @return {*} Badge.
+ */
+function fileBadge( file, changed ) {
+	if ( ! file.done ) {
+		return <Badge tone="info" icon={ LoaderCircle }>{ __( 'Comparing', 'keepmerge-push-staging-to-live' ) }</Badge>;
+	}
+	if ( changed > 0 ) {
+		return (
+			<Badge tone="warning">
+				{ sprintf(
+					/* translators: %s: number of files. */
+					_n( '%s file differs', '%s files differ', changed, 'keepmerge-push-staging-to-live' ),
+					number( changed )
+				) }
+			</Badge>
+		);
+	}
+	return (
+		<Badge tone="success">
+			{ sprintf(
+				/* translators: %s: number of files. */
+				_n( 'Same (%s file)', 'Same (%s files)', file.compared, 'keepmerge-push-staging-to-live' ),
+				number( file.compared )
+			) }
+		</Badge>
+	);
+}
+
+/**
  * The Code sub-tab (blueprint §6.11, F8): plugins and themes missing, extra or at another version
  * on live, and per-file hash differences of live's active theme, its parent and active plugins.
  * Code is reported, never pushed. Live answers only after its administrator allows code report
@@ -235,7 +268,7 @@ export default function CodeReport( { pairing } ) {
 				<dt>{ __( 'WordPress', 'keepmerge-push-staging-to-live' ) }</dt>
 				<dd>
 					{ sprintf(
-						/* translators: 1: version here, 2: version on live. */
+						/* translators: 1: value on this site, 2: value on the live site. */
 						__( 'This site %1$s · live %2$s', 'keepmerge-push-staging-to-live' ),
 						core.wordpress ? core.wordpress.here : '–',
 						core.wordpress ? core.wordpress.live : '–'
@@ -244,7 +277,7 @@ export default function CodeReport( { pairing } ) {
 				<dt>{ __( 'PHP', 'keepmerge-push-staging-to-live' ) }</dt>
 				<dd>
 					{ sprintf(
-						/* translators: 1: version here, 2: version on live. */
+						/* translators: 1: value on this site, 2: value on the live site. */
 						__( 'This site %1$s · live %2$s', 'keepmerge-push-staging-to-live' ),
 						core.php ? core.php.here : '–',
 						core.php ? core.php.live : '–'
@@ -254,7 +287,7 @@ export default function CodeReport( { pairing } ) {
 				<dd>
 					{ diff.active_theme
 						? sprintf(
-								/* translators: 1: theme and version here, 2: theme and version on live. */
+								/* translators: 1: value on this site, 2: value on the live site. */
 								__( 'This site %1$s · live %2$s', 'keepmerge-push-staging-to-live' ),
 								`${ diff.active_theme.here.slug } ${ diff.active_theme.here.version }`,
 								`${ diff.active_theme.live.slug } ${ diff.active_theme.live.version }`
@@ -335,25 +368,7 @@ export default function CodeReport( { pairing } ) {
 									<span className="sgsp-cell-muted">
 										{ typeLabel( file.type ) } · { file.local_version || '–' } / { file.live_version || '–' }
 									</span>
-									{ ! file.done ? (
-										<Badge tone="info" icon={ LoaderCircle }>{ __( 'Comparing', 'keepmerge-push-staging-to-live' ) }</Badge>
-									) : changed > 0 ? (
-										<Badge tone="warning">
-											{ sprintf(
-												/* translators: %s: number of files. */
-												_n( '%s file differs', '%s files differ', changed, 'keepmerge-push-staging-to-live' ),
-												number( changed )
-											) }
-										</Badge>
-									) : (
-										<Badge tone="success">
-											{ sprintf(
-												/* translators: %s: number of files. */
-												__( 'Same (%s files)', 'keepmerge-push-staging-to-live' ),
-												number( file.compared )
-											) }
-										</Badge>
-									) }
+									{ fileBadge( file, changed ) }
 								</div>
 								{ changed > 0 && (
 									<details className="sgsp-disclosure">

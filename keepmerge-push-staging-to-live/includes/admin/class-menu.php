@@ -43,7 +43,9 @@ final class Menu {
 
 	/**
 	 * The page shell. The heading is printed here so the page has its title without
-	 * JavaScript; the React app fills the status line and everything below the header.
+	 * JavaScript; the React app fills the status line and everything below the header. The
+	 * masthead is a div, not a header element: the page sits inside core's main landmark, where a
+	 * header would be a nested banner landmark.
 	 *
 	 * @return void
 	 */
@@ -53,14 +55,14 @@ final class Menu {
 		}
 		?>
 		<div class="wrap sgsp-wrap">
-			<header class="sgsp-masthead">
+			<div class="sgsp-masthead">
 				<div class="sgsp-masthead__text">
 					<span class="sgsp-masthead__rule" aria-hidden="true"></span>
 					<h1 class="sgsp-masthead__title"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 					<p class="sgsp-masthead__lead"><?php esc_html_e( 'Push content and data from staging to live and keep what changed on live. Theme and plugin code is reported, never pushed.', 'keepmerge-push-staging-to-live' ); ?></p>
 				</div>
 				<div id="softglaze-sp-status" class="sgsp-masthead__status"></div>
-			</header>
+			</div>
 			<hr class="wp-header-end">
 			<div id="softglaze-sp-root" class="sgsp-root">
 				<noscript>

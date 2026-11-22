@@ -55,6 +55,7 @@ final class Plugin {
 
 		add_action( 'admin_menu', array( Admin\Menu::class, 'register' ) );
 		add_action( 'admin_enqueue_scripts', array( Admin\Assets::class, 'enqueue' ) );
+		add_action( 'admin_init', array( Admin\Privacy::class, 'register' ) );
 
 		add_action( Cron::HOOK, array( Cron::class, 'daily_prune' ) );
 

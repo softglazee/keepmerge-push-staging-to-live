@@ -25,7 +25,7 @@ import PushDetail from './pushes/PushDetail';
 function hostOf( url ) {
 	try {
 		return new window.URL( url ).host;
-	} catch ( e ) {
+	} catch {
 		return url || '–';
 	}
 }
@@ -46,7 +46,7 @@ function fileCell( done, total, renamed ) {
 		<span className="sgsp-pushcell">
 			<span>
 				{ sprintf(
-					/* translators: 1: files done, 2: files in the push. */
+					/* translators: 1: number done, 2: total number. */
 					__( '%1$s of %2$s', 'keepmerge-push-staging-to-live' ),
 					number( done ),
 					number( total )
@@ -201,7 +201,7 @@ export default function PushesScreen( { notify } ) {
 			className: 'sgsp-num',
 			render: ( row ) =>
 				sprintf(
-					/* translators: 1: items received, 2: items in the push. */
+					/* translators: 1: number done, 2: total number. */
 					__( '%1$s of %2$s', 'keepmerge-push-staging-to-live' ),
 					number( row.received.total ),
 					number( row.items )
@@ -269,7 +269,7 @@ export default function PushesScreen( { notify } ) {
 			className: 'sgsp-num',
 			render: ( row ) =>
 				sprintf(
-					/* translators: 1: items sent, 2: items in the push. */
+					/* translators: 1: number done, 2: total number. */
 					__( '%1$s of %2$s', 'keepmerge-push-staging-to-live' ),
 					number( row.sent ),
 					number( row.total )
@@ -369,7 +369,7 @@ export default function PushesScreen( { notify } ) {
 					<div className="sgsp-field">
 						<label className="sgsp-field__label" htmlFor="sgsp-release-domain">
 							{ sprintf(
-								/* translators: %s: this site's host. */
+								/* translators: %s: domain of the live site. */
 								__( 'Type %s to confirm', 'keepmerge-push-staging-to-live' ),
 								data.host
 							) }

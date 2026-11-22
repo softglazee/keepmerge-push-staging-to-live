@@ -289,7 +289,7 @@ export default function BaselineCard( { pairing, initial, notify, onDone } ) {
 						{ baseline.clone_unknown
 							? __( 'Clone date: not known', 'keepmerge-push-staging-to-live' )
 							: sprintf(
-									/* translators: %s: date such as 2026-10-25. */
+									/* translators: %s: date. */
 									__( 'Clone date: %s', 'keepmerge-push-staging-to-live' ),
 									baseline.clone_date
 							  ) }
@@ -341,8 +341,9 @@ export default function BaselineCard( { pairing, initial, notify, onDone } ) {
 						<legend className="sgsp-segmented__legend">{ __( 'Show', 'keepmerge-push-staging-to-live' ) }</legend>
 						<div className="sgsp-segmented__options">
 							{ FILTERS.map( ( key ) => (
-								<label key={ key } className={ `sgsp-segmented__option${ filter === key ? ' is-selected' : '' }` }>
+								<label key={ key } className={ `sgsp-segmented__option${ filter === key ? ' is-selected' : '' }` } htmlFor={ `${ idPrefix }-filter-${ key }` }>
 									<input
+										id={ `${ idPrefix }-filter-${ key }` }
 										type="radio"
 										name={ `${ idPrefix }-filter` }
 										value={ key }
@@ -442,8 +443,8 @@ export default function BaselineCard( { pairing, initial, notify, onDone } ) {
 							) }
 						</p>
 					</div>
-					<label className="sgsp-checkbox sgsp-mt-3">
-						<input type="checkbox" checked={ unknown } onChange={ ( event ) => setUnknown( event.target.checked ) } />
+					<label className="sgsp-checkbox sgsp-mt-3" htmlFor={ `${ idPrefix }-unknown` }>
+						<input id={ `${ idPrefix }-unknown` } type="checkbox" checked={ unknown } onChange={ ( event ) => setUnknown( event.target.checked ) } />
 						<span>
 							{ __( 'I don\'t know the date', 'keepmerge-push-staging-to-live' ) }
 							<span className="sgsp-field__hint sgsp-block">

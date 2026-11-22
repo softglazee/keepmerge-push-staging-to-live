@@ -256,8 +256,8 @@ export default function PlanCard( { pairing, baseline, initialPlan, initialPush,
 						[ 'all', __( 'Everything included in Settings', 'keepmerge-push-staging-to-live' ) ],
 						[ 'some', __( 'Only some kinds', 'keepmerge-push-staging-to-live' ) ],
 					].map( ( [ value, label ] ) => (
-						<label key={ value } className={ `sgsp-segmented__option${ scopeMode === value ? ' is-selected' : '' }` }>
-							<input type="radio" name={ `${ idPrefix }-scope` } value={ value } checked={ scopeMode === value } onChange={ () => setScopeMode( value ) } />
+						<label key={ value } className={ `sgsp-segmented__option${ scopeMode === value ? ' is-selected' : '' }` } htmlFor={ `${ idPrefix }-scope-${ value }` }>
+							<input id={ `${ idPrefix }-scope-${ value }` } type="radio" name={ `${ idPrefix }-scope` } value={ value } checked={ scopeMode === value } onChange={ () => setScopeMode( value ) } />
 							{ label }
 						</label>
 					) ) }
@@ -267,8 +267,9 @@ export default function PlanCard( { pairing, baseline, initialPlan, initialPush,
 				<fieldset className="sgsp-choices sgsp-mt-3">
 					<legend className="screen-reader-text">{ __( 'Kinds to compare', 'keepmerge-push-staging-to-live' ) }</legend>
 					{ scopeList().map( ( option ) => (
-						<label key={ option.id } className="sgsp-checkbox">
+						<label key={ option.id } className="sgsp-checkbox" htmlFor={ `${ idPrefix }-kind-${ option.id }` }>
 							<input
+								id={ `${ idPrefix }-kind-${ option.id }` }
 								type="checkbox"
 								checked={ groups.includes( option.id ) }
 								onChange={ ( event ) =>

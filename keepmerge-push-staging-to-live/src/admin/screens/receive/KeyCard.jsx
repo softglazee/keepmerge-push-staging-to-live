@@ -27,12 +27,13 @@ export default function KeyCard( { issued, canCreate, blocker, now, busy, onCrea
 
 	function selectKey() {
 		const node = keyRef.current;
-		if ( ! node || ! window.getSelection ) {
+		const view = node ? node.ownerDocument.defaultView : null;
+		if ( ! view || ! view.getSelection ) {
 			return;
 		}
-		const range = document.createRange();
+		const range = node.ownerDocument.createRange();
 		range.selectNodeContents( node );
-		const selection = window.getSelection();
+		const selection = view.getSelection();
 		selection.removeAllRanges();
 		selection.addRange( range );
 	}

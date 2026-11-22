@@ -169,7 +169,7 @@ export default function PushDialog( { summary, planId, host, onClose, onStarted 
 				<p className="sgsp-field__hint sgsp-mt-0">{ __( 'This plan has no conflicts.', 'keepmerge-push-staging-to-live' ) }</p>
 			) }
 			{ null !== decided && decided.length > 0 && (
-				<ul className="sgsp-decided">
+				<ul className="sgsp-decided" tabIndex={ 0 }>
 					{ decided.map( ( row ) => (
 						<li key={ row.uuid }>
 							<span className="sgsp-decided__title">{ row.title || row.uuid }</span>
@@ -183,7 +183,7 @@ export default function PushDialog( { summary, planId, host, onClose, onStarted 
 			<div className="sgsp-field sgsp-mt-3">
 				<label className="sgsp-field__label" htmlFor="sgsp-push-domain">
 					{ sprintf(
-						/* translators: %s: live site host. */
+						/* translators: %s: domain of the live site. */
 						__( 'Type %s to confirm', 'keepmerge-push-staging-to-live' ),
 						host
 					) }

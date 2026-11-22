@@ -43,7 +43,7 @@ function DomainField( { id, host, value, onChange } ) {
 		<div className="sgsp-field">
 			<label className="sgsp-field__label" htmlFor={ id }>
 				{ sprintf(
-					/* translators: %s: this site's host. */
+					/* translators: %s: domain of the live site. */
 					__( 'Type %s to confirm', 'keepmerge-push-staging-to-live' ),
 					host
 				) }
@@ -150,8 +150,8 @@ function RollbackDialog( { push, onCancel, onConfirm } ) {
 						<fieldset className="sgsp-rollback__conflicts">
 							<legend className="sgsp-field__label">{ __( 'Conflicts (tick to roll back anyway; the later change on this site is lost)', 'keepmerge-push-staging-to-live' ) }</legend>
 							{ preview.conflicts.map( ( item ) => (
-								<label key={ item.uuid } className="sgsp-checkbox">
-									<input type="checkbox" checked={ ticked.includes( item.uuid ) } onChange={ () => toggle( item.uuid ) } />
+								<label key={ item.uuid } className="sgsp-checkbox" htmlFor={ `sgsp-rollback-${ item.uuid }` }>
+									<input id={ `sgsp-rollback-${ item.uuid }` } type="checkbox" checked={ ticked.includes( item.uuid ) } onChange={ () => toggle( item.uuid ) } />
 									<span>
 										{ item.title || item.uuid } <span className="sgsp-review__kind">{ kindName( item.kind, item.type ) }</span>
 										<span className="sgsp-checkbox__meta">{ reasonLabel( item.reason ) }</span>

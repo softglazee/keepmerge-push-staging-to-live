@@ -130,8 +130,9 @@ export default function HeldReview( { push, onSaved, notify } ) {
 					return (
 						<li key={ item.uuid } className="sgsp-review__item">
 							<div className="sgsp-review__head">
-								<label className="sgsp-review__pick">
+								<label className="sgsp-review__pick" htmlFor={ `${ name }-pick` }>
 									<input
+										id={ `${ name }-pick` }
 										type="checkbox"
 										checked={ !! selected[ item.uuid ] }
 										onChange={ ( event ) => setSelected( { ...selected, [ item.uuid ]: event.target.checked } ) }
@@ -178,8 +179,9 @@ export default function HeldReview( { push, onSaved, notify } ) {
 									) }
 								</legend>
 								{ DECISIONS.map( ( decision ) => (
-									<label key={ decision } className={ `sgsp-review__choice${ allowed( item, decision ) ? '' : ' is-disabled' }` }>
+									<label key={ decision } className={ `sgsp-review__choice${ allowed( item, decision ) ? '' : ' is-disabled' }` } htmlFor={ `${ name }-${ decision }` }>
 										<input
+											id={ `${ name }-${ decision }` }
 											type="radio"
 											name={ name }
 											value={ decision }
@@ -194,6 +196,11 @@ export default function HeldReview( { push, onSaved, notify } ) {
 							{ ! item.can_filter && (
 								<p className="sgsp-field__hint sgsp-m-0">
 									{ __( 'Held for markup in custom fields, options or widgets, which WordPress\'s HTML filter does not cover: approve it as is or skip it.', 'keepmerge-push-staging-to-live' ) }
+								</p>
+							) }
+							{ 'term' === item.kind && item.reasons.some( ( reason ) => 'kses' === reason.rule ) && (
+								<p className="sgsp-field__hint sgsp-m-0">
+									{ __( 'Category and tag descriptions go through WordPress\'s description filter, which allows less markup than posts do (on WordPress 6.5 it also removes rel and target from links).', 'keepmerge-push-staging-to-live' ) }
 								</p>
 							) }
 							{ item.needs_css && ! push.can.edit_css && (

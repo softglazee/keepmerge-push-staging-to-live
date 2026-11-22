@@ -29,11 +29,12 @@ function Details( { details } ) {
 		<ul className="sgsp-details">
 			{ keys.map( ( key ) => {
 				const value = details[ key ];
-				const text = Array.isArray( value )
-					? value.join( ', ' )
-					: 'object' === typeof value && null !== value
-					? JSON.stringify( value )
-					: String( value );
+				let text = String( value );
+				if ( Array.isArray( value ) ) {
+					text = value.join( ', ' );
+				} else if ( 'object' === typeof value && null !== value ) {
+					text = JSON.stringify( value );
+				}
 				return (
 					<li key={ key }>
 						<span className="sgsp-details__key">{ key }:</span> { text }
