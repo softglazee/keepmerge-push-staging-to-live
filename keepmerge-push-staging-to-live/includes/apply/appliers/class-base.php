@@ -9,6 +9,7 @@ namespace SoftGlaze\SafePush\Apply\Appliers;
 
 use SoftGlaze\SafePush\Apply\Item_Context;
 use SoftGlaze\SafePush\Sync\Identity;
+use SoftGlaze\SafePush\Transfer\Item_Stager;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -37,10 +38,13 @@ abstract class Base {
 		$id      = (int) $id;
 		$current = 'term' === $type ? get_term_meta( $id ) : get_post_meta( $id );
 		$current = is_array( $current ) ? $current : array();
+		$kept    = array_map( 'strtolower', $keep );
 
 		foreach ( $meta as $key => $values ) {
 			$key = (string) $key;
-			if ( '' === $key || in_array( $key, $keep, true ) || 0 === strpos( $key, '_softglaze_sp_' ) ) {
+			// Compared as the database compares keys (without case), so a received key never
+			// deletes or shadows a kept or Keepmerge key; other keys never reach the database.
+			if ( ! Item_Stager::plain_meta_key( $key ) || in_array( strtolower( $key ), $kept, true ) || 0 === stripos( $key, '_softglaze_sp_' ) ) {
 				continue;
 			}
 			$values = is_array( $values ) ? array_values( $values ) : array( $values );

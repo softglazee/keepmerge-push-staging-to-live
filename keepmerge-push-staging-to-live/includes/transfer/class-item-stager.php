@@ -1190,7 +1190,10 @@ final class Item_Stager {
 	}
 
 	/**
-	 * Meta of an item without the keys live excludes; attachment path keys refuse the item.
+	 * Meta of an item without the keys live excludes; attachment path keys refuse the item. Keys are
+	 * compared without case, and a key that is not plain ASCII (or has a space at either end) is
+	 * dropped: the database's collation matches meta keys ignoring case, accents and trailing
+	 * spaces, so such a key could read or delete another key's rows.
 	 *
 	 * @param string $kind    Kind ('menu_item' for the items of a menu).
 	 * @param array  $meta    key => list of values.
@@ -1202,20 +1205,25 @@ final class Item_Stager {
 		$dropped = 0;
 		foreach ( $meta as $key => $values ) {
 			$key = (string) $key;
-			if ( '_wp_attached_file' === $key || '_wp_attachment_metadata' === $key ) {
+			if ( ! self::plain_meta_key( $key ) ) {
+				++$dropped;
+				continue;
+			}
+			$lower = strtolower( $key );
+			if ( '_wp_attached_file' === $lower || '_wp_attachment_metadata' === $lower ) {
 				// Attachment paths travel as checked fields only, never as meta.
 				$problem = array( 'reserved_meta', 'meta' );
 				return null;
 			}
-			if ( '_wp_page_template' === $key ) {
+			if ( '_wp_page_template' === $lower ) {
 				$this->warn( 'page_template_dropped', 'meta' );
 				continue;
 			}
-			if ( '_wp_attachment_image_alt' === $key || Scope::meta_excluded( $key ) ) {
+			if ( '_wp_attachment_image_alt' === $lower || Scope::meta_excluded( $key ) ) {
 				++$dropped;
 				continue;
 			}
-			if ( ( 'product' === $kind && Guard::is_internal_product_meta( $key ) ) || ( 'term' === $kind && Guard::is_volatile_term_meta( $key ) ) || ( 'menu_item' === $kind && in_array( $key, Menus::ITEM_FIELDS, true ) ) ) {
+			if ( ( 'product' === $kind && Guard::is_internal_product_meta( $lower ) ) || ( 'term' === $kind && Guard::is_volatile_term_meta( $lower ) ) || ( 'menu_item' === $kind && in_array( $lower, Menus::ITEM_FIELDS, true ) ) ) {
 				++$dropped;
 				continue;
 			}
@@ -1225,6 +1233,17 @@ final class Item_Stager {
 			$this->warn( 'meta_excluded', (string) $dropped );
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether a meta key is printable ASCII without a space at either end (the only keys whose
+	 * matches in the database are exactly their case variants).
+	 *
+	 * @param string $key Meta key.
+	 * @return bool
+	 */
+	public static function plain_meta_key( $key ) {
+		return 1 === preg_match( '/\A[\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?\z/', (string) $key );
 	}
 
 	/**
