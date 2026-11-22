@@ -72,6 +72,9 @@ abstract class Exporter {
 		// The author is compared by login: an email that differs between the sites (staging
 		// copies often anonymise them) does not make content differ.
 		unset( $form['author']['email'] );
+		if ( 'global_styles' === $kind ) {
+			$form = Hasher::styles_form( $form );
+		}
 
 		$hashes = Hasher::item_hashes( $kind, $form );
 

@@ -141,6 +141,52 @@ final class Hasher {
 	}
 
 	/**
+	 * The hash form of global styles: the theme.json document decoded, with empty sections left
+	 * out. Core's wp_filter_global_styles_post() writes the JSON again in its own key order and
+	 * escaping and drops empty sections, so the same styles hash alike however the text was
+	 * written; the markup gate compares them the same way.
+	 *
+	 * @param array $form Hash form of a global styles item.
+	 * @return array
+	 */
+	public static function styles_form( array $form ) {
+		if ( ! isset( $form['post_content'] ) || ! is_string( $form['post_content'] ) ) {
+			return $form;
+		}
+		$decoded = json_decode( $form['post_content'], true, Normalizer::MAX_DEPTH );
+		if ( ! is_array( $decoded ) ) {
+			return $form;
+		}
+		$form['post_content'] = array(
+			Normalizer::MARK => 'styles',
+			'v'              => self::without_empty( $decoded, 0 ),
+		);
+		return $form;
+	}
+
+	/**
+	 * A decoded JSON value without its empty arrays and objects, at every level.
+	 *
+	 * @param mixed $value Value.
+	 * @param int   $depth Depth.
+	 * @return mixed
+	 */
+	private static function without_empty( $value, $depth ) {
+		if ( ! is_array( $value ) || $depth > Normalizer::MAX_DEPTH ) {
+			return $value;
+		}
+		$list = array_keys( $value ) === range( 0, count( $value ) - 1 );
+		$out  = array();
+		foreach ( $value as $key => $item ) {
+			$item = self::without_empty( $item, $depth + 1 );
+			if ( array() !== $item ) {
+				$out[ $key ] = $item;
+			}
+		}
+		return $list ? array_values( $out ) : $out;
+	}
+
+	/**
 	 * The text form a source-side "ser" value has on a site that keeps it serialized: the value
 	 * rebuilt from typed data (tokens stay tokens) and serialized, read by the canonical reader.
 	 *

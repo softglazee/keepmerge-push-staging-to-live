@@ -328,8 +328,9 @@ final class Review {
 
 	/**
 	 * Whether the filter left global styles as they were apart from how the JSON is written (key
-	 * order, escaped slashes), so the stored text can stay staging's own: the item hash compares
-	 * the text, and the markup gate holds every global styles item core's filters would change.
+	 * order, escaped slashes), so the stored text can stay staging's own. The item hash compares the
+	 * decoded styles (Hasher::styles_form()), and the markup gate holds every global styles item
+	 * core's filters would change.
 	 *
 	 * @param array $before Data before Review::filter().
 	 * @param array $after  Data after it.
