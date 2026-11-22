@@ -343,13 +343,18 @@ final class Rollback_Runner {
 		);
 		$cursor       = $session['cursor_json'];
 		$cursor['rb'] = $rb;
-		Push_Session::update(
+		// Only from the state this request read: a resume that started meanwhile wins.
+		$moved = Push_Session::transition(
 			(int) $session['id'],
+			(string) $session['state'],
 			array(
 				'state'       => 'rolling_back',
 				'cursor_json' => $cursor,
 			)
 		);
+		if ( ! $moved ) {
+			return new WP_Error( 'push_state_changed', __( 'This push changed meanwhile (it was resumed or rolled back). Reload the screen.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
+		}
 
 		Audit_Log::write(
 			'rollback_started',

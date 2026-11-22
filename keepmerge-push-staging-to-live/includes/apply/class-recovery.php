@@ -8,6 +8,7 @@
 namespace SoftGlaze\SafePush\Apply;
 
 use SoftGlaze\SafePush\Audit_Log;
+use SoftGlaze\SafePush\Limits;
 use SoftGlaze\SafePush\Tables;
 use SoftGlaze\SafePush\Transfer\Push_Lock;
 use SoftGlaze\SafePush\Transfer\Push_Session;
@@ -111,6 +112,29 @@ final class Recovery {
 			return $lock;
 		}
 
+		// Leave "interrupted" only if the push is still interrupted (a rollback may have started
+		// meanwhile); the step is marked busy until the rows a dead step left are recovered.
+		$before              = $apply;
+		$apply['actor']      = 'remote' === $actor ? 'remote' : 'user';
+		$apply['user']       = 'remote' === $actor ? 0 : absint( $user_id );
+		$apply['busy_until'] = time() + Limits::time_budget() + 15;
+		$apply['error']      = '';
+		$fresh               = Push_Session::find( (string) $session['push_uuid'] );
+		$cursor              = is_array( $fresh ) ? $fresh['cursor_json'] : $session['cursor_json'];
+		$cursor['apply']     = $apply;
+		$claimed             = Push_Session::transition(
+			(int) $session['id'],
+			'interrupted',
+			array(
+				'state'       => 'snapshot' === $apply['pass'] ? 'snapshotting' : 'applying',
+				'cursor_json' => $cursor,
+				'error_code'  => '',
+			)
+		);
+		if ( ! $claimed ) {
+			return new WP_Error( 'push_state_changed', __( 'This push changed meanwhile (it was resumed or rolled back). Reload the screen.', 'keepmerge-push-staging-to-live' ), array( 'status' => 409 ) );
+		}
+
 		$failed = null;
 		foreach ( self::rows_with_status( $session, 'applying' ) as $row ) {
 			$outcome = Applier::recover( $session, $row );
@@ -121,6 +145,7 @@ final class Recovery {
 		}
 
 		if ( null !== $failed ) {
+			$apply           = $before;
 			$apply['error']  = 'interrupted_item';
 			$apply['failed'] = array(
 				'row'  => (int) $failed['id'],

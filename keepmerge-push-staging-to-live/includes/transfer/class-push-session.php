@@ -1259,6 +1259,50 @@ final class Push_Session {
 	public static function update( $id, array $fields ) {
 		global $wpdb;
 
+		$data = self::columns( $fields );
+		if ( empty( $data ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
+		$wpdb->update( Tables::table_name( 'pushes' ), $data, array( 'id' => absint( $id ) ) );
+	}
+
+	/**
+	 * Updates session columns only while the session is still in $from (a compare-and-swap on the
+	 * state), so two administrators or the source and an administrator cannot both move a session
+	 * out of the same state.
+	 *
+	 * @param int    $id     Session row ID.
+	 * @param string $from   State the caller read.
+	 * @param array  $fields state (a different one), cursor_json, finished_gmt, error_code.
+	 * @return bool Whether this call moved the session.
+	 */
+	public static function transition( $id, $from, array $fields ) {
+		global $wpdb;
+
+		$data = self::columns( $fields );
+		if ( ! isset( $data['state'] ) || (string) $from === $data['state'] ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table; conditional update on the state.
+		$updated = $wpdb->update(
+			Tables::table_name( 'pushes' ),
+			$data,
+			array(
+				'id'    => absint( $id ),
+				'state' => (string) $from,
+			)
+		);
+		return 1 === (int) $updated;
+	}
+
+	/**
+	 * The session columns of an update (cursor_json encoded here).
+	 *
+	 * @param array $fields Fields.
+	 * @return array
+	 */
+	private static function columns( array $fields ) {
 		$data = array();
 		foreach ( array( 'state', 'finished_gmt', 'error_code', 'error_detail' ) as $name ) {
 			if ( isset( $fields[ $name ] ) ) {
@@ -1268,11 +1312,7 @@ final class Push_Session {
 		if ( isset( $fields['cursor_json'] ) ) {
 			$data['cursor_json'] = (string) wp_json_encode( $fields['cursor_json'] );
 		}
-		if ( empty( $data ) ) {
-			return;
-		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Own table.
-		$wpdb->update( Tables::table_name( 'pushes' ), $data, array( 'id' => absint( $id ) ) );
+		return $data;
 	}
 
 	/**
