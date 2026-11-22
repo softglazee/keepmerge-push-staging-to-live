@@ -403,9 +403,10 @@ final class Push_Runner {
 	 */
 	public static function run( $push_id, $client = null, $max = 500 ) {
 		$push = self::present( self::find( $push_id ) );
-		// Calling this on a paused push is the resume (the pause message names this command): one
-		// step resumes it; if it pauses again, the loop below stops instead of retrying.
-		$resume = isset( $push['state'] ) && 'paused' === $push['state'];
+		// Calling this on a paused push is the resume, and on a push waiting for review on live the
+		// status check (the messages name this command for both): one step runs; if the push is
+		// still paused or waiting, the loop below stops instead of retrying.
+		$resume = isset( $push['state'] ) && in_array( $push['state'], array( 'paused', 'awaiting_review' ), true );
 		for ( $i = 0; $i < $max; $i++ ) {
 			if ( $resume ) {
 				$resume = false;
